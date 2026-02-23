@@ -1,0 +1,55 @@
+/**
+ * Background service worker - Super Immersive Translate
+ */
+
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus.create({
+    id: 'translate-page',
+    title: '⚡ 翻译此页面',
+    contexts: ['page']
+  });
+
+  chrome.contextMenus.create({
+    id: 'translate-selection',
+    title: '⚡ 翻译选中文本',
+    contexts: ['selection']
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (!tab?.id) return;
+
+  if (info.menuItemId === 'translate-page') {
+    chrome.tabs.sendMessage(tab.id, { action: 'toggle' });
+  } else if (info.menuItemId === 'translate-selection') {
+    chrome.tabs.sendMessage(tab.id, { action: 'translateSelection', text: info.selectionText });
+  }
+});
+
+chrome.commands.onCommand.addListener(async (command) => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+
+  if (command === 'toggle-translate') {
+    chrome.tabs.sendMessage(tab.id, { action: 'toggle' });
+  } else if (command === 'translate-selection') {
+    chrome.tabs.sendMessage(tab.id, { action: 'translateSelection' });
+  }
+});
+
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === 'getSettings') {
+    chrome.storage.sync.get({
+      engine: 'google',
+      targetLang: 'zh-CN',
+      sourceLang: 'auto',
+      selectionMode: 'icon',
+      selectionEngines: ['google', 'lingva', 'libre'],
+      deeplKey: '',
+      customApiUrl: '',
+      customApiKey: '',
+      libreUrl: 'https://libretranslate.com'
+    }).then(sendResponse);
+    return true;
+  }
+});
