@@ -362,6 +362,23 @@
 
   document.addEventListener('mouseup', () => { dragState = null; });
 
+  // ========== History ==========
+  let historyPendingText = null;
+
+  async function saveToHistory(text, translation, engine) {
+    try {
+      const { translationHistory = [] } = await chrome.storage.local.get('translationHistory');
+      translationHistory.unshift({
+        text, translation, engine,
+        url: location.href,
+        title: document.title,
+        timestamp: Date.now()
+      });
+      if (translationHistory.length > 500) translationHistory.length = 500;
+      await chrome.storage.local.set({ translationHistory });
+    } catch (e) { /* ignore */ }
+  }
+
   // ========== Engine Translation ==========
   function updateEngineResult(engineId, result, error) {
     if (!panel) return;
@@ -376,6 +393,11 @@
     } else {
       resultEl.className = 'sit-engine-result';
       resultEl.textContent = result;
+
+      if (historyPendingText && result) {
+        saveToHistory(historyPendingText, result, engineId);
+        historyPendingText = null;
+      }
     }
   }
 
@@ -436,6 +458,7 @@
       loading: true, result: '', error: null
     }));
 
+    historyPendingText = text;
     renderPanel(text, engineResults);
     positionPanel(rect);
 

@@ -11,8 +11,8 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["utils/translator.js", "content/selection.js", "content/content.js"],
-      "css": ["content/content.css", "content/selection.css"],
+      "js": ["utils/translator.js", "content/selection.js", "content/content.js", "content/input-translate.js", "content/youtube.js"],
+      "css": ["content/content.css", "content/selection.css", "content/youtube.css"],
       "run_at": "document_idle"
     }
   ],
@@ -29,6 +29,10 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
   "commands": {
     "toggle-translate": {
       "suggested_key": { "default": "Alt+T", "mac": "Alt+T" },
@@ -41,7 +45,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["wordbook/*"],
+      "resources": ["wordbook/*", "history/*", "pdf/*", "options/*"],
       "matches": ["<all_urls>"]
     }
   ]

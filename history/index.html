@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📝 翻译历史 - 超级翻译</title>
+  <link rel="stylesheet" href="history.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1>⚡ 翻译历史</h1>
+      </div>
+      <div class="topbar-right">
+        <input type="text" id="searchInput" placeholder="搜索历史..." class="search-input">
+        <span id="countLabel" class="count-label">0 条记录</span>
+        <button id="clearBtn" class="btn-danger">🗑️ 清空</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <div id="historyList" class="history-list"></div>
+      <div id="emptyState" class="empty-state">
+        <div class="empty-icon">📝</div>
+        <h3>暂无翻译历史</h3>
+        <p>划词翻译时会自动记录到这里</p>
+      </div>
+    </main>
+  </div>
+  <script src="history.js"></script>
+</body>
+</html>

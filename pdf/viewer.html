@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📄 PDF 翻译 - 超级翻译</title>
+  <link rel="stylesheet" href="viewer.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>⚡ PDF / 文档翻译</h1>
+      <div class="topbar-actions">
+        <select id="engine">
+          <option value="google">Google 翻译</option>
+          <option value="lingva">Lingva</option>
+          <option value="libre">LibreTranslate</option>
+          <option value="mymemory">MyMemory</option>
+          <option value="deepl">DeepL</option>
+        </select>
+        <button id="translateBtn" class="btn-primary">🔄 翻译</button>
+        <button id="clearBtn" class="btn-secondary">清空</button>
+      </div>
+    </header>
+
+    <div class="upload-area" id="uploadArea">
+      <div class="upload-content">
+        <div class="upload-icon">📄</div>
+        <p class="upload-text">拖拽 PDF / TXT 文件到此处，或</p>
+        <label class="upload-btn">
+          选择文件
+          <input type="file" id="fileInput" accept=".pdf,.txt,.md,.html,.htm" hidden>
+        </label>
+        <p class="upload-hint">支持 PDF、TXT、Markdown、HTML</p>
+      </div>
+    </div>
+
+    <div class="workspace" id="workspace" style="display:none">
+      <div class="panel">
+        <div class="panel-header">
+          <span>原文</span>
+          <span id="charCount" class="char-count">0 字</span>
+        </div>
+        <textarea id="sourceText" class="panel-text" placeholder="在此粘贴或编辑文本..."></textarea>
+      </div>
+      <div class="panel">
+        <div class="panel-header">
+          <span>译文</span>
+          <button id="copyBtn" class="btn-small">📋 复制</button>
+        </div>
+        <div id="translatedText" class="panel-text panel-output"></div>
+      </div>
+    </div>
+
+    <div id="progressBar" class="progress-bar" style="display:none">
+      <div class="progress-track">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+      <span id="progressLabel" class="progress-label">准备中...</span>
+    </div>
+  </div>
+  <script src="viewer.js"></script>
+</body>
+</html>

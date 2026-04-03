@@ -46,6 +46,39 @@
       </select>
     </div>
 
+    <div class="section">
+      <label>显示模式</label>
+      <select id="displayMode">
+        <option value="bilingual">双语对照 (原文 + 译文)</option>
+        <option value="replace">译文替换 (悬停显示原文)</option>
+        <option value="translationOnly">仅译文</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <label>译文颜色</label>
+      <div class="color-picker" id="colorPicker">
+        <button class="color-dot" data-color="#9b59b6" title="紫色" style="background:#9b59b6"></button>
+        <button class="color-dot" data-color="#4f8ef7" title="蓝色" style="background:#4f8ef7"></button>
+        <button class="color-dot" data-color="#7c8aaa" title="灰色" style="background:#7c8aaa"></button>
+        <button class="color-dot" data-color="#27ae60" title="绿色" style="background:#27ae60"></button>
+        <button class="color-dot" data-color="#e67e22" title="橙色" style="background:#e67e22"></button>
+        <button class="color-dot" data-color="#e74c3c" title="红色" style="background:#e74c3c"></button>
+        <button class="color-dot" data-color="#00b894" title="青色" style="background:#00b894"></button>
+      </div>
+    </div>
+
+    <div class="section toggle-group">
+      <label class="toggle-label">
+        <input type="checkbox" id="hoverTranslate">
+        <span>鼠标悬停翻译段落</span>
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" id="inputTranslate">
+        <span>输入框实时翻译</span>
+      </label>
+    </div>
+
     <div class="divider"></div>
 
     <div class="section">
@@ -90,9 +123,16 @@
     </div>
 
     <div class="footer">
-      <span class="shortcut">全页: Alt+T</span>
-      <span class="shortcut">划词: Alt+S</span>
-      <a href="#" id="openWordbook" class="wordbook-link">📖 单词本</a>
+      <div class="footer-shortcuts">
+        <span class="shortcut">全页: Alt+T</span>
+        <span class="shortcut">划词: Alt+S</span>
+      </div>
+      <div class="footer-links">
+        <a href="#" id="openWordbook" class="footer-link">📖 单词本</a>
+        <a href="#" id="openHistory" class="footer-link">📝 历史</a>
+        <a href="#" id="openPDF" class="footer-link">📄 PDF</a>
+        <a href="#" id="openSettings" class="footer-link">⚙️ 设置</a>
+      </div>
     </div>
   </div>
   <script src="popup.js"></script>

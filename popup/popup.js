@@ -6,8 +6,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusText = document.getElementById('statusText');
   const engineSelect = document.getElementById('engine');
   const targetLangSelect = document.getElementById('targetLang');
+  const displayModeSelect = document.getElementById('displayMode');
   const selectionModeSelect = document.getElementById('selectionMode');
   const selectionEnginesGroup = document.getElementById('selectionEngines');
+  const colorPicker = document.getElementById('colorPicker');
+  const hoverTranslateCheckbox = document.getElementById('hoverTranslate');
+  const inputTranslateCheckbox = document.getElementById('inputTranslate');
   const deeplKeyInput = document.getElementById('deeplKey');
   const customApiUrlInput = document.getElementById('customApiUrl');
   const customApiKeyInput = document.getElementById('customApiKey');
@@ -20,6 +24,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const settings = await chrome.storage.sync.get({
     engine: 'google',
     targetLang: 'zh-CN',
+    displayMode: 'bilingual',
+    translationColor: '#9b59b6',
+    hoverTranslate: false,
+    inputTranslate: false,
     selectionMode: 'icon',
     selectionEngines: ['google', 'lingva', 'libre'],
     deeplKey: '',
@@ -30,7 +38,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   engineSelect.value = settings.engine;
   targetLangSelect.value = settings.targetLang;
+  displayModeSelect.value = settings.displayMode;
   selectionModeSelect.value = settings.selectionMode;
+  hoverTranslateCheckbox.checked = settings.hoverTranslate;
+  inputTranslateCheckbox.checked = settings.inputTranslate;
+
+  // Restore color selection
+  setActiveColor(settings.translationColor);
   deeplKeyInput.value = settings.deeplKey;
   customApiUrlInput.value = settings.customApiUrl;
   customApiKeyInput.value = settings.customApiKey;
@@ -49,8 +63,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (tab?.id) {
       const resp = await chrome.tabs.sendMessage(tab.id, { action: 'getStatus' });
       if (resp) {
-        toggleBtn.checked = resp.enabled;
-        statusText.textContent = resp.enabled ? '翻译中' : '已关闭';
+        if (resp.blocked) {
+          toggleBtn.checked = false;
+          toggleBtn.disabled = true;
+          statusText.textContent = '站点已屏蔽';
+        } else {
+          toggleBtn.checked = resp.enabled;
+          statusText.textContent = resp.enabled ? '翻译中' : '已关闭';
+        }
       }
     }
   } catch (e) { /* content script not ready */ }
@@ -75,8 +95,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveSettings();
   });
 
+  // Color picker
+  colorPicker.addEventListener('click', (e) => {
+    const dot = e.target.closest('.color-dot');
+    if (!dot) return;
+    setActiveColor(dot.dataset.color);
+    saveSettings();
+  });
+
+  function setActiveColor(color) {
+    colorPicker.querySelectorAll('.color-dot').forEach(d => {
+      d.classList.toggle('active', d.dataset.color === color);
+    });
+  }
+
   // All other changes
   targetLangSelect.addEventListener('change', saveSettings);
+  displayModeSelect.addEventListener('change', saveSettings);
+  hoverTranslateCheckbox.addEventListener('change', saveSettings);
+  inputTranslateCheckbox.addEventListener('change', saveSettings);
   selectionModeSelect.addEventListener('change', saveSettings);
   selectionEnginesGroup.addEventListener('change', saveSettings);
   deeplKeyInput.addEventListener('input', debounce(saveSettings, 500));
@@ -96,9 +133,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       selEngines.push(cb.value);
     });
 
+    const activeColor = colorPicker.querySelector('.color-dot.active');
     const newSettings = {
       engine: engineSelect.value,
       targetLang: targetLangSelect.value,
+      displayMode: displayModeSelect.value,
+      translationColor: activeColor ? activeColor.dataset.color : '#9b59b6',
+      hoverTranslate: hoverTranslateCheckbox.checked,
+      inputTranslate: inputTranslateCheckbox.checked,
       selectionMode: selectionModeSelect.value,
       selectionEngines: selEngines.length > 0 ? selEngines : ['google'],
       deeplKey: deeplKeyInput.value,
@@ -112,7 +154,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       if (tab?.id) {
-        chrome.tabs.sendMessage(tab.id, { action: 'updateSettings' });
+        await chrome.tabs.sendMessage(tab.id, { action: 'updateSettings' }).catch(() => {});
       }
     } catch (e) { /* ignore */ }
   }
@@ -125,9 +167,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
-  // Open wordbook
+  // Open pages
   document.getElementById('openWordbook').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('wordbook/index.html') });
+  });
+
+  document.getElementById('openHistory').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('history/index.html') });
+  });
+
+  document.getElementById('openPDF').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('pdf/viewer.html') });
+  });
+
+  document.getElementById('openSettings').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
   });
 });

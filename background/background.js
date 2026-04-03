@@ -20,9 +20,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab?.id) return;
 
   if (info.menuItemId === 'translate-page') {
-    chrome.tabs.sendMessage(tab.id, { action: 'toggle' });
+    chrome.tabs.sendMessage(tab.id, { action: 'toggle' }).catch(() => {});
   } else if (info.menuItemId === 'translate-selection') {
-    chrome.tabs.sendMessage(tab.id, { action: 'translateSelection', text: info.selectionText });
+    chrome.tabs.sendMessage(tab.id, { action: 'translateSelection', text: info.selectionText }).catch(() => {});
   }
 });
 
@@ -31,9 +31,9 @@ chrome.commands.onCommand.addListener(async (command) => {
   if (!tab?.id) return;
 
   if (command === 'toggle-translate') {
-    chrome.tabs.sendMessage(tab.id, { action: 'toggle' });
+    chrome.tabs.sendMessage(tab.id, { action: 'toggle' }).catch(() => {});
   } else if (command === 'translate-selection') {
-    chrome.tabs.sendMessage(tab.id, { action: 'translateSelection' });
+    chrome.tabs.sendMessage(tab.id, { action: 'translateSelection' }).catch(() => {});
   }
 });
 
