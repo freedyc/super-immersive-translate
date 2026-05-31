@@ -15,17 +15,35 @@ const DEFAULT_SETTINGS = {
   customApiUrl: '',
   customApiKey: '',
   libreUrl: 'https://libretranslate.com',
+  openaiKey: '',
+  openaiModel: 'gpt-3.5-turbo',
+  openaiUrl: 'https://api.openai.com/v1/chat/completions',
+  geminiKey: '',
+  geminiModel: 'gemini-1.5-flash',
+  claudeKey: '',
+  claudeModel: 'claude-3-haiku-20240307',
+  ollamaModel: 'llama3',
+  ollamaUrl: 'http://localhost:11434/api/chat',
+  webllmModel: 'Llama-3-8B-Instruct-q4f32_1-MLC',
+  aiPrompt: 'Translate the following text to {targetLang}. Keep the exact separators "\\n\\u2581\\u2581\\u2581\\n" unchanged. Only output the translated text.',
   translationFontSize: '0.92',
   translationLineHeight: '1.6',
   translationBold: false,
   translationShowBorder: true,
   siteRules: { mode: 'blacklist', sites: [] },
-  siteEngines: {}
+  siteEngines: {},
+  ttsEngine: 'browser',
+  ttsBrowserVoiceURI: '',
+  ttsBrowserRate: '1.0',
+  ttsBrowserPitch: '1.0',
+  ttsOpenaiVoice: 'alloy',
+  ttsOpenaiSpeed: '1.0'
 };
 
 const ENGINE_NAMES = {
   google: 'Google', mymemory: 'MyMemory', lingva: 'Lingva',
-  libre: 'Libre', deepl: 'DeepL', custom: '自定义'
+  libre: 'Libre', deepl: 'DeepL', custom: '自定义',
+  openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude', ollama: 'Ollama'
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -58,6 +76,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('customApiUrl').value = settings.customApiUrl;
   $('customApiKey').value = settings.customApiKey;
   $('libreUrl').value = settings.libreUrl;
+  $('openaiKey').value = settings.openaiKey;
+  $('openaiModel').value = settings.openaiModel;
+  $('openaiUrl').value = settings.openaiUrl;
+  $('geminiKey').value = settings.geminiKey;
+  $('geminiModel').value = settings.geminiModel;
+  $('claudeKey').value = settings.claudeKey;
+  $('claudeModel').value = settings.claudeModel;
+  const ollamaModel = document.getElementById('ollamaModel');
+  const ollamaUrl = document.getElementById('ollamaUrl');
+  const webllmModel = document.getElementById('webllmModel');
+  const aiPrompt = document.getElementById('aiPrompt');
+  ollamaModel.value = settings.ollamaModel;
+  ollamaUrl.value = settings.ollamaUrl;
+  webllmModel.value = settings.webllmModel;
+  aiPrompt.value = settings.aiPrompt;
 
   document.querySelectorAll('#selectionEngines input').forEach(cb => {
     cb.checked = settings.selectionEngines.includes(cb.value);
@@ -71,12 +104,70 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('lineHeightValue').textContent = settings.translationLineHeight;
   $('translationBold').checked = settings.translationBold;
   $('translationShowBorder').checked = settings.translationShowBorder;
+  
+  $('ttsEngine').value = settings.ttsEngine;
+  $('ttsBrowserRate').value = settings.ttsBrowserRate;
+  $('ttsBrowserRateValue').textContent = settings.ttsBrowserRate;
+  $('ttsBrowserPitch').value = settings.ttsBrowserPitch;
+  $('ttsBrowserPitchValue').textContent = settings.ttsBrowserPitch;
+  $('ttsOpenaiVoice').value = settings.ttsOpenaiVoice;
+  $('ttsOpenaiSpeed').value = settings.ttsOpenaiSpeed;
+  $('ttsOpenaiSpeedValue').textContent = settings.ttsOpenaiSpeed;
+  updateTTSUI(settings.ttsEngine);
   updatePreview(settings);
 
   // Sites
   $('siteMode').value = settings.siteRules.mode;
   renderSiteList(settings.siteRules.sites);
   renderSiteEngines(settings.siteEngines);
+
+  // Load voices for browser TTS
+  function loadVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    const select = $('ttsBrowserVoiceURI');
+    if (!select) return;
+    select.innerHTML = '<option value="">自动匹配 (默认)</option>';
+    voices.forEach(v => {
+      const option = document.createElement('option');
+      option.value = v.voiceURI;
+      option.textContent = `${v.name} (${v.lang})`;
+      select.appendChild(option);
+    });
+    if (settings.ttsBrowserVoiceURI) {
+      select.value = settings.ttsBrowserVoiceURI;
+    }
+  }
+  loadVoices();
+  if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }
+
+  $('ttsEngine').addEventListener('change', (e) => {
+    updateTTSUI(e.target.value);
+    saveAll();
+  });
+
+  function updateTTSUI(engine) {
+    $('ttsBrowserSettings').style.display = engine === 'browser' ? 'block' : 'none';
+    $('ttsOpenAISettings').style.display = engine === 'openai' ? 'block' : 'none';
+  }
+
+  ['ttsBrowserVoiceURI', 'ttsOpenaiVoice'].forEach(id => {
+    $(id).addEventListener('change', saveAll);
+  });
+
+  $('ttsBrowserRate').addEventListener('input', () => {
+    $('ttsBrowserRateValue').textContent = $('ttsBrowserRate').value;
+    debouncedSave();
+  });
+  $('ttsBrowserPitch').addEventListener('input', () => {
+    $('ttsBrowserPitchValue').textContent = $('ttsBrowserPitch').value;
+    debouncedSave();
+  });
+  $('ttsOpenaiSpeed').addEventListener('input', () => {
+    $('ttsOpenaiSpeedValue').textContent = $('ttsOpenaiSpeed').value;
+    debouncedSave();
+  });
 
   // ── Shortcuts ───────────────────────────
   try {
@@ -109,7 +200,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     el.addEventListener('change', saveAll);
   });
 
-  ['deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl'].forEach(id => {
+  ['deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl', 
+   'openaiKey', 'openaiModel', 'openaiUrl', 
+   'geminiKey', 'geminiModel', 'claudeKey', 'claudeModel', 
+   'ollamaModel', 'ollamaUrl', 'aiPrompt'
+  ].forEach(id => {
     $(id).addEventListener('input', debounce(saveAll, 500));
   });
 
@@ -256,10 +351,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       customApiUrl: $('customApiUrl').value,
       customApiKey: $('customApiKey').value,
       libreUrl: $('libreUrl').value,
+      openaiKey: $('openaiKey').value,
+      openaiModel: $('openaiModel').value,
+      openaiUrl: $('openaiUrl').value,
+      geminiKey: $('geminiKey').value,
+      geminiModel: $('geminiModel').value,
+      claudeKey: $('claudeKey').value,
+      claudeModel: $('claudeModel').value,
+      ollamaModel: ollamaModel.value,
+      ollamaUrl: ollamaUrl.value,
+      webllmModel: webllmModel.value,
+      aiPrompt: aiPrompt.value,
       translationFontSize: $('fontSize').value,
       translationLineHeight: $('lineHeight').value,
       translationBold: $('translationBold').checked,
       translationShowBorder: $('translationShowBorder').checked,
+      ttsEngine: $('ttsEngine').value,
+      ttsBrowserVoiceURI: $('ttsBrowserVoiceURI').value,
+      ttsBrowserRate: $('ttsBrowserRate').value,
+      ttsBrowserPitch: $('ttsBrowserPitch').value,
+      ttsOpenaiVoice: $('ttsOpenaiVoice').value,
+      ttsOpenaiSpeed: $('ttsOpenaiSpeed').value,
       siteRules: { mode: $('siteMode').value, sites: current.siteRules.sites },
       siteEngines: current.siteEngines
     };

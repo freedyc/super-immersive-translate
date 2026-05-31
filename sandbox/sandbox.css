@@ -1,0 +1,7 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* We can put custom utility overrides here if needed, but Tailwind handles most things */
+.translation-result {
+  min-height: 120px;
+}

@@ -1,0 +1,34 @@
+{
+  "name": "super-immersive-translate",
+  "version": "1.0.0",
+  "description": "⚡ 一款功能强大的 Chrome 沉浸式双语翻译插件，对标沙拉翻译 + 沉浸式翻译，多引擎并行翻译，完全免费。",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/freedyc/super-immersive-translate.git"
+  },
+  "keywords": [],
+  "author": "dengyongchao",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/freedyc/super-immersive-translate/issues"
+  },
+  "homepage": "https://github.com/freedyc/super-immersive-translate#readme",
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0-beta.33",
+    "@mlc-ai/web-llm": "^0.2.84",
+    "@tailwindcss/vite": "^4.3.0",
+    "daisyui": "^5.5.20",
+    "lucide": "^1.17.0",
+    "tailwindcss": "^4.3.0",
+    "vite": "^8.0.14"
+  },
+  "dependencies": {
+    "tesseract.js": "^7.0.0"
+  }
+}

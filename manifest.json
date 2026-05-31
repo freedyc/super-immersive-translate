@@ -12,7 +12,6 @@
     {
       "matches": ["<all_urls>"],
       "js": ["utils/translator.js", "content/selection.js", "content/content.js", "content/input-translate.js", "content/youtube.js"],
-      "css": ["content/content.css", "content/selection.css", "content/youtube.css"],
       "run_at": "document_idle"
     }
   ],
@@ -45,7 +44,7 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["wordbook/*", "history/*", "pdf/*", "options/*"],
+      "resources": ["wordbook/*", "history/*", "pdf/*", "options/*", "sandbox/*"],
       "matches": ["<all_urls>"]
     }
   ]

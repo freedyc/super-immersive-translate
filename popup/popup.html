@@ -28,6 +28,10 @@
         <option value="libre">LibreTranslate (免费)</option>
         <option value="deepl">DeepL (需 API Key)</option>
         <option value="custom">自定义 API</option>
+        <option value="openai">OpenAI (需 API Key)</option>
+        <option value="gemini">Gemini (需 API Key)</option>
+        <option value="claude">Claude (需 API Key)</option>
+        <option value="ollama">Ollama (本地/自定义)</option>
       </select>
     </div>
 
@@ -43,6 +47,14 @@
         <option value="de">Deutsch</option>
         <option value="es">Español</option>
         <option value="ru">Русский</option>
+        <option value="pt">Português</option>
+        <option value="it">Italiano</option>
+        <option value="ar">العربية</option>
+        <option value="hi">हिन्दी</option>
+        <option value="th">ไทย</option>
+        <option value="vi">Tiếng Việt</option>
+        <option value="id">Bahasa Indonesia</option>
+        <option value="tr">Türkçe</option>
       </select>
     </div>
 
@@ -100,6 +112,10 @@
         <label><input type="checkbox" value="libre" checked> 🟣 Libre</label>
         <label><input type="checkbox" value="mymemory"> 🟡 MyMemory</label>
         <label><input type="checkbox" value="deepl"> 🔷 DeepL</label>
+        <label><input type="checkbox" value="openai"> ⚪ OpenAI</label>
+        <label><input type="checkbox" value="gemini"> ✨ Gemini</label>
+        <label><input type="checkbox" value="claude"> 🔶 Claude</label>
+        <label><input type="checkbox" value="ollama"> 🦙 Ollama</label>
       </div>
     </div>
 
@@ -122,6 +138,28 @@
       <input type="text" id="libreUrl" placeholder="https://libretranslate.com" value="https://libretranslate.com">
     </div>
 
+    <div class="section openai-settings" style="display:none">
+      <label>OpenAI API Key</label>
+      <input type="password" id="openaiKey" placeholder="输入 OpenAI API Key">
+      <div style="font-size: 12px; color: #666; margin-top: 4px;">更多模型配置请前往设置页</div>
+    </div>
+
+    <div class="section gemini-settings" style="display:none">
+      <label>Gemini API Key</label>
+      <input type="password" id="geminiKey" placeholder="输入 Gemini API Key">
+      <div style="font-size: 12px; color: #666; margin-top: 4px;">更多模型配置请前往设置页</div>
+    </div>
+
+    <div class="section claude-settings" style="display:none">
+      <label>Claude API Key</label>
+      <input type="password" id="claudeKey" placeholder="输入 Claude API Key">
+      <div style="font-size: 12px; color: #666; margin-top: 4px;">更多模型配置请前往设置页</div>
+    </div>
+
+    <div class="section ollama-settings" style="display:none">
+      <div style="font-size: 12px; color: #666;">Ollama 配置请前往设置页</div>
+    </div>
+
     <div class="footer">
       <div class="footer-shortcuts">
         <span class="shortcut">全页: Alt+T</span>
@@ -131,10 +169,11 @@
         <a href="#" id="openWordbook" class="footer-link">📖 单词本</a>
         <a href="#" id="openHistory" class="footer-link">📝 历史</a>
         <a href="#" id="openPDF" class="footer-link">📄 PDF</a>
+        <a href="#" id="openSandbox" class="footer-link">🛠️ 快捷翻译</a>
         <a href="#" id="openSettings" class="footer-link">⚙️ 设置</a>
       </div>
     </div>
   </div>
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

@@ -16,9 +16,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   const customApiUrlInput = document.getElementById('customApiUrl');
   const customApiKeyInput = document.getElementById('customApiKey');
   const libreUrlInput = document.getElementById('libreUrl');
+  const openaiKeyInput = document.getElementById('openaiKey');
+  const geminiKeyInput = document.getElementById('geminiKey');
+  const claudeKeyInput = document.getElementById('claudeKey');
   const deeplSettings = document.querySelector('.deepl-settings');
   const customSettings = document.querySelector('.custom-settings');
   const libreSettings = document.querySelector('.libre-settings');
+  const openaiSettings = document.querySelector('.openai-settings');
+  const geminiSettings = document.querySelector('.gemini-settings');
+  const claudeSettings = document.querySelector('.claude-settings');
+  const ollamaSettings = document.querySelector('.ollama-settings');
 
   // Load settings
   const settings = await chrome.storage.sync.get({
@@ -33,7 +40,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     deeplKey: '',
     customApiUrl: '',
     customApiKey: '',
-    libreUrl: 'https://libretranslate.com'
+    libreUrl: 'https://libretranslate.com',
+    openaiKey: '',
+    geminiKey: '',
+    claudeKey: ''
   });
 
   engineSelect.value = settings.engine;
@@ -49,6 +59,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   customApiUrlInput.value = settings.customApiUrl;
   customApiKeyInput.value = settings.customApiKey;
   libreUrlInput.value = settings.libreUrl;
+  openaiKeyInput.value = settings.openaiKey;
+  geminiKeyInput.value = settings.geminiKey;
+  claudeKeyInput.value = settings.claudeKey;
 
   // Restore selection engine checkboxes
   selectionEnginesGroup.querySelectorAll('input[type="checkbox"]').forEach(cb => {
@@ -120,11 +133,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   customApiUrlInput.addEventListener('input', debounce(saveSettings, 500));
   customApiKeyInput.addEventListener('input', debounce(saveSettings, 500));
   libreUrlInput.addEventListener('input', debounce(saveSettings, 500));
+  openaiKeyInput.addEventListener('input', debounce(saveSettings, 500));
+  geminiKeyInput.addEventListener('input', debounce(saveSettings, 500));
+  claudeKeyInput.addEventListener('input', debounce(saveSettings, 500));
 
   function updateEngineUI(engine) {
     deeplSettings.style.display = engine === 'deepl' ? 'block' : 'none';
     customSettings.style.display = engine === 'custom' ? 'block' : 'none';
     libreSettings.style.display = engine === 'libre' ? 'block' : 'none';
+    openaiSettings.style.display = engine === 'openai' ? 'block' : 'none';
+    geminiSettings.style.display = engine === 'gemini' ? 'block' : 'none';
+    claudeSettings.style.display = engine === 'claude' ? 'block' : 'none';
+    if (ollamaSettings) ollamaSettings.style.display = engine === 'ollama' ? 'block' : 'none';
   }
 
   async function saveSettings() {
@@ -146,7 +166,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       deeplKey: deeplKeyInput.value,
       customApiUrl: customApiUrlInput.value,
       customApiKey: customApiKeyInput.value,
-      libreUrl: libreUrlInput.value
+      libreUrl: libreUrlInput.value,
+      openaiKey: openaiKeyInput.value,
+      geminiKey: geminiKeyInput.value,
+      claudeKey: claudeKeyInput.value
     };
     await chrome.storage.sync.set(newSettings);
 
@@ -181,6 +204,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('openPDF').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('pdf/viewer.html') });
+  });
+
+  document.getElementById('openSandbox').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('sandbox/index.html') });
   });
 
   document.getElementById('openSettings').addEventListener('click', (e) => {

@@ -1,3 +1,5 @@
+import './content.css';
+
 /**
  * Content script - Super Immersive Translate
  * Full page bilingual translation only.

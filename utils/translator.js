@@ -1,3 +1,4 @@
+
 /**
  * Translator engine wrapper
  * Free engines: Google, MyMemory, LibreTranslate, Lingva, Yandex(browser)
@@ -21,7 +22,12 @@ class Translator {
     lingva:   { name: 'Lingva Translate', free: true },
     libre:    { name: 'LibreTranslate', free: true },
     deepl:    { name: 'DeepL', free: false },
-    custom:   { name: '自定义 API', free: false }
+    custom:   { name: '自定义 API', free: false },
+    openai:   { name: 'OpenAI', free: false },
+    gemini:   { name: 'Gemini', free: false },
+    claude:   { name: 'Claude', free: false },
+    ollama:   { name: 'Ollama', free: true },
+    webllm:   { name: 'WebLLM (本地)', free: true }
   };
 
   async init() {
@@ -32,7 +38,18 @@ class Translator {
       deeplKey: '',
       customApiUrl: '',
       customApiKey: '',
-      libreUrl: 'https://libretranslate.com'
+      libreUrl: 'https://libretranslate.com',
+      openaiKey: '',
+      openaiModel: 'gpt-3.5-turbo',
+      openaiUrl: 'https://api.openai.com/v1/chat/completions',
+      geminiKey: '',
+      geminiModel: 'gemini-1.5-flash',
+      claudeKey: '',
+      claudeModel: 'claude-3-haiku-20240307',
+      ollamaModel: 'llama3',
+      ollamaUrl: 'http://localhost:11434/api/chat',
+      webllmModel: 'Llama-3-8B-Instruct-q4f32_1-MLC',
+      aiPrompt: 'Translate the following text to {targetLang}. Keep the exact separators "\\n\\u2581\\u2581\\u2581\\n" unchanged. Only output the translated text.'
     });
     Object.assign(this, settings);
   }
@@ -73,6 +90,11 @@ class Translator {
         case 'libre':    results = await this._libreBatch(texts); break;
         case 'deepl':    results = await this._deeplBatch(texts); break;
         case 'custom':   results = await this._customBatch(texts); break;
+        case 'openai':   results = await this._openaiBatch(texts); break;
+        case 'gemini':   results = await this._geminiBatch(texts); break;
+        case 'claude':   results = await this._claudeBatch(texts); break;
+        case 'ollama':   results = await this._ollamaBatch(texts); break;
+        case 'webllm':   results = await this._webllmBatch(texts); break;
         default:         results = await this._googleBatch(texts);
       }
       batch.forEach((item, i) => {
@@ -233,6 +255,164 @@ class Translator {
     if (Array.isArray(data.text)) return data.text;
     return texts.map(() => data.translation || data.text || data.result || '');
   }
+
+  // --- AI Engines ---
+
+  _getAiPrompt() {
+    const promptTemplate = this.aiPrompt || 'Translate the following text to {targetLang}. Keep the exact separators "\\n\\u2581\\u2581\\u2581\\n" unchanged. Only output the translated text.';
+    const langMap = { 'zh-CN': 'Simplified Chinese', 'zh-TW': 'Traditional Chinese', 'en': 'English', 'ja': 'Japanese', 'ko': 'Korean', 'fr': 'French', 'de': 'German', 'es': 'Spanish', 'ru': 'Russian', 'pt': 'Portuguese', 'it': 'Italian', 'ar': 'Arabic', 'hi': 'Hindi', 'th': 'Thai', 'vi': 'Vietnamese', 'id': 'Indonesian', 'tr': 'Turkish' };
+    return promptTemplate.replace('{targetLang}', langMap[this.targetLang] || this.targetLang);
+  }
+
+  _parseAiResult(result, originalCount) {
+    let text = result.trim();
+    // Sometimes LLMs wrap output in markdown
+    if (text.startsWith('```')) {
+      text = text.replace(/^```[^\n]*\n/, '').replace(/\n```$/, '');
+    }
+    const parts = text.split(/\s*▁▁▁\s*|\s*\u2581\u2581\u2581\s*/);
+    if (parts.length === originalCount) return parts.map(p => p.trim());
+    
+    // Fallback: if lengths don't match, just return the first chunk or duplicate
+    console.warn(`[Translator] AI batch parts mismatch. Expected ${originalCount}, got ${parts.length}`);
+    return Array(originalCount).fill(parts[0] || '');
+  }
+
+  async _openaiBatch(texts) {
+    if (!this.openaiKey) throw new Error('OpenAI API key not set');
+    const SEP = '\n\u2581\u2581\u2581\n';
+    const merged = texts.join(SEP);
+    const url = this.openaiUrl || 'https://api.openai.com/v1/chat/completions';
+    
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.openaiKey}`
+      },
+      body: JSON.stringify({
+        model: this.openaiModel || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: this._getAiPrompt() },
+          { role: 'user', content: merged }
+        ],
+        temperature: 0.3
+      })
+    });
+    if (!resp.ok) throw new Error(`OpenAI API ${resp.status}`);
+    const data = await resp.json();
+    const resultText = data.choices?.[0]?.message?.content || '';
+    return this._parseAiResult(resultText, texts.length);
+  }
+
+  async _geminiBatch(texts) {
+    if (!this.geminiKey) throw new Error('Gemini API key not set');
+    const SEP = '\n\u2581\u2581\u2581\n';
+    const merged = texts.join(SEP);
+    const model = this.geminiModel || 'gemini-1.5-flash';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiKey}`;
+    
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: this._getAiPrompt() }] },
+        contents: [{ parts: [{ text: merged }] }],
+        generationConfig: { temperature: 0.3 }
+      })
+    });
+    if (!resp.ok) throw new Error(`Gemini API ${resp.status}`);
+    const data = await resp.json();
+    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return this._parseAiResult(resultText, texts.length);
+  }
+
+  async _ollamaBatch(texts) {
+    const SEP = '\n\u2581\u2581\u2581\n';
+    const merged = texts.join(SEP);
+    const url = this.ollamaUrl || 'http://localhost:11434/api/chat';
+    
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: this.ollamaModel || 'llama3',
+        messages: [
+          { role: 'system', content: this._getAiPrompt() },
+          { role: 'user', content: merged }
+        ],
+        stream: false,
+        options: { temperature: 0.3 }
+      })
+    });
+    if (!resp.ok) throw new Error(`Ollama API ${resp.status}`);
+    const data = await resp.json();
+    const resultText = data.message?.content || '';
+    return this._parseAiResult(resultText, texts.length);
+  }
+
+  async _claudeBatch(texts) {
+    if (!this.claudeKey) throw new Error('Claude API key not set');
+    const SEP = '\n\u2581\u2581\u2581\n';
+    const merged = texts.join(SEP);
+    const url = 'https://api.anthropic.com/v1/messages';
+    
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': this.claudeKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerously-allow-custom-urls': 'true' // Allow requests from browser extension
+      },
+      body: JSON.stringify({
+        model: this.claudeModel || 'claude-3-haiku-20240307',
+        max_tokens: 4000,
+        temperature: 0.3,
+        system: this._getAiPrompt(),
+        messages: [{ role: 'user', content: merged }]
+      })
+    });
+    if (!resp.ok) throw new Error(`Claude API ${resp.status}`);
+    const data = await resp.json();
+    const resultText = data.content?.[0]?.text || '';
+    return this._parseAiResult(resultText, texts.length);
+  }
+
+  async _webllmBatch(texts) {
+    const SEP = '\n\u2581\u2581\u2581\n';
+    const merged = texts.join(SEP);
+    
+    if (!this.webllmEngine) {
+      const { CreateWebWorkerMLCEngine } = await import("@mlc-ai/web-llm");
+      this.webllmEngine = await CreateWebWorkerMLCEngine(
+        new Worker(new URL('./webllm-worker.js', import.meta.url), { type: "module" }),
+        this.webllmModel || "Llama-3-8B-Instruct-q4f32_1-MLC",
+        {
+          initProgressCallback: (progress) => {
+            console.log('[WebLLM]', progress.text);
+            // Store progress so UI can read it if needed
+            this.webllmProgress = progress.text;
+            // Dispatch a custom event on window for UI to hook into
+            window.dispatchEvent(new CustomEvent('webllm-progress', { detail: progress.text }));
+          }
+        }
+      );
+    }
+
+    const messages = [
+      { role: "system", content: this._getAiPrompt() },
+      { role: "user", content: merged }
+    ];
+
+    const reply = await this.webllmEngine.chat.completions.create({
+      messages,
+      temperature: 0.3
+    });
+
+    const resultText = reply.choices[0].message.content || '';
+    return this._parseAiResult(resultText, texts.length);
+  }
 }
 
-const translator = new Translator();
+window.translator = new Translator();

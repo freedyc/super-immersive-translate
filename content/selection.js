@@ -1,3 +1,5 @@
+import './selection.css';
+
 /**
  * Selection Translation Module - Saladict-style
  * Modes: icon, direct, dblclick, shortcut, off

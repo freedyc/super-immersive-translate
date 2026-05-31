@@ -1,3 +1,5 @@
+import './youtube.css';
+
 /**
  * YouTube Subtitle Translation - Super Immersive Translate
  * Detects YouTube captions and adds bilingual subtitles.
