@@ -76,7 +76,7 @@ export async function initThemeControl(container) {
   container.innerHTML = `
     <label class="flex items-center gap-1.5" title="主题">
       <i data-lucide="palette" class="w-4 h-4"></i>
-      <select class="select select-bordered select-xs" aria-label="主题">${opts}</select>
+      <select class="select select-bordered select-sm w-auto min-w-[7rem]" aria-label="主题">${opts}</select>
     </label>`;
   const select = container.querySelector('select');
   select.value = current;
