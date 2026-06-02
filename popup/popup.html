@@ -20,10 +20,7 @@
       </h1>
       
       <div class="flex items-center gap-2 relative z-10">
-        <!-- Theme Toggle Button -->
-        <button id="themeToggle" class="btn btn-ghost btn-circle btn-sm text-primary-content hover:bg-white/15" title="切换明暗主题">
-          <i id="themeIcon" data-lucide="sun" class="w-4 h-4"></i>
-        </button>
+        <div id="themeControl" class="text-primary-content"></div>
         <!-- Status Switch -->
         <div class="flex items-center gap-2 bg-base-100/10 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 shadow-inner">
           <span id="statusText" class="text-[10px] font-extrabold uppercase tracking-wider text-white">已关闭</span>
@@ -276,10 +273,6 @@
 
     <!-- Footer Dock component -->
     <div class="dock dock-sm border-t border-base-200/60 bg-base-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-20">
-      <button id="openSandbox" class="hover:text-primary transition-colors py-1">
-        <i data-lucide="zap" class="w-4 h-4 text-warning"></i>
-        <span class="dock-label font-extrabold text-[9px]">快捷翻译</span>
-      </button>
       <button id="openWordbook" class="hover:text-primary transition-colors py-1">
         <i data-lucide="book-open" class="w-4 h-4"></i>
         <span class="dock-label font-extrabold text-[9px]">单词本</span>

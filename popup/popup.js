@@ -1,10 +1,13 @@
 import { createIcons, icons } from 'lucide';
+import { applyTheme, initThemeControl } from '../utils/theme.js';
 
 /**
  * Popup script - Super Immersive Translate
  */
 document.addEventListener('DOMContentLoaded', async () => {
   createIcons({ icons });
+  await applyTheme();
+  await initThemeControl(document.getElementById('themeControl'));
   const toggleBtn = document.getElementById('toggleBtn');
   const statusText = document.getElementById('statusText');
   const engineSelect = document.getElementById('engine');
@@ -48,13 +51,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     libreUrl: 'https://libretranslate.com',
     openaiKey: '',
     geminiKey: '',
-    claudeKey: '',
-    theme: 'light' // Default theme
+    claudeKey: ''
   });
-
-  // Apply saved theme immediately
-  document.documentElement.setAttribute('data-theme', settings.theme);
-  updateThemeToggleUI(settings.theme);
 
   engineSelect.value = settings.engine;
   targetLangSelect.value = settings.targetLang;
@@ -132,23 +130,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  // Theme switcher
-  const themeToggle = document.getElementById('themeToggle');
-  themeToggle.addEventListener('click', async () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', newTheme);
-    updateThemeToggleUI(newTheme);
-    await chrome.storage.sync.set({ theme: newTheme });
-  });
-
-  function updateThemeToggleUI(theme) {
-    const themeToggle = document.getElementById('themeToggle');
-    if (!themeToggle) return;
-    themeToggle.innerHTML = `<i id="themeIcon" data-lucide="${theme === 'dark' ? 'moon' : 'sun'}" class="w-4 h-4"></i>`;
-    createIcons({ icons });
-  }
-
   // Mode Grid Navigation
   const openTabInSandbox = (tabName) => {
     chrome.tabs.create({ url: chrome.runtime.getURL(`sandbox/index.html?tab=${tabName}`) });
@@ -211,7 +192,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     const activeColor = colorPicker.querySelector('.color-dot.active');
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
     const newSettings = {
       engine: engineSelect.value,
       targetLang: targetLangSelect.value,
@@ -227,8 +207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       libreUrl: libreUrlInput.value,
       openaiKey: openaiKeyInput.value,
       geminiKey: geminiKeyInput.value,
-      claudeKey: claudeKeyInput.value,
-      theme: currentTheme
+      claudeKey: claudeKeyInput.value
     };
     await chrome.storage.sync.set(newSettings);
 
@@ -250,11 +229,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Open pages
-  document.getElementById('openSandbox').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: chrome.runtime.getURL('sandbox/index.html') });
-  });
-
   document.getElementById('openWordbook').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('wordbook/index.html') });
