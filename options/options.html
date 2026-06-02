@@ -105,6 +105,16 @@
               </select>
             </div>
 
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">全页翻译并发</span></label>
+              <select id="translateConcurrency" class="select select-bordered select-sm w-full">
+                <option value="low">低 (2 路并发，最稳，较慢)</option>
+                <option value="medium">中 (5 路并发，推荐)</option>
+                <option value="high">高 (10 路并发，最快，可能触发限流)</option>
+              </select>
+              <p class="text-xs text-base-content/40 mt-1">并发越高翻译越快，但 Google 等免费接口可能因请求过多被限流 (429)。本地 WebLLM 始终单路。</p>
+            </div>
+
             <div class="flex gap-6 flex-wrap">
               <label class="cursor-pointer flex items-center gap-2 text-sm">
                 <input type="checkbox" id="hoverTranslate" class="checkbox checkbox-primary checkbox-sm" />
@@ -480,6 +490,24 @@
                 <i data-lucide="download" class="w-4 h-4"></i>
                 导入配置
                 <input type="file" id="importFile" accept=".json" class="hidden" />
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">全部数据备份</h3>
+            <p class="text-xs text-base-content/40 -mt-2">导出全部数据（设置 + 单词本 + 翻译历史）到一个文件，方便整机迁移；导入会覆盖对应数据</p>
+            <div class="flex gap-3 flex-wrap">
+              <button class="btn btn-primary btn-sm" id="exportAllBtn">
+                <i data-lucide="package" class="w-4 h-4"></i>
+                导出全部数据
+              </button>
+              <label class="btn btn-outline btn-sm cursor-pointer">
+                <i data-lucide="package-open" class="w-4 h-4"></i>
+                导入全部数据
+                <input type="file" id="importAllFile" accept=".json" class="hidden" />
               </label>
             </div>
           </div>

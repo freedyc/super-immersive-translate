@@ -8,6 +8,7 @@ const DEFAULT_SETTINGS = {
   engine: 'google',
   targetLang: 'zh-CN',
   displayMode: 'bilingual',
+  translateConcurrency: 'medium',
   translationColor: '#9b59b6',
   hoverTranslate: false,
   inputTranslate: false,
@@ -76,6 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('engine').value = settings.engine;
   $('targetLang').value = settings.targetLang;
   $('displayMode').value = settings.displayMode;
+  $('translateConcurrency').value = settings.translateConcurrency;
   $('hoverTranslate').checked = settings.hoverTranslate;
   $('inputTranslate').checked = settings.inputTranslate;
   $('selectionMode').value = settings.selectionMode;
@@ -198,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Auto-save listeners ─────────────────
 
   const saveFields = [
-    'engine', 'targetLang', 'displayMode', 'selectionMode',
+    'engine', 'targetLang', 'displayMode', 'translateConcurrency', 'selectionMode',
     'hoverTranslate', 'inputTranslate',
     'translationBold', 'translationShowBorder', 'siteMode'
   ];
@@ -308,6 +310,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     location.reload();
   });
 
+  // Full backup: settings (sync) + wordbook + history (local) in one file.
+  $('exportAllBtn').addEventListener('click', async () => {
+    const [settings, local] = await Promise.all([
+      chrome.storage.sync.get(null),
+      chrome.storage.local.get({ wordbook: [], translationHistory: [] })
+    ]);
+    const bundle = {
+      type: 'super-immersive-translate-backup',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      settings,
+      wordbook: local.wordbook || [],
+      history: local.translationHistory || []
+    };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sit-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  $('importAllFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const bundle = JSON.parse(await file.text());
+      if (bundle.type !== 'super-immersive-translate-backup' || !bundle.settings) {
+        throw new Error('不是有效的全部数据备份文件');
+      }
+      if (!confirm('导入将覆盖当前的设置、单词本和翻译历史，确定继续吗？')) {
+        e.target.value = '';
+        return;
+      }
+      await chrome.storage.sync.set(bundle.settings);
+      await chrome.storage.local.set({
+        wordbook: Array.isArray(bundle.wordbook) ? bundle.wordbook : [],
+        translationHistory: Array.isArray(bundle.history) ? bundle.history : []
+      });
+      location.reload();
+    } catch (err) {
+      alert('导入失败: ' + err.message);
+    }
+  });
+
   // ── Helpers ─────────────────────────────
 
   function setActiveColor(color) {
@@ -349,6 +397,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       engine: $('engine').value,
       targetLang: $('targetLang').value,
       displayMode: $('displayMode').value,
+      translateConcurrency: $('translateConcurrency').value,
       translationColor: getActiveColor(),
       hoverTranslate: $('hoverTranslate').checked,
       inputTranslate: $('inputTranslate').checked,
