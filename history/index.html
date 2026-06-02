@@ -6,28 +6,38 @@
   <title>📝 翻译历史 - 超级翻译</title>
   <link rel="stylesheet" href="history.css">
 </head>
-<body>
-  <div class="app">
-    <header class="topbar">
-      <div class="topbar-left">
-        <h1>⚡ 翻译历史</h1>
-      </div>
-      <div class="topbar-right">
-        <input type="text" id="searchInput" placeholder="搜索历史..." class="search-input">
-        <span id="countLabel" class="count-label">0 条记录</span>
-        <button id="clearBtn" class="btn-danger">🗑️ 清空</button>
-      </div>
-    </header>
+<body class="bg-base-200 text-base-content min-h-screen">
 
-    <main class="main">
-      <div id="historyList" class="history-list"></div>
-      <div id="emptyState" class="empty-state">
-        <div class="empty-icon">📝</div>
-        <h3>暂无翻译历史</h3>
-        <p>划词翻译时会自动记录到这里</p>
-      </div>
-    </main>
+  <!-- Navbar -->
+  <div class="navbar bg-base-100 shadow px-4">
+    <div class="navbar-start">
+      <h1 class="text-base font-bold flex items-center gap-2">
+        <i data-lucide="history" class="w-5 h-5 text-primary"></i>
+        翻译历史
+      </h1>
+    </div>
+    <div class="navbar-end flex items-center gap-2">
+      <input type="text" id="searchInput" placeholder="搜索历史..." class="input input-bordered input-sm w-44" />
+      <span id="countLabel" class="badge badge-ghost">0 条记录</span>
+      <button id="clearBtn" class="btn btn-error btn-sm gap-1">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+        清空
+      </button>
+      <div id="themeControl"></div>
+    </div>
   </div>
+
+  <!-- Main content -->
+  <main class="container mx-auto p-4">
+    <div id="historyList" class="flex flex-col gap-3"></div>
+
+    <div id="emptyState" class="flex flex-col items-center justify-center py-20 text-base-content/50">
+      <i data-lucide="inbox" class="w-16 h-16 mb-4 text-base-content/30"></i>
+      <h3 class="text-lg font-semibold mb-1">暂无翻译历史</h3>
+      <p class="text-sm">划词翻译时会自动记录到这里</p>
+    </div>
+  </main>
+
   <script type="module" src="history.js"></script>
 </body>
 </html>

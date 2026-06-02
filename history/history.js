@@ -1,6 +1,9 @@
 /**
  * Translation History Page - Super Immersive Translate
  */
+import { createIcons, icons } from 'lucide';
+import { applyTheme, initThemeControl } from '../utils/theme.js';
+
 (async function () {
   'use strict';
 
@@ -20,34 +23,44 @@
 
   function render() {
     document.getElementById('countLabel').textContent = `${history.length} 条记录`;
-    document.getElementById('emptyState').style.display = history.length === 0 ? 'block' : 'none';
+    document.getElementById('emptyState').style.display = history.length === 0 ? 'flex' : 'none';
     renderList();
+    createIcons({ icons });
   }
 
   function renderList() {
     const container = document.getElementById('historyList');
     if (filtered.length === 0 && history.length > 0) {
-      container.innerHTML = '<div class="empty-state"><p>没有匹配的记录</p></div>';
+      container.innerHTML = `
+        <div class="flex flex-col items-center justify-center py-12 text-base-content/50">
+          <i data-lucide="search-x" class="w-10 h-10 mb-3 text-base-content/30"></i>
+          <p class="text-sm">没有匹配的记录</p>
+        </div>`;
+      createIcons({ icons });
       return;
     }
 
     container.innerHTML = filtered.map((item, i) => {
       const time = formatTime(item.timestamp);
       const source = item.url
-        ? `<a href="${esc(item.url)}" target="_blank" title="${esc(item.url)}">${esc(item.title || '来源页面')}</a>`
+        ? `<a href="${esc(item.url)}" target="_blank" title="${esc(item.url)}" class="link link-primary">${esc(item.title || '来源页面')}</a>`
         : '';
 
       return `
-        <div class="history-card" data-index="${i}">
-          <div class="history-header">
-            <span class="history-text">${esc(item.text)}</span>
-            <button class="history-delete" title="删除">✕</button>
-          </div>
-          <div class="history-translation">${esc(item.translation || '')}</div>
-          <div class="history-meta">
-            <span class="history-engine">${esc(item.engine || '')}</span>
-            <span class="history-time">${time}</span>
-            ${source}
+        <div class="card bg-base-100 shadow-sm history-card" data-index="${i}">
+          <div class="card-body p-4 gap-2">
+            <div class="flex items-start justify-between gap-3">
+              <span class="font-medium text-base-content text-sm leading-relaxed break-words flex-1">${esc(item.text)}</span>
+              <button class="btn btn-ghost btn-xs history-delete shrink-0" title="删除">
+                <i data-lucide="x" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+            <div class="text-sm text-secondary leading-relaxed break-words">${esc(item.translation || '')}</div>
+            <div class="flex flex-wrap items-center gap-2 text-xs text-base-content/50">
+              ${item.engine ? `<span class="badge badge-ghost badge-sm">${esc(item.engine)}</span>` : ''}
+              <span>${time}</span>
+              ${source}
+            </div>
           </div>
         </div>
       `;
@@ -64,6 +77,8 @@
         render();
       });
     });
+
+    createIcons({ icons });
   }
 
   // Search
@@ -105,6 +120,10 @@
     d.textContent = str || '';
     return d.innerHTML;
   }
+
+  await applyTheme();
+  await initThemeControl(document.getElementById('themeControl'));
+  createIcons({ icons });
 
   await loadHistory();
 })();
