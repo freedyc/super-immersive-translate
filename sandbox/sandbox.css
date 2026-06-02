@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@import "../styles/theme.css";
 
 /* We can put custom utility overrides here if needed, but Tailwind handles most things */
 .translation-result {

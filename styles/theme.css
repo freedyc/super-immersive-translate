@@ -1,0 +1,5 @@
+/* styles/theme.css — daisyUI 主题启用清单（CSS 侧单一来源）
+   新增主题：在下面 themes: 追加同名主题，并同步 utils/theme.js 的 AVAILABLE_THEMES。 */
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark;
+}

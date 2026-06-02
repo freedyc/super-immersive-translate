@@ -1,5 +1,5 @@
 @import "tailwindcss";
-@plugin "daisyui";
+@import "../styles/theme.css";
 
 /* Transition styles for smooth theme swapping */
 html, body {
