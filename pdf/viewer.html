@@ -3,62 +3,107 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📄 PDF 翻译 - 超级翻译</title>
+  <title>PDF 翻译 - 超级翻译</title>
   <link rel="stylesheet" href="viewer.css">
 </head>
-<body>
-  <div class="app">
-    <header class="topbar">
-      <h1>⚡ PDF / 文档翻译</h1>
-      <div class="topbar-actions">
-        <select id="engine">
-          <option value="google">Google 翻译</option>
-          <option value="lingva">Lingva</option>
-          <option value="libre">LibreTranslate</option>
-          <option value="mymemory">MyMemory</option>
-          <option value="deepl">DeepL</option>
-        </select>
-        <button id="translateBtn" class="btn-primary">🔄 翻译</button>
-        <button id="clearBtn" class="btn-secondary">清空</button>
-      </div>
-    </header>
+<body class="bg-base-200 text-base-content min-h-screen">
 
-    <div class="upload-area" id="uploadArea">
-      <div class="upload-content">
-        <div class="upload-icon">📄</div>
-        <p class="upload-text">拖拽 PDF / TXT 文件到此处，或</p>
-        <label class="upload-btn">
+  <!-- Navbar -->
+  <div class="navbar bg-base-100 shadow px-4">
+    <div class="navbar-start">
+      <span class="flex items-center gap-2 font-semibold text-base">
+        <i data-lucide="file-text" class="w-5 h-5 text-primary"></i>
+        文档翻译
+      </span>
+    </div>
+    <div class="navbar-end flex items-center gap-2">
+      <select id="engine" class="select select-bordered select-sm">
+        <option value="google">Google 翻译</option>
+        <option value="lingva">Lingva</option>
+        <option value="libre">LibreTranslate</option>
+        <option value="mymemory">MyMemory</option>
+        <option value="deepl">DeepL</option>
+      </select>
+      <div id="themeControl"></div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="max-w-5xl mx-auto p-4 flex flex-col gap-4">
+
+    <!-- Upload Area -->
+    <div id="uploadArea"
+         class="card border-2 border-dashed border-base-300 bg-base-100 flex items-center justify-center min-h-64 cursor-pointer transition-colors">
+      <div class="card-body items-center text-center py-10">
+        <i data-lucide="upload" class="w-12 h-12 text-base-content/40 mb-3"></i>
+        <p class="text-base text-base-content/60 mb-3">拖拽 PDF / TXT 文件到此处，或</p>
+        <label class="btn btn-primary btn-sm cursor-pointer">
           选择文件
           <input type="file" id="fileInput" accept=".pdf,.txt,.md,.html,.htm" hidden>
         </label>
-        <p class="upload-hint">支持 PDF、TXT、Markdown、HTML</p>
+        <p class="text-xs text-base-content/40 mt-2">支持 PDF、TXT、Markdown、HTML</p>
       </div>
     </div>
 
-    <div class="workspace" id="workspace" style="display:none">
-      <div class="panel">
-        <div class="panel-header">
-          <span>原文</span>
-          <span id="charCount" class="char-count">0 字</span>
+    <!-- Workspace (hidden until file loaded) -->
+    <div id="workspace" class="grid md:grid-cols-2 gap-4" style="display:none">
+
+      <!-- Source panel -->
+      <div class="card bg-base-100 shadow flex flex-col overflow-hidden">
+        <div class="card-body p-0 flex flex-col h-full">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-base-200 text-sm font-medium text-base-content/60">
+            <span>原文</span>
+            <span id="charCount" class="badge badge-ghost badge-sm">0 字</span>
+          </div>
+          <textarea
+            id="sourceText"
+            class="flex-1 w-full p-4 text-sm leading-relaxed bg-transparent resize-none outline-none min-h-96 font-sans"
+            placeholder="在此粘贴或编辑文本..."
+          ></textarea>
         </div>
-        <textarea id="sourceText" class="panel-text" placeholder="在此粘贴或编辑文本..."></textarea>
       </div>
-      <div class="panel">
-        <div class="panel-header">
-          <span>译文</span>
-          <button id="copyBtn" class="btn-small">📋 复制</button>
+
+      <!-- Translated panel -->
+      <div class="card bg-base-100 shadow flex flex-col overflow-hidden">
+        <div class="card-body p-0 flex flex-col h-full">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-base-200 text-sm font-medium text-base-content/60">
+            <span>译文</span>
+            <button id="copyBtn" class="btn btn-ghost btn-xs gap-1">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              复制
+            </button>
+          </div>
+          <div
+            id="translatedText"
+            class="flex-1 p-4 text-sm leading-relaxed overflow-y-auto text-secondary break-words min-h-96"
+          ></div>
         </div>
-        <div id="translatedText" class="panel-text panel-output"></div>
       </div>
+
     </div>
 
-    <div id="progressBar" class="progress-bar" style="display:none">
-      <div class="progress-track">
-        <div id="progressFill" class="progress-fill"></div>
-      </div>
-      <span id="progressLabel" class="progress-label">准备中...</span>
+    <!-- Toolbar -->
+    <div class="flex items-center gap-2 flex-wrap">
+      <button id="translateBtn" class="btn btn-primary btn-sm gap-1">
+        <i data-lucide="languages" class="w-4 h-4"></i>
+        翻译
+      </button>
+      <button id="clearBtn" class="btn btn-ghost btn-sm gap-1">
+        <i data-lucide="trash-2" class="w-4 h-4"></i>
+        清空
+      </button>
     </div>
+
+    <!-- Progress bar (hidden until translation starts) -->
+    <div id="progressBar" class="card bg-base-100 shadow px-4 py-3 flex-row items-center gap-3" style="display:none">
+      <div class="flex-1 h-1.5 bg-base-200 rounded-full overflow-hidden">
+        <div id="progressFill" class="h-full w-0 rounded-full bg-primary transition-all duration-300"></div>
+      </div>
+      <span id="progressLabel" class="text-xs text-base-content/60 whitespace-nowrap">准备中...</span>
+    </div>
+
   </div>
+
   <script type="module" src="viewer.js"></script>
 </body>
 </html>

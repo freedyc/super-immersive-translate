@@ -1,3 +1,5 @@
+import { createIcons, icons } from 'lucide';
+import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { Translator } from '../utils/translator.js';
 
 /**
@@ -19,6 +21,11 @@ import { Translator } from '../utils/translator.js';
   const progressBar = document.getElementById('progressBar');
   const progressFill = document.getElementById('progressFill');
   const progressLabel = document.getElementById('progressLabel');
+
+  // Apply theme and init theme control
+  applyTheme();
+  initThemeControl(document.getElementById('themeControl'));
+  createIcons({ icons });
 
   // Load saved engine
   const settings = await chrome.storage.sync.get({ engine: 'google' });
@@ -279,8 +286,12 @@ import { Translator } from '../utils/translator.js';
     const text = translatedText.textContent;
     if (!text) return;
     navigator.clipboard.writeText(text);
-    copyBtn.textContent = '✅ 已复制';
-    setTimeout(() => { copyBtn.textContent = '📋 复制'; }, 1500);
+    copyBtn.innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5"></i> 已复制';
+    createIcons({ icons });
+    setTimeout(() => {
+      copyBtn.innerHTML = '<i data-lucide="copy" class="w-3.5 h-3.5"></i> 复制';
+      createIcons({ icons });
+    }, 1500);
   });
 
   function escapeHtml(str) {
