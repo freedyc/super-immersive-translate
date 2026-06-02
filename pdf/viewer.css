@@ -7,7 +7,7 @@
   width: 0%;
   border-radius: 9999px;
   transition: width 0.3s ease;
-  background: linear-gradient(90deg, oklch(var(--p)), oklch(var(--s)));
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
 }
 
 /* Translated text output */
@@ -17,6 +17,6 @@
 
 /* Upload drag-over state */
 #uploadArea.drag-over {
-  border-color: oklch(var(--p));
-  background-color: oklch(var(--p) / 0.05);
+  border-color: var(--color-primary);
+  background-color: color-mix(in oklch, var(--color-primary) 5%, transparent);
 }
