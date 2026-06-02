@@ -3,282 +3,369 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>⚡ 超级翻译 - 设置</title>
+  <title>超级翻译 - 设置</title>
   <link rel="stylesheet" href="options.css">
 </head>
-<body>
-  <div class="app">
-    <aside class="sidebar">
-      <div class="logo">⚡ 超级翻译</div>
-      <nav class="nav">
-        <a href="#" class="nav-item active" data-tab="general">⚙️ 常规设置</a>
-        <a href="#" class="nav-item" data-tab="style">🎨 翻译样式</a>
-        <a href="#" class="nav-item" data-tab="shortcuts">⌨️ 快捷键</a>
-        <a href="#" class="nav-item" data-tab="sites">🌐 站点规则</a>
-        <a href="#" class="nav-item" data-tab="data">💾 数据管理</a>
-        <a href="#" class="nav-item" data-tab="tts">🔊 朗读设置</a>
+<body class="bg-base-200 text-base-content min-h-screen">
+
+  <div class="flex min-h-screen">
+
+    <!-- ── Sidebar ───────────────────────────────────────────────── -->
+    <aside class="w-52 bg-base-100 border-r border-base-300 flex flex-col fixed top-0 left-0 bottom-0 z-10">
+      <div class="px-5 py-4 border-b border-base-200 flex items-center gap-2">
+        <i data-lucide="languages" class="w-5 h-5 text-primary"></i>
+        <span class="font-bold text-base">超级翻译</span>
+      </div>
+
+      <nav class="flex-1 py-2">
+        <a href="#" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-base-content/70 border-l-[3px] border-transparent hover:bg-base-200/60 transition-colors active" data-tab="general">
+          <i data-lucide="settings-2" class="w-4 h-4 shrink-0"></i> 常规设置
+        </a>
+        <a href="#" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-base-content/70 border-l-[3px] border-transparent hover:bg-base-200/60 transition-colors" data-tab="style">
+          <i data-lucide="palette" class="w-4 h-4 shrink-0"></i> 翻译样式
+        </a>
+        <a href="#" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-base-content/70 border-l-[3px] border-transparent hover:bg-base-200/60 transition-colors" data-tab="shortcuts">
+          <i data-lucide="keyboard" class="w-4 h-4 shrink-0"></i> 快捷键
+        </a>
+        <a href="#" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-base-content/70 border-l-[3px] border-transparent hover:bg-base-200/60 transition-colors" data-tab="sites">
+          <i data-lucide="globe" class="w-4 h-4 shrink-0"></i> 站点规则
+        </a>
+        <a href="#" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-base-content/70 border-l-[3px] border-transparent hover:bg-base-200/60 transition-colors" data-tab="tts">
+          <i data-lucide="volume-2" class="w-4 h-4 shrink-0"></i> 朗读设置
+        </a>
+        <a href="#" class="nav-item flex items-center gap-2 px-5 py-2.5 text-sm text-base-content/70 border-l-[3px] border-transparent hover:bg-base-200/60 transition-colors" data-tab="data">
+          <i data-lucide="database" class="w-4 h-4 shrink-0"></i> 数据管理
+        </a>
       </nav>
-      <div class="sidebar-version">v2.0.0</div>
+
+      <div class="px-5 py-3 flex items-center justify-between border-t border-base-200">
+        <span class="text-xs text-base-content/30">v2.0.0</span>
+        <div id="themeControl"></div>
+      </div>
     </aside>
 
-    <main class="main">
-      <!-- General -->
+    <!-- ── Main content ───────────────────────────────────────────── -->
+    <main class="flex-1 ml-52 px-9 py-7 max-w-3xl">
+
+      <!-- ═══════════════════ 常规 ═══════════════════ -->
       <section class="tab active" id="tab-general">
-        <h2>常规设置</h2>
+        <h2 class="text-xl font-semibold mb-5">常规设置</h2>
 
-        <div class="card">
-          <h3>全页翻译</h3>
-          <div class="field">
-            <label>翻译引擎</label>
-            <select id="engine">
-              <option value="google">Google 翻译 (免费)</option>
-              <option value="mymemory">MyMemory (免费)</option>
-              <option value="lingva">Lingva Translate (免费)</option>
-              <option value="libre">LibreTranslate (免费)</option>
-              <option value="deepl">DeepL (需 API Key)</option>
-              <option value="custom">自定义 API</option>
-              <option value="openai">OpenAI (需 API Key)</option>
-              <option value="gemini">Gemini (需 API Key)</option>
-              <option value="claude">Claude (需 API Key)</option>
-              <option value="ollama">Ollama (本地/自定义)</option>
-              <option value="webllm">WebLLM (本地浏览器推理)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>目标语言</label>
-            <select id="targetLang">
-              <option value="zh-CN">简体中文</option>
-              <option value="zh-TW">繁体中文</option>
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
-              <option value="ko">한국어</option>
-              <option value="fr">Français</option>
-              <option value="de">Deutsch</option>
-              <option value="es">Español</option>
-              <option value="ru">Русский</option>
-              <option value="pt">Português</option>
-              <option value="it">Italiano</option>
-              <option value="ar">العربية</option>
-              <option value="hi">हिन्दी</option>
-              <option value="th">ไทย</option>
-              <option value="vi">Tiếng Việt</option>
-              <option value="id">Bahasa Indonesia</option>
-              <option value="tr">Türkçe</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>显示模式</label>
-            <select id="displayMode">
-              <option value="bilingual">双语对照 (原文 + 译文)</option>
-              <option value="replace">译文替换 (悬停显示原文)</option>
-              <option value="translationOnly">仅译文</option>
-            </select>
-          </div>
-          <div class="field-row">
-            <label class="toggle"><input type="checkbox" id="hoverTranslate"><span>鼠标悬停翻译段落</span></label>
-            <label class="toggle"><input type="checkbox" id="inputTranslate"><span>输入框实时翻译</span></label>
-          </div>
-        </div>
+        <!-- 全页翻译 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">全页翻译</h3>
 
-        <div class="card">
-          <h3>划词翻译</h3>
-          <div class="field">
-            <label>划词模式</label>
-            <select id="selectionMode">
-              <option value="icon">图标模式 (选中后点击图标)</option>
-              <option value="direct">直接弹窗 (选中即翻译)</option>
-              <option value="dblclick">双击查词</option>
-              <option value="shortcut">快捷键</option>
-              <option value="off">关闭划词翻译</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>划词引擎 (多选)</label>
-            <div class="checkbox-row" id="selectionEngines">
-              <label><input type="checkbox" value="google" checked> Google</label>
-              <label><input type="checkbox" value="lingva" checked> Lingva</label>
-              <label><input type="checkbox" value="libre" checked> Libre</label>
-              <label><input type="checkbox" value="mymemory"> MyMemory</label>
-              <label><input type="checkbox" value="deepl"> DeepL</label>
-              <label><input type="checkbox" value="openai"> OpenAI</label>
-              <label><input type="checkbox" value="gemini"> Gemini</label>
-              <label><input type="checkbox" value="claude"> Claude</label>
-              <label><input type="checkbox" value="ollama"> Ollama</label>
-              <label><input type="checkbox" value="webllm"> WebLLM</label>
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">翻译引擎</span></label>
+              <select id="engine" class="select select-bordered select-sm w-full">
+                <option value="google">Google 翻译 (免费)</option>
+                <option value="mymemory">MyMemory (免费)</option>
+                <option value="lingva">Lingva Translate (免费)</option>
+                <option value="libre">LibreTranslate (免费)</option>
+                <option value="deepl">DeepL (需 API Key)</option>
+                <option value="custom">自定义 API</option>
+                <option value="openai">OpenAI (需 API Key)</option>
+                <option value="gemini">Gemini (需 API Key)</option>
+                <option value="claude">Claude (需 API Key)</option>
+                <option value="ollama">Ollama (本地/自定义)</option>
+                <option value="webllm">WebLLM (本地浏览器推理)</option>
+              </select>
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">目标语言</span></label>
+              <select id="targetLang" class="select select-bordered select-sm w-full">
+                <option value="zh-CN">简体中文</option>
+                <option value="zh-TW">繁体中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+                <option value="ko">한국어</option>
+                <option value="fr">Français</option>
+                <option value="de">Deutsch</option>
+                <option value="es">Español</option>
+                <option value="ru">Русский</option>
+                <option value="pt">Português</option>
+                <option value="it">Italiano</option>
+                <option value="ar">العربية</option>
+                <option value="hi">हिन्दी</option>
+                <option value="th">ไทย</option>
+                <option value="vi">Tiếng Việt</option>
+                <option value="id">Bahasa Indonesia</option>
+                <option value="tr">Türkçe</option>
+              </select>
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">显示模式</span></label>
+              <select id="displayMode" class="select select-bordered select-sm w-full">
+                <option value="bilingual">双语对照 (原文 + 译文)</option>
+                <option value="replace">译文替换 (悬停显示原文)</option>
+                <option value="translationOnly">仅译文</option>
+              </select>
+            </div>
+
+            <div class="flex gap-6 flex-wrap">
+              <label class="cursor-pointer flex items-center gap-2 text-sm">
+                <input type="checkbox" id="hoverTranslate" class="checkbox checkbox-primary checkbox-sm" />
+                <span>鼠标悬停翻译段落</span>
+              </label>
+              <label class="cursor-pointer flex items-center gap-2 text-sm">
+                <input type="checkbox" id="inputTranslate" class="checkbox checkbox-primary checkbox-sm" />
+                <span>输入框实时翻译</span>
+              </label>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <h3>API 配置</h3>
-          <div class="field">
-            <label>DeepL API Key</label>
-            <input type="password" id="deeplKey" placeholder="输入 DeepL API Key">
-          </div>
-          <div class="field">
-            <label>自定义 API 地址</label>
-            <input type="text" id="customApiUrl" placeholder="https://api.example.com/translate">
-          </div>
-          <div class="field">
-            <label>自定义 API Key (可选)</label>
-            <input type="password" id="customApiKey" placeholder="Bearer token">
-          </div>
-          <div class="field">
-            <label>LibreTranslate 地址</label>
-            <input type="text" id="libreUrl" placeholder="https://libretranslate.com">
+        <!-- 划词翻译 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">划词翻译</h3>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">划词模式</span></label>
+              <select id="selectionMode" class="select select-bordered select-sm w-full">
+                <option value="icon">图标模式 (选中后点击图标)</option>
+                <option value="direct">直接弹窗 (选中即翻译)</option>
+                <option value="dblclick">双击查词</option>
+                <option value="shortcut">快捷键</option>
+                <option value="off">关闭划词翻译</option>
+              </select>
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">划词引擎 (多选)</span></label>
+              <div class="flex flex-wrap gap-x-4 gap-y-2 mt-1" id="selectionEngines">
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="google" class="checkbox checkbox-primary checkbox-xs" checked /> Google</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="lingva" class="checkbox checkbox-primary checkbox-xs" checked /> Lingva</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="libre" class="checkbox checkbox-primary checkbox-xs" checked /> Libre</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="mymemory" class="checkbox checkbox-primary checkbox-xs" /> MyMemory</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="deepl" class="checkbox checkbox-primary checkbox-xs" /> DeepL</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="openai" class="checkbox checkbox-primary checkbox-xs" /> OpenAI</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="gemini" class="checkbox checkbox-primary checkbox-xs" /> Gemini</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="claude" class="checkbox checkbox-primary checkbox-xs" /> Claude</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="ollama" class="checkbox checkbox-primary checkbox-xs" /> Ollama</label>
+                <label class="cursor-pointer flex items-center gap-1.5 text-sm"><input type="checkbox" value="webllm" class="checkbox checkbox-primary checkbox-xs" /> WebLLM</label>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <h3>AI 引擎配置</h3>
-          <p class="hint">配置 OpenAI, Gemini 或 Claude 的 API 访问凭证</p>
-          <div class="field">
-            <label>OpenAI API Key</label>
-            <input type="password" id="openaiKey" placeholder="sk-...">
-          </div>
-          <div class="field-row">
-            <div class="field" style="flex: 1;">
-              <label>OpenAI 模型</label>
-              <input type="text" id="openaiModel" placeholder="例如: gpt-3.5-turbo, gpt-4o">
+        <!-- API 配置 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">API 配置</h3>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">DeepL API Key</span></label>
+              <input type="password" id="deeplKey" placeholder="输入 DeepL API Key" class="input input-bordered input-sm w-full" />
             </div>
-            <div class="field" style="flex: 2;">
-              <label>OpenAI 接口地址 (支持代理)</label>
-              <input type="text" id="openaiUrl" placeholder="https://api.openai.com/v1/chat/completions">
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">自定义 API 地址</span></label>
+              <input type="text" id="customApiUrl" placeholder="https://api.example.com/translate" class="input input-bordered input-sm w-full" />
             </div>
-          </div>
-          <div class="field-row">
-            <div class="field" style="flex: 1;">
-              <label>Gemini API Key</label>
-              <input type="password" id="geminiKey" placeholder="AIza...">
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">自定义 API Key (可选)</span></label>
+              <input type="password" id="customApiKey" placeholder="Bearer token" class="input input-bordered input-sm w-full" />
             </div>
-            <div class="field" style="flex: 1;">
-              <label>Gemini 模型</label>
-              <input type="text" id="geminiModel" placeholder="例如: gemini-1.5-flash, gemini-1.5-pro">
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">LibreTranslate 地址</span></label>
+              <input type="text" id="libreUrl" placeholder="https://libretranslate.com" class="input input-bordered input-sm w-full" />
             </div>
           </div>
-          <div class="field-row">
-            <div class="field" style="flex: 1;">
-              <label>Claude API Key</label>
-              <input type="password" id="claudeKey" placeholder="sk-ant-...">
+        </div>
+
+        <!-- AI 引擎配置 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">AI 引擎配置</h3>
+            <p class="text-xs text-base-content/50 -mt-2">配置 OpenAI、Gemini 或 Claude 的 API 访问凭证</p>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">OpenAI API Key</span></label>
+              <input type="password" id="openaiKey" placeholder="sk-..." class="input input-bordered input-sm w-full" />
             </div>
-            <div class="field" style="flex: 1;">
-              <label>Claude 模型</label>
-              <input type="text" id="claudeModel" placeholder="例如: claude-3-haiku-20240307">
+            <div class="grid grid-cols-3 gap-3">
+              <div class="form-control">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">OpenAI 模型</span></label>
+                <input type="text" id="openaiModel" placeholder="gpt-3.5-turbo" class="input input-bordered input-sm w-full" />
+              </div>
+              <div class="form-control col-span-2">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">OpenAI 接口地址 (支持代理)</span></label>
+                <input type="text" id="openaiUrl" placeholder="https://api.openai.com/v1/chat/completions" class="input input-bordered input-sm w-full" />
+              </div>
             </div>
-          </div>
-          <div class="field-row">
-            <div class="field" style="flex: 1;">
-              <label>Ollama 模型</label>
-              <input type="text" id="ollamaModel" placeholder="例如: llama3, qwen">
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="form-control">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">Gemini API Key</span></label>
+                <input type="password" id="geminiKey" placeholder="AIza..." class="input input-bordered input-sm w-full" />
+              </div>
+              <div class="form-control">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">Gemini 模型</span></label>
+                <input type="text" id="geminiModel" placeholder="gemini-1.5-flash" class="input input-bordered input-sm w-full" />
+              </div>
             </div>
-            <div class="field" style="flex: 2;">
-              <label>Ollama 接口地址</label>
-              <input type="text" id="ollamaUrl" placeholder="http://localhost:11434/api/chat">
+
+            <div class="grid grid-cols-2 gap-3">
+              <div class="form-control">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">Claude API Key</span></label>
+                <input type="password" id="claudeKey" placeholder="sk-ant-..." class="input input-bordered input-sm w-full" />
+              </div>
+              <div class="form-control">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">Claude 模型</span></label>
+                <input type="text" id="claudeModel" placeholder="claude-3-haiku-20240307" class="input input-bordered input-sm w-full" />
+              </div>
             </div>
-          </div>
-          <div class="field-row">
-            <div class="field" style="flex: 1;">
-              <label>WebLLM 模型</label>
-              <select id="webllmModel" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px;">
+
+            <div class="grid grid-cols-3 gap-3">
+              <div class="form-control">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">Ollama 模型</span></label>
+                <input type="text" id="ollamaModel" placeholder="llama3, qwen" class="input input-bordered input-sm w-full" />
+              </div>
+              <div class="form-control col-span-2">
+                <label class="label pb-1"><span class="label-text text-xs text-base-content/60">Ollama 接口地址</span></label>
+                <input type="text" id="ollamaUrl" placeholder="http://localhost:11434/api/chat" class="input input-bordered input-sm w-full" />
+              </div>
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">WebLLM 模型</span></label>
+              <select id="webllmModel" class="select select-bordered select-sm w-full">
                 <option value="Llama-3-8B-Instruct-q4f32_1-MLC">Llama-3-8B-Instruct-q4f32_1-MLC</option>
                 <option value="Phi-3-mini-4k-instruct-q4f16_1-MLC">Phi-3-mini-4k-instruct-q4f16_1-MLC</option>
                 <option value="Qwen2-1.5B-Instruct-q4f16_1-MLC">Qwen2-1.5B-Instruct-q4f16_1-MLC</option>
                 <option value="gemma-2b-it-q4f16_1-MLC">gemma-2b-it-q4f16_1-MLC</option>
               </select>
-              <p class="hint">模型初次使用会自动下载到浏览器缓存中，文件较大请耐心等待。</p>
+              <p class="text-xs text-base-content/40 mt-1">模型初次使用会自动下载到浏览器缓存中，文件较大请耐心等待。</p>
             </div>
-          </div>
-          <div class="field">
-            <label>AI 翻译提示词 (Prompt)</label>
-            <textarea id="aiPrompt" rows="3" style="width: 100%; box-sizing: border-box; padding: 8px; border-radius: 4px; border: 1px solid #ddd;"></textarea>
-            <p class="hint">请务必保留 <code>{targetLang}</code> 占位符和对 <code>\n\u2581\u2581\u2581\n</code> 分隔符的说明，否则全页翻译会因为段落错位而失败。</p>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">AI 翻译提示词 (Prompt)</span></label>
+              <textarea id="aiPrompt" rows="3" class="textarea textarea-bordered text-sm w-full"></textarea>
+              <p class="text-xs text-base-content/40 mt-1">请务必保留 <code class="font-mono">{targetLang}</code> 占位符和对 <code class="font-mono">\n▁▁▁\n</code> 分隔符的说明，否则全页翻译会因为段落错位而失败。</p>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- Style -->
+      <!-- ═══════════════════ 样式 ═══════════════════ -->
       <section class="tab" id="tab-style">
-        <h2>翻译样式</h2>
+        <h2 class="text-xl font-semibold mb-5">翻译样式</h2>
 
-        <div class="card">
-          <h3>译文颜色</h3>
-          <div class="color-picker" id="colorPicker">
-            <button class="color-dot" data-color="#9b59b6" title="紫色" style="background:#9b59b6"></button>
-            <button class="color-dot" data-color="#4f8ef7" title="蓝色" style="background:#4f8ef7"></button>
-            <button class="color-dot" data-color="#7c8aaa" title="灰色" style="background:#7c8aaa"></button>
-            <button class="color-dot" data-color="#27ae60" title="绿色" style="background:#27ae60"></button>
-            <button class="color-dot" data-color="#e67e22" title="橙色" style="background:#e67e22"></button>
-            <button class="color-dot" data-color="#e74c3c" title="红色" style="background:#e74c3c"></button>
-            <button class="color-dot" data-color="#00b894" title="青色" style="background:#00b894"></button>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>字体设置</h3>
-          <div class="field">
-            <label>字体大小 <span class="field-value" id="fontSizeValue">0.92em</span></label>
-            <input type="range" id="fontSize" min="0.7" max="1.5" step="0.02" value="0.92">
-          </div>
-          <div class="field">
-            <label>行高 <span class="field-value" id="lineHeightValue">1.6</span></label>
-            <input type="range" id="lineHeight" min="1.0" max="3.0" step="0.1" value="1.6">
-          </div>
-          <div class="field-row">
-            <label class="toggle"><input type="checkbox" id="translationBold"><span>译文加粗</span></label>
-            <label class="toggle"><input type="checkbox" id="translationShowBorder" checked><span>显示左边框</span></label>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>预览</h3>
-          <div class="preview-box">
-            <p>This is the original English text for preview.</p>
-            <span class="preview-translation" id="previewText">这是用于预览的原始英文文本。</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Shortcuts -->
-      <section class="tab" id="tab-shortcuts">
-        <h2>快捷键</h2>
-
-        <div class="card">
-          <h3>当前快捷键</h3>
-          <div class="shortcut-list" id="shortcutList"></div>
-          <p class="hint">快捷键通过 Chrome 扩展管理页面修改</p>
-          <button class="btn-primary" id="openShortcutsBtn">打开快捷键设置</button>
-        </div>
-      </section>
-
-      <!-- Sites -->
-      <section class="tab" id="tab-sites">
-        <h2>站点规则</h2>
-
-        <div class="card">
-          <h3>黑名单 / 白名单</h3>
-          <div class="field">
-            <label>模式</label>
-            <select id="siteMode">
-              <option value="blacklist">黑名单 (排除以下站点)</option>
-              <option value="whitelist">白名单 (仅翻译以下站点)</option>
-            </select>
-          </div>
-          <div class="field">
-            <div class="input-row">
-              <input type="text" id="siteInput" placeholder="输入域名，如 example.com">
-              <button class="btn-primary" id="addSiteBtn">添加</button>
+        <!-- 颜色 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-3">
+            <h3 class="font-semibold text-sm">译文颜色</h3>
+            <div class="flex gap-3 items-center" id="colorPicker">
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#9b59b6" title="紫色" style="background:#9b59b6"></button>
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#4f8ef7" title="蓝色" style="background:#4f8ef7"></button>
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#7c8aaa" title="灰色" style="background:#7c8aaa"></button>
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#27ae60" title="绿色" style="background:#27ae60"></button>
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#e67e22" title="橙色" style="background:#e67e22"></button>
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#e74c3c" title="红色" style="background:#e74c3c"></button>
+              <button class="color-dot w-7 h-7 rounded-full border-2 border-transparent cursor-pointer hover:scale-110 transition-transform focus:outline-none" data-color="#00b894" title="青色" style="background:#00b894"></button>
             </div>
           </div>
-          <div class="tag-list" id="siteList"></div>
         </div>
 
-        <div class="card">
-          <h3>站点专属引擎</h3>
-          <p class="hint">为特定网站指定翻译引擎，覆盖全局默认设置</p>
-          <div class="field">
-            <div class="input-row">
-              <input type="text" id="siteEngineHost" placeholder="域名，如 github.com">
-              <select id="siteEngineEngine">
+        <!-- 字体设置 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">字体设置</h3>
+
+            <div class="form-control">
+              <label class="label pb-1 flex justify-between">
+                <span class="label-text text-xs text-base-content/60">字体大小</span>
+                <span class="text-xs font-semibold text-primary" id="fontSizeValue">0.92em</span>
+              </label>
+              <input type="range" id="fontSize" min="0.7" max="1.5" step="0.02" value="0.92" class="range range-primary range-sm" />
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1 flex justify-between">
+                <span class="label-text text-xs text-base-content/60">行高</span>
+                <span class="text-xs font-semibold text-primary" id="lineHeightValue">1.6</span>
+              </label>
+              <input type="range" id="lineHeight" min="1.0" max="3.0" step="0.1" value="1.6" class="range range-primary range-sm" />
+            </div>
+
+            <div class="flex gap-6 flex-wrap">
+              <label class="cursor-pointer flex items-center gap-2 text-sm">
+                <input type="checkbox" id="translationBold" class="checkbox checkbox-primary checkbox-sm" />
+                <span>译文加粗</span>
+              </label>
+              <label class="cursor-pointer flex items-center gap-2 text-sm">
+                <input type="checkbox" id="translationShowBorder" class="checkbox checkbox-primary checkbox-sm" checked />
+                <span>显示左边框</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 预览 -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-3">
+            <h3 class="font-semibold text-sm">预览</h3>
+            <div class="bg-base-200 rounded-lg p-4 border border-base-300">
+              <p class="text-sm text-base-content mb-1">This is the original English text for preview.</p>
+              <span class="preview-translation text-sm" id="previewText">这是用于预览的原始英文文本。</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════ 快捷键 ═══════════════════ -->
+      <section class="tab" id="tab-shortcuts">
+        <h2 class="text-xl font-semibold mb-5">快捷键</h2>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">当前快捷键</h3>
+            <div class="flex flex-col gap-2.5 mb-2" id="shortcutList"></div>
+            <p class="text-xs text-base-content/40">快捷键通过 Chrome 扩展管理页面修改</p>
+            <button class="btn btn-primary btn-sm w-fit" id="openShortcutsBtn">
+              <i data-lucide="external-link" class="w-4 h-4"></i>
+              打开快捷键设置
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════ 站点 ═══════════════════ -->
+      <section class="tab" id="tab-sites">
+        <h2 class="text-xl font-semibold mb-5">站点规则</h2>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">黑名单 / 白名单</h3>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">模式</span></label>
+              <select id="siteMode" class="select select-bordered select-sm w-full">
+                <option value="blacklist">黑名单 (排除以下站点)</option>
+                <option value="whitelist">白名单 (仅翻译以下站点)</option>
+              </select>
+            </div>
+
+            <div class="flex gap-2">
+              <input type="text" id="siteInput" placeholder="输入域名，如 example.com" class="input input-bordered input-sm flex-1" />
+              <button class="btn btn-primary btn-sm" id="addSiteBtn">添加</button>
+            </div>
+
+            <div class="flex flex-wrap gap-2 mt-1" id="siteList"></div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">站点专属引擎</h3>
+            <p class="text-xs text-base-content/40 -mt-2">为特定网站指定翻译引擎，覆盖全局默认设置</p>
+
+            <div class="flex gap-2">
+              <input type="text" id="siteEngineHost" placeholder="域名，如 github.com" class="input input-bordered input-sm flex-1" />
+              <select id="siteEngineEngine" class="select select-bordered select-sm w-36">
                 <option value="google">Google</option>
                 <option value="mymemory">MyMemory</option>
                 <option value="lingva">Lingva</option>
@@ -291,92 +378,128 @@
                 <option value="ollama">Ollama</option>
                 <option value="webllm">WebLLM</option>
               </select>
-              <button class="btn-primary" id="addSiteEngineBtn">添加</button>
+              <button class="btn btn-primary btn-sm" id="addSiteEngineBtn">添加</button>
+            </div>
+
+            <div class="flex flex-col gap-1.5 mt-1" id="siteEngineList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════ 朗读 (TTS) ═══════════════════ -->
+      <section class="tab" id="tab-tts">
+        <h2 class="text-xl font-semibold mb-5">朗读设置 (TTS)</h2>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">基础配置</h3>
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">发音引擎</span></label>
+              <select id="ttsEngine" class="select select-bordered select-sm w-full">
+                <option value="browser">浏览器自带语音 (完全免费)</option>
+                <option value="openai">OpenAI TTS (需配置 API Key，音质极佳)</option>
+              </select>
             </div>
           </div>
-          <div class="site-engine-list" id="siteEngineList"></div>
+        </div>
+
+        <!-- Browser TTS settings — show/hide via JS inline style -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl" id="ttsBrowserSettings">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">浏览器自带语音设置</h3>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">系统语音包</span></label>
+              <select id="ttsBrowserVoiceURI" class="select select-bordered select-sm w-full">
+                <option value="">自动匹配 (默认)</option>
+              </select>
+              <p class="text-xs text-base-content/40 mt-1">如果找不到合适的语音，尝试在操作系统设置中安装更多语音包。</p>
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1 flex justify-between">
+                <span class="label-text text-xs text-base-content/60">语速 (Rate)</span>
+                <span class="text-xs font-semibold text-primary" id="ttsBrowserRateValue">1.0</span>
+              </label>
+              <input type="range" id="ttsBrowserRate" min="0.1" max="2.0" step="0.1" value="1.0" class="range range-primary range-sm" />
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1 flex justify-between">
+                <span class="label-text text-xs text-base-content/60">语调 (Pitch)</span>
+                <span class="text-xs font-semibold text-primary" id="ttsBrowserPitchValue">1.0</span>
+              </label>
+              <input type="range" id="ttsBrowserPitch" min="0" max="2.0" step="0.1" value="1.0" class="range range-primary range-sm" />
+            </div>
+          </div>
+        </div>
+
+        <!-- OpenAI TTS settings — hidden by default via JS -->
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl" id="ttsOpenAISettings" style="display:none">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">OpenAI TTS 设置</h3>
+            <p class="text-xs text-base-content/40 -mt-2">复用常规设置中的 OpenAI API Key 和接口地址。</p>
+
+            <div class="form-control">
+              <label class="label pb-1"><span class="label-text text-xs text-base-content/60">发音人 (Voice)</span></label>
+              <select id="ttsOpenaiVoice" class="select select-bordered select-sm w-full">
+                <option value="alloy">Alloy (中性)</option>
+                <option value="echo">Echo (男性)</option>
+                <option value="fable">Fable (英音)</option>
+                <option value="onyx">Onyx (低沉男声)</option>
+                <option value="nova">Nova (温柔女声)</option>
+                <option value="shimmer">Shimmer (清亮女声)</option>
+              </select>
+            </div>
+
+            <div class="form-control">
+              <label class="label pb-1 flex justify-between">
+                <span class="label-text text-xs text-base-content/60">语速 (Speed)</span>
+                <span class="text-xs font-semibold text-primary" id="ttsOpenaiSpeedValue">1.0</span>
+              </label>
+              <input type="range" id="ttsOpenaiSpeed" min="0.25" max="4.0" step="0.25" value="1.0" class="range range-primary range-sm" />
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- TTS -->
-      <section class="tab" id="tab-tts">
-        <h2>朗读设置 (TTS)</h2>
-
-        <div class="card">
-          <h3>基础配置</h3>
-          <div class="field">
-            <label>发音引擎</label>
-            <select id="ttsEngine">
-              <option value="browser">浏览器自带语音 (完全免费)</option>
-              <option value="openai">OpenAI TTS (需配置 API Key，音质极佳)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="card" id="ttsBrowserSettings">
-          <h3>浏览器自带语音设置</h3>
-          <div class="field">
-            <label>系统语音包</label>
-            <select id="ttsBrowserVoiceURI">
-              <option value="">自动匹配 (默认)</option>
-            </select>
-            <p class="hint">如果找不到合适的语音，尝试在操作系统设置中安装更多语音包。</p>
-          </div>
-          <div class="field">
-            <label>语速 (Rate) <span class="field-value" id="ttsBrowserRateValue">1.0</span></label>
-            <input type="range" id="ttsBrowserRate" min="0.1" max="2.0" step="0.1" value="1.0">
-          </div>
-          <div class="field">
-            <label>语调 (Pitch) <span class="field-value" id="ttsBrowserPitchValue">1.0</span></label>
-            <input type="range" id="ttsBrowserPitch" min="0" max="2.0" step="0.1" value="1.0">
-          </div>
-        </div>
-
-        <div class="card" id="ttsOpenAISettings" style="display: none;">
-          <h3>OpenAI TTS 设置</h3>
-          <p class="hint">复用常规设置中的 OpenAI API Key 和接口地址。</p>
-          <div class="field">
-            <label>发音人 (Voice)</label>
-            <select id="ttsOpenaiVoice">
-              <option value="alloy">Alloy (中性)</option>
-              <option value="echo">Echo (男性)</option>
-              <option value="fable">Fable (英音)</option>
-              <option value="onyx">Onyx (低沉男声)</option>
-              <option value="nova">Nova (温柔女声)</option>
-              <option value="shimmer">Shimmer (清亮女声)</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>语速 (Speed) <span class="field-value" id="ttsOpenaiSpeedValue">1.0</span></label>
-            <input type="range" id="ttsOpenaiSpeed" min="0.25" max="4.0" step="0.25" value="1.0">
-          </div>
-        </div>
-      </section>
-
-      <!-- Data -->
+      <!-- ═══════════════════ 数据 ═══════════════════ -->
       <section class="tab" id="tab-data">
-        <h2>数据管理</h2>
+        <h2 class="text-xl font-semibold mb-5">数据管理</h2>
 
-        <div class="card">
-          <h3>导出 / 导入配置</h3>
-          <p class="hint">导出所有设置（包括站点规则、样式配置等），方便备份或迁移到其他设备</p>
-          <div class="btn-row">
-            <button class="btn-primary" id="exportBtn">📤 导出配置</button>
-            <label class="btn-secondary upload-label">
-              📥 导入配置
-              <input type="file" id="importFile" accept=".json" hidden>
-            </label>
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">导出 / 导入配置</h3>
+            <p class="text-xs text-base-content/40 -mt-2">导出所有设置（包括站点规则、样式配置等），方便备份或迁移到其他设备</p>
+            <div class="flex gap-3 flex-wrap">
+              <button class="btn btn-primary btn-sm" id="exportBtn">
+                <i data-lucide="upload" class="w-4 h-4"></i>
+                导出配置
+              </button>
+              <label class="btn btn-outline btn-sm cursor-pointer">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                导入配置
+                <input type="file" id="importFile" accept=".json" class="hidden" />
+              </label>
+            </div>
           </div>
         </div>
 
-        <div class="card">
-          <h3>重置</h3>
-          <p class="hint">恢复所有设置为默认值（不影响单词本和翻译历史）</p>
-          <button class="btn-danger" id="resetBtn">🔄 恢复默认设置</button>
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">重置</h3>
+            <p class="text-xs text-base-content/40 -mt-2">恢复所有设置为默认值（不影响单词本和翻译历史）</p>
+            <button class="btn btn-error btn-sm w-fit" id="resetBtn">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              恢复默认设置
+            </button>
+          </div>
         </div>
       </section>
+
     </main>
   </div>
+
   <script type="module" src="options.js"></script>
 </body>
 </html>

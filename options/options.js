@@ -1,6 +1,8 @@
 /**
  * Options page - Super Immersive Translate
  */
+import { createIcons, icons } from 'lucide';
+import { applyTheme, initThemeControl } from '../utils/theme.js';
 
 const DEFAULT_SETTINGS = {
   engine: 'google',
@@ -47,6 +49,11 @@ const ENGINE_NAMES = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // ── Theme ────────────────────────────────
+  applyTheme();
+  await initThemeControl(document.getElementById('themeControl'));
+  createIcons({ icons });
+
   // ── Tab navigation ──────────────────────
   const navItems = document.querySelectorAll('.nav-item');
   const tabs = document.querySelectorAll('.tab');
@@ -176,10 +183,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     commands.forEach(cmd => {
       if (!cmd.description) return;
       const item = document.createElement('div');
-      item.className = 'shortcut-item';
+      item.className = 'shortcut-item flex justify-between items-center px-3 py-2.5 bg-base-200 rounded-lg';
       item.innerHTML = `
-        <span class="shortcut-desc">${cmd.description}</span>
-        <span class="shortcut-key">${cmd.shortcut || '未设置'}</span>`;
+        <span class="shortcut-desc text-sm text-base-content/70">${cmd.description}</span>
+        <span class="shortcut-key font-mono text-xs px-2.5 py-1 bg-base-100 border border-base-300 rounded">${cmd.shortcut || '未设置'}</span>`;
       container.appendChild(item);
     });
   } catch (e) { /* ignore */ }
@@ -383,8 +390,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     container.innerHTML = '';
     sites.forEach(site => {
       const tag = document.createElement('span');
-      tag.className = 'tag';
-      tag.innerHTML = `${site} <button class="tag-remove" data-site="${site}">&times;</button>`;
+      tag.className = 'tag badge badge-outline gap-1 py-3 px-2.5';
+      tag.innerHTML = `${site} <button class="tag-remove btn btn-ghost btn-xs h-4 min-h-0 px-0.5 text-base-content/40 hover:text-error" data-site="${site}">&times;</button>`;
       container.appendChild(tag);
     });
     container.querySelectorAll('.tag-remove').forEach(btn => {
@@ -402,11 +409,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     container.innerHTML = '';
     Object.entries(engines).forEach(([host, eng]) => {
       const item = document.createElement('div');
-      item.className = 'site-engine-item';
+      item.className = 'site-engine-item flex items-center justify-between px-3 py-2 bg-base-200 rounded-lg text-sm';
       item.innerHTML = `
-        <span class="site-host">${host}</span>
-        <span class="site-eng">${ENGINE_NAMES[eng] || eng}</span>
-        <button class="tag-remove" data-host="${host}">&times;</button>`;
+        <span class="site-host font-medium text-base-content">${host}</span>
+        <span class="site-eng text-xs text-primary font-semibold">${ENGINE_NAMES[eng] || eng}</span>
+        <button class="tag-remove btn btn-ghost btn-xs text-base-content/40 hover:text-error" data-host="${host}">&times;</button>`;
       container.appendChild(item);
     });
     container.querySelectorAll('.tag-remove').forEach(btn => {
