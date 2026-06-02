@@ -1,4 +1,5 @@
 import './content.css';
+import { translator } from '../utils/translator.js';
 
 /**
  * Content script - Super Immersive Translate

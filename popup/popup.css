@@ -1,217 +1,23 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* Transition styles for smooth theme swapping */
+html, body {
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
-body {
-  width: 340px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
-  color: #333;
-  background: #fff;
+/* Custom scrollbar to keep layout clean */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
 }
-
-.popup-container { padding: 16px; }
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
-
-.header h1 {
-  font-size: 16px;
-  font-weight: 600;
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--color-base-300, #e5e7eb);
+  border-radius: 10px;
 }
-
-.toggle-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #888;
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background-color: var(--color-base-content, #9ca3af);
+  opacity: 0.5;
 }
-
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 40px;
-  height: 22px;
-}
-
-.switch input { opacity: 0; width: 0; height: 0; }
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: #ccc;
-  border-radius: 22px;
-  transition: 0.3s;
-}
-
-.slider::before {
-  content: '';
-  position: absolute;
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: 0.3s;
-}
-
-input:checked + .slider { background: #4f8ef7; }
-input:checked + .slider::before { transform: translateX(18px); }
-
-.section { margin-bottom: 12px; }
-
-.section label {
-  display: block;
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 4px;
-}
-
-.section select,
-.section input[type="text"],
-.section input[type="password"] {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.2s;
-  background: #fafafa;
-}
-
-.section select:focus,
-.section input:focus { border-color: #4f8ef7; }
-
-.section input { margin-bottom: 6px; }
-
-.divider {
-  height: 1px;
-  background: #eee;
-  margin: 12px 0;
-}
-
-/* Checkbox group for engine selection */
-.checkbox-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-top: 4px;
-}
-
-.checkbox-group label {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: #555;
-  cursor: pointer;
-  margin-bottom: 0;
-}
-
-.checkbox-group input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  accent-color: #4f8ef7;
-  cursor: pointer;
-}
-
-/* Inline toggle label for checkboxes */
-.toggle-label {
-  display: flex !important;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  font-size: 13px !important;
-  color: #444 !important;
-}
-
-.toggle-label input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
-  accent-color: #4f8ef7;
-  cursor: pointer;
-}
-
-/* Color picker for translation text */
-.color-picker {
-  display: flex;
-  gap: 8px;
-  margin-top: 6px;
-  align-items: center;
-}
-
-.color-dot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
-  outline: none;
-  padding: 0;
-}
-
-.color-dot:hover {
-  transform: scale(1.2);
-}
-
-.color-dot.active {
-  border-color: #333;
-  box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
-}
-
-.footer {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #eee;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.footer-shortcuts {
-  display: flex;
-  gap: 8px;
-}
-
-.footer-links {
-  display: flex;
-  gap: 16px;
-}
-
-.shortcut {
-  font-size: 11px;
-  color: #aaa;
-  background: #f5f5f5;
-  padding: 3px 8px;
-  border-radius: 4px;
-}
-
-/* Toggle group for multiple inline checkboxes */
-.toggle-group {
-  display: flex;
-  gap: 16px;
-}
-
-.footer-link {
-  font-size: 12px;
-  color: #4f8ef7;
-  text-decoration: none;
-  font-weight: 500;
-  transition: color 0.15s;
-}
-
-.footer-link:hover { color: #6c5ce7; }

@@ -1,3 +1,5 @@
+import { Translator } from '../utils/translator.js';
+
 /**
  * PDF / Document Translation Workspace - Super Immersive Translate
  */

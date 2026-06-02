@@ -434,6 +434,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (navDoc) navDoc.addEventListener('click', () => switchTab(navDoc, contentDoc));
   if (navWeb) navWeb.addEventListener('click', () => switchTab(navWeb, contentWeb));
 
+  // Switch to specific tab based on URL query parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialTab = urlParams.get('tab');
+  if (initialTab === 'image') {
+    switchTab(navImage, contentImage);
+  } else if (initialTab === 'doc' || initialTab === 'document') {
+    switchTab(navDoc, contentDoc);
+  } else if (initialTab === 'web' || initialTab === 'website') {
+    switchTab(navWeb, contentWeb);
+  } else if (initialTab === 'text') {
+    switchTab(navText, contentText);
+  }
+
+
   // --- Clipboard Paste Support ---
   document.addEventListener('paste', (e) => {
     const clipboardData = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData);

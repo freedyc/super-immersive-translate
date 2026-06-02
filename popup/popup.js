@@ -1,7 +1,10 @@
+import { createIcons, icons } from 'lucide';
+
 /**
  * Popup script - Super Immersive Translate
  */
 document.addEventListener('DOMContentLoaded', async () => {
+  createIcons({ icons });
   const toggleBtn = document.getElementById('toggleBtn');
   const statusText = document.getElementById('statusText');
   const engineSelect = document.getElementById('engine');
@@ -26,6 +29,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   const geminiSettings = document.querySelector('.gemini-settings');
   const claudeSettings = document.querySelector('.claude-settings');
   const ollamaSettings = document.querySelector('.ollama-settings');
+  const webllmSettings = document.querySelector('.webllm-settings');
+  const engineSettingsContainer = document.getElementById('engineSettingsContainer');
 
   // Load settings
   const settings = await chrome.storage.sync.get({
@@ -43,8 +48,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     libreUrl: 'https://libretranslate.com',
     openaiKey: '',
     geminiKey: '',
-    claudeKey: ''
+    claudeKey: '',
+    theme: 'light' // Default theme
   });
+
+  // Apply saved theme immediately
+  document.documentElement.setAttribute('data-theme', settings.theme);
+  updateThemeToggleUI(settings.theme);
 
   engineSelect.value = settings.engine;
   targetLangSelect.value = settings.targetLang;
@@ -122,6 +132,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Theme switcher
+  const themeToggle = document.getElementById('themeToggle');
+  themeToggle.addEventListener('click', async () => {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    updateThemeToggleUI(newTheme);
+    await chrome.storage.sync.set({ theme: newTheme });
+  });
+
+  function updateThemeToggleUI(theme) {
+    const themeToggle = document.getElementById('themeToggle');
+    if (!themeToggle) return;
+    themeToggle.innerHTML = `<i id="themeIcon" data-lucide="${theme === 'dark' ? 'moon' : 'sun'}" class="w-4 h-4"></i>`;
+    createIcons({ icons });
+  }
+
+  // Mode Grid Navigation
+  const openTabInSandbox = (tabName) => {
+    chrome.tabs.create({ url: chrome.runtime.getURL(`sandbox/index.html?tab=${tabName}`) });
+  };
+
+  document.getElementById('navSandboxBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    openTabInSandbox('text');
+  });
+
+  document.getElementById('navImageBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    openTabInSandbox('image');
+  });
+
+  document.getElementById('navDocBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    openTabInSandbox('doc');
+  });
+
+  document.getElementById('navWebBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    openTabInSandbox('web');
+  });
+
   // All other changes
   targetLangSelect.addEventListener('change', saveSettings);
   displayModeSelect.addEventListener('change', saveSettings);
@@ -138,6 +190,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   claudeKeyInput.addEventListener('input', debounce(saveSettings, 500));
 
   function updateEngineUI(engine) {
+    const hasSettings = ['deepl', 'custom', 'libre', 'openai', 'gemini', 'claude', 'ollama', 'webllm'].includes(engine);
+    if (engineSettingsContainer) {
+      engineSettingsContainer.classList.toggle('hidden', !hasSettings);
+    }
     deeplSettings.style.display = engine === 'deepl' ? 'block' : 'none';
     customSettings.style.display = engine === 'custom' ? 'block' : 'none';
     libreSettings.style.display = engine === 'libre' ? 'block' : 'none';
@@ -145,6 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     geminiSettings.style.display = engine === 'gemini' ? 'block' : 'none';
     claudeSettings.style.display = engine === 'claude' ? 'block' : 'none';
     if (ollamaSettings) ollamaSettings.style.display = engine === 'ollama' ? 'block' : 'none';
+    if (webllmSettings) webllmSettings.style.display = engine === 'webllm' ? 'block' : 'none';
   }
 
   async function saveSettings() {
@@ -154,6 +211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     const activeColor = colorPicker.querySelector('.color-dot.active');
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
     const newSettings = {
       engine: engineSelect.value,
       targetLang: targetLangSelect.value,
@@ -169,7 +227,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       libreUrl: libreUrlInput.value,
       openaiKey: openaiKeyInput.value,
       geminiKey: geminiKeyInput.value,
-      claudeKey: claudeKeyInput.value
+      claudeKey: claudeKeyInput.value,
+      theme: currentTheme
     };
     await chrome.storage.sync.set(newSettings);
 
@@ -191,6 +250,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Open pages
+  document.getElementById('openSandbox').addEventListener('click', (e) => {
+    e.preventDefault();
+    chrome.tabs.create({ url: chrome.runtime.getURL('sandbox/index.html') });
+  });
+
   document.getElementById('openWordbook').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('wordbook/index.html') });
@@ -201,18 +265,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.tabs.create({ url: chrome.runtime.getURL('history/index.html') });
   });
 
-  document.getElementById('openPDF').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: chrome.runtime.getURL('pdf/viewer.html') });
-  });
-
-  document.getElementById('openSandbox').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: chrome.runtime.getURL('sandbox/index.html') });
-  });
-
   document.getElementById('openSettings').addEventListener('click', (e) => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
   });
 });
+

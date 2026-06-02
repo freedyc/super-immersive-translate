@@ -1,179 +1,310 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Super Immersive Translate</title>
   <link rel="stylesheet" href="popup.css">
 </head>
-<body>
-  <div class="popup-container">
-    <div class="header">
-      <h1>⚡ 超级翻译</h1>
-      <div class="toggle-wrap">
-        <label class="switch">
-          <input type="checkbox" id="toggleBtn">
-          <span class="slider"></span>
-        </label>
-        <span id="statusText">已关闭</span>
+<body class="w-[360px] h-[600px] bg-base-200 text-base-content font-sans overflow-hidden">
+  <div class="flex flex-col h-full">
+    
+    <!-- Header -->
+    <div class="bg-primary text-primary-content px-4 py-3 flex justify-between items-center shadow-md shrink-0 relative overflow-hidden">
+      <!-- Gradient / Decorative Overlay -->
+      <div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-focus/80 opacity-95"></div>
+      <div class="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+      
+      <h1 class="text-base font-extrabold flex items-center gap-1.5 relative z-10 tracking-wide">
+        <i data-lucide="languages" class="w-5 h-5 text-warning fill-warning/20"></i> 超级翻译
+      </h1>
+      
+      <div class="flex items-center gap-2 relative z-10">
+        <!-- Theme Toggle Button -->
+        <button id="themeToggle" class="btn btn-ghost btn-circle btn-sm text-primary-content hover:bg-white/15" title="切换明暗主题">
+          <i id="themeIcon" data-lucide="sun" class="w-4 h-4"></i>
+        </button>
+        <!-- Status Switch -->
+        <div class="flex items-center gap-2 bg-base-100/10 backdrop-blur-md px-2.5 py-1 rounded-full border border-white/10 shadow-inner">
+          <span id="statusText" class="text-[10px] font-extrabold uppercase tracking-wider text-white">已关闭</span>
+          <input type="checkbox" id="toggleBtn" class="toggle toggle-success toggle-xs border-white/20 bg-white" />
+        </div>
       </div>
     </div>
 
-    <div class="section">
-      <label>全页翻译引擎</label>
-      <select id="engine">
-        <option value="google">Google 翻译 (免费)</option>
-        <option value="mymemory">MyMemory (免费)</option>
-        <option value="lingva">Lingva Translate (免费)</option>
-        <option value="libre">LibreTranslate (免费)</option>
-        <option value="deepl">DeepL (需 API Key)</option>
-        <option value="custom">自定义 API</option>
-        <option value="openai">OpenAI (需 API Key)</option>
-        <option value="gemini">Gemini (需 API Key)</option>
-        <option value="claude">Claude (需 API Key)</option>
-        <option value="ollama">Ollama (本地/自定义)</option>
-      </select>
-    </div>
-
-    <div class="section">
-      <label>目标语言</label>
-      <select id="targetLang">
-        <option value="zh-CN">简体中文</option>
-        <option value="zh-TW">繁体中文</option>
-        <option value="en">English</option>
-        <option value="ja">日本語</option>
-        <option value="ko">한국어</option>
-        <option value="fr">Français</option>
-        <option value="de">Deutsch</option>
-        <option value="es">Español</option>
-        <option value="ru">Русский</option>
-        <option value="pt">Português</option>
-        <option value="it">Italiano</option>
-        <option value="ar">العربية</option>
-        <option value="hi">हिन्दी</option>
-        <option value="th">ไทย</option>
-        <option value="vi">Tiếng Việt</option>
-        <option value="id">Bahasa Indonesia</option>
-        <option value="tr">Türkçe</option>
-      </select>
-    </div>
-
-    <div class="section">
-      <label>显示模式</label>
-      <select id="displayMode">
-        <option value="bilingual">双语对照 (原文 + 译文)</option>
-        <option value="replace">译文替换 (悬停显示原文)</option>
-        <option value="translationOnly">仅译文</option>
-      </select>
-    </div>
-
-    <div class="section">
-      <label>译文颜色</label>
-      <div class="color-picker" id="colorPicker">
-        <button class="color-dot" data-color="#9b59b6" title="紫色" style="background:#9b59b6"></button>
-        <button class="color-dot" data-color="#4f8ef7" title="蓝色" style="background:#4f8ef7"></button>
-        <button class="color-dot" data-color="#7c8aaa" title="灰色" style="background:#7c8aaa"></button>
-        <button class="color-dot" data-color="#27ae60" title="绿色" style="background:#27ae60"></button>
-        <button class="color-dot" data-color="#e67e22" title="橙色" style="background:#e67e22"></button>
-        <button class="color-dot" data-color="#e74c3c" title="红色" style="background:#e74c3c"></button>
-        <button class="color-dot" data-color="#00b894" title="青色" style="background:#00b894"></button>
+    <!-- Scrollable Content -->
+    <div class="p-3 overflow-y-auto flex-1 flex flex-col gap-3 bg-base-200 custom-scrollbar">
+      
+      <!-- Mode Navigation Grid -->
+      <div class="grid grid-cols-4 gap-2 shrink-0">
+        <button id="navImageBtn" class="btn btn-sm btn-outline border-base-300/80 hover:border-primary hover:bg-primary/5 flex flex-col gap-1 h-14 py-2 px-1 rounded-xl text-base-content/85 transition-all duration-200">
+          <i data-lucide="image" class="w-4 h-4 text-primary"></i>
+          <span class="text-[9px] font-extrabold">图片翻译</span>
+        </button>
+        <button id="navDocBtn" class="btn btn-sm btn-outline border-base-300/80 hover:border-success hover:bg-success/5 flex flex-col gap-1 h-14 py-2 px-1 rounded-xl text-base-content/85 transition-all duration-200">
+          <i data-lucide="file-text" class="w-4 h-4 text-success"></i>
+          <span class="text-[9px] font-extrabold">文档翻译</span>
+        </button>
+        <button id="navWebBtn" class="btn btn-sm btn-outline border-base-300/80 hover:border-secondary hover:bg-secondary/5 flex flex-col gap-1 h-14 py-2 px-1 rounded-xl text-base-content/85 transition-all duration-200">
+          <i data-lucide="globe" class="w-4 h-4 text-secondary"></i>
+          <span class="text-[9px] font-extrabold">网页翻译</span>
+        </button>
+        <button id="navSandboxBtn" class="btn btn-sm btn-outline border-base-300/80 hover:border-warning hover:bg-warning/5 flex flex-col gap-1 h-14 py-2 px-1 rounded-xl text-base-content/85 transition-all duration-200">
+          <i data-lucide="zap" class="w-4 h-4 text-warning"></i>
+          <span class="text-[9px] font-extrabold">快捷翻译</span>
+        </button>
       </div>
-    </div>
 
-    <div class="section toggle-group">
-      <label class="toggle-label">
-        <input type="checkbox" id="hoverTranslate">
-        <span>鼠标悬停翻译段落</span>
-      </label>
-      <label class="toggle-label">
-        <input type="checkbox" id="inputTranslate">
-        <span>输入框实时翻译</span>
-      </label>
-    </div>
+      <!-- Core Configuration Card -->
+      <div class="card bg-base-100 border border-base-200/60 shadow-sm p-3.5 flex flex-col gap-3 rounded-2xl">
+        <h2 class="text-[10px] font-extrabold text-base-content/40 uppercase tracking-widest flex items-center gap-1.5 pb-1.5 border-b border-base-200/60">
+          <i data-lucide="settings-2" class="w-3.5 h-3.5 text-base-content/40"></i> 全局翻译设置
+        </h2>
+        
+        <!-- Engine Selector -->
+        <div class="form-control w-full">
+          <label class="label py-0.5"><span class="label-text font-bold text-[11px] text-base-content/85">全页翻译引擎</span></label>
+          <select id="engine" class="select select-bordered select-sm w-full rounded-xl bg-base-100 text-base-content font-semibold border-base-300 focus:border-primary">
+            <option value="google">Google 翻译 (免费)</option>
+            <option value="mymemory">MyMemory (免费)</option>
+            <option value="lingva">Lingva Translate (免费)</option>
+            <option value="libre">LibreTranslate (免费)</option>
+            <option value="deepl">DeepL (需 API Key)</option>
+            <option value="custom">自定义 API</option>
+            <option value="openai">OpenAI (需 API Key)</option>
+            <option value="gemini">Gemini (需 API Key)</option>
+            <option value="claude">Claude (需 API Key)</option>
+            <option value="ollama">Ollama (本地/自定义)</option>
+            <option value="webllm">WebLLM (本地运行/显卡加速)</option>
+          </select>
+        </div>
 
-    <div class="divider"></div>
+        <!-- Engine specific settings container -->
+        <div id="engineSettingsContainer" class="bg-base-200/50 border border-base-200/60 rounded-xl p-3 flex flex-col gap-2.5 transition-all duration-200 empty:hidden">
+          <!-- DeepL Settings -->
+          <div class="deepl-settings hidden flex flex-col gap-1">
+            <label class="label py-0"><span class="label-text font-bold text-[10px] text-base-content/75">DeepL API Key</span></label>
+            <input type="password" id="deeplKey" placeholder="输入 DeepL API Key" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+          </div>
 
-    <div class="section">
-      <label>划词翻译模式</label>
-      <select id="selectionMode">
-        <option value="icon">图标模式 (选中后点击图标)</option>
-        <option value="direct">直接弹窗 (选中即翻译)</option>
-        <option value="dblclick">双击查词</option>
-        <option value="shortcut">快捷键 (Alt+S)</option>
-        <option value="off">关闭划词翻译</option>
-      </select>
-    </div>
+          <!-- Custom Settings -->
+          <div class="custom-settings hidden flex flex-col gap-1">
+            <label class="label py-0"><span class="label-text font-bold text-[10px] text-base-content/75">API 地址</span></label>
+            <input type="text" id="customApiUrl" placeholder="https://api.example.com/translate" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+            <label class="label py-0 mt-1"><span class="label-text font-bold text-[10px] text-base-content/75">API Key (可选)</span></label>
+            <input type="password" id="customApiKey" placeholder="Bearer token" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+          </div>
 
-    <div class="section">
-      <label>划词翻译引擎 (多选)</label>
-      <div class="checkbox-group" id="selectionEngines">
-        <label><input type="checkbox" value="google" checked> 🔵 Google</label>
-        <label><input type="checkbox" value="lingva" checked> 🟢 Lingva</label>
-        <label><input type="checkbox" value="libre" checked> 🟣 Libre</label>
-        <label><input type="checkbox" value="mymemory"> 🟡 MyMemory</label>
-        <label><input type="checkbox" value="deepl"> 🔷 DeepL</label>
-        <label><input type="checkbox" value="openai"> ⚪ OpenAI</label>
-        <label><input type="checkbox" value="gemini"> ✨ Gemini</label>
-        <label><input type="checkbox" value="claude"> 🔶 Claude</label>
-        <label><input type="checkbox" value="ollama"> 🦙 Ollama</label>
+          <!-- Libre settings -->
+          <div class="libre-settings hidden flex flex-col gap-1">
+            <label class="label py-0"><span class="label-text font-bold text-[10px] text-base-content/75">LibreTranslate 地址</span></label>
+            <input type="text" id="libreUrl" placeholder="https://libretranslate.com" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+          </div>
+
+          <!-- OpenAI Settings -->
+          <div class="openai-settings hidden flex flex-col gap-1">
+            <label class="label py-0"><span class="label-text font-bold text-[10px] text-base-content/75">OpenAI API Key</span></label>
+            <input type="password" id="openaiKey" placeholder="输入 OpenAI API Key" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+            <div class="text-[9px] text-base-content/40 mt-0.5">更多模型配置请前往扩展设置页</div>
+          </div>
+
+          <!-- Gemini Settings -->
+          <div class="gemini-settings hidden flex flex-col gap-1">
+            <label class="label py-0"><span class="label-text font-bold text-[10px] text-base-content/75">Gemini API Key</span></label>
+            <input type="password" id="geminiKey" placeholder="输入 Gemini API Key" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+            <div class="text-[9px] text-base-content/40 mt-0.5">更多模型配置请前往扩展设置页</div>
+          </div>
+
+          <!-- Claude Settings -->
+          <div class="claude-settings hidden flex flex-col gap-1">
+            <label class="label py-0"><span class="label-text font-bold text-[10px] text-base-content/75">Claude API Key</span></label>
+            <input type="password" id="claudeKey" placeholder="输入 Claude API Key" class="input input-bordered input-sm w-full rounded-lg bg-base-100 text-base-content border-base-300 focus:border-primary" />
+            <div class="text-[9px] text-base-content/40 mt-0.5">更多模型配置请前往扩展设置页</div>
+          </div>
+
+          <!-- Ollama Settings -->
+          <div class="ollama-settings hidden text-[10px] text-base-content/60 font-medium py-1">
+            Ollama 模型配置请前往扩展设置页完成。
+          </div>
+
+          <!-- WebLLM Settings -->
+          <div class="webllm-settings hidden text-[10px] text-base-content/60 font-medium py-1">
+            WebLLM 模型配置请前往扩展设置页或快捷翻译页完成。首次启动需要从 HuggingFace 加载几 GB 的模型文件。
+          </div>
+        </div>
+
+        <!-- Target Language & Display Mode -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text font-bold text-[11px] text-base-content/85">目标语言</span></label>
+            <select id="targetLang" class="select select-bordered select-sm w-full rounded-xl bg-base-100 text-base-content font-semibold border-base-300 focus:border-primary">
+              <option value="zh-CN">简体中文</option>
+              <option value="zh-TW">繁体中文</option>
+              <option value="en">English</option>
+              <option value="ja">日本語</option>
+              <option value="ko">한국어</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="es">Español</option>
+              <option value="ru">Русский</option>
+              <option value="pt">Português</option>
+              <option value="it">Italiano</option>
+              <option value="ar">العربية</option>
+              <option value="hi">हिन्दी</option>
+              <option value="th">ไทย</option>
+              <option value="vi">Tiếng Việt</option>
+              <option value="id">Bahasa Indonesia</option>
+              <option value="tr">Türkçe</option>
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label py-0.5"><span class="label-text font-bold text-[11px] text-base-content/85">显示模式</span></label>
+            <select id="displayMode" class="select select-bordered select-sm w-full rounded-xl bg-base-100 text-base-content font-semibold border-base-300 focus:border-primary">
+              <option value="bilingual">双语对照</option>
+              <option value="replace">译文替换</option>
+              <option value="translationOnly">仅译文</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Translation Highlight Color -->
+        <div class="form-control mt-1 pt-2.5 border-t border-base-200/60">
+          <label class="label py-0 mb-1.5"><span class="label-text font-bold text-[11px] text-base-content/85">译文高亮颜色</span></label>
+          <div class="flex justify-between items-center px-1" id="colorPicker">
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#9b59b6" style="background:#9b59b6"></button>
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#4f8ef7" style="background:#4f8ef7"></button>
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#7c8aaa" style="background:#7c8aaa"></button>
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#27ae60" style="background:#27ae60"></button>
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#e67e22" style="background:#e67e22"></button>
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#e74c3c" style="background:#e74c3c"></button>
+            <button class="w-5 h-5 rounded-full border border-base-content/10 cursor-pointer hover:scale-115 transition-transform color-dot focus:outline-none shadow-sm" data-color="#00b894" style="background:#00b894"></button>
+          </div>
+        </div>
+
+        <!-- Hover and Live Translation Toggles -->
+        <div class="flex flex-col gap-2.5 mt-1.5 bg-base-200/50 p-2.5 rounded-xl border border-base-200/60">
+          <label class="cursor-pointer flex items-center justify-between">
+            <span class="label-text font-bold text-[11px] text-base-content/75">悬停段落翻译</span>
+            <input type="checkbox" id="hoverTranslate" class="checkbox checkbox-primary checkbox-sm rounded-md" />
+          </label>
+          <label class="cursor-pointer flex items-center justify-between">
+            <span class="label-text font-bold text-[11px] text-base-content/75">输入框实时翻译</span>
+            <input type="checkbox" id="inputTranslate" class="checkbox checkbox-primary checkbox-sm rounded-md" />
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div class="divider"></div>
+      <!-- Selection Translate Card -->
+      <div class="card bg-base-100 border border-base-200/60 shadow-sm p-3.5 flex flex-col gap-3 rounded-2xl">
+        <h2 class="text-[10px] font-extrabold text-base-content/40 uppercase tracking-widest flex items-center gap-1.5 pb-1.5 border-b border-base-200/60">
+          <i data-lucide="mouse-pointer-2" class="w-3.5 h-3.5 text-base-content/40"></i> 划词翻译模式
+        </h2>
+        
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text font-bold text-[11px] text-base-content/85">触发方式</span></label>
+          <select id="selectionMode" class="select select-bordered select-sm w-full rounded-xl bg-base-100 text-base-content font-semibold border-base-300 focus:border-primary">
+            <option value="icon">图标模式 (选中后点击图标)</option>
+            <option value="direct">直接弹窗 (选中即翻译)</option>
+            <option value="dblclick">双击查词</option>
+            <option value="shortcut">快捷键 (Alt+S)</option>
+            <option value="off">关闭划词翻译</option>
+          </select>
+        </div>
 
-    <div class="section deepl-settings" style="display:none">
-      <label>DeepL API Key</label>
-      <input type="password" id="deeplKey" placeholder="输入 DeepL API Key">
-    </div>
-
-    <div class="section custom-settings" style="display:none">
-      <label>API 地址</label>
-      <input type="text" id="customApiUrl" placeholder="https://api.example.com/translate">
-      <label>API Key (可选)</label>
-      <input type="password" id="customApiKey" placeholder="Bearer token">
-    </div>
-
-    <div class="section libre-settings" style="display:none">
-      <label>LibreTranslate 地址</label>
-      <input type="text" id="libreUrl" placeholder="https://libretranslate.com" value="https://libretranslate.com">
-    </div>
-
-    <div class="section openai-settings" style="display:none">
-      <label>OpenAI API Key</label>
-      <input type="password" id="openaiKey" placeholder="输入 OpenAI API Key">
-      <div style="font-size: 12px; color: #666; margin-top: 4px;">更多模型配置请前往设置页</div>
-    </div>
-
-    <div class="section gemini-settings" style="display:none">
-      <label>Gemini API Key</label>
-      <input type="password" id="geminiKey" placeholder="输入 Gemini API Key">
-      <div style="font-size: 12px; color: #666; margin-top: 4px;">更多模型配置请前往设置页</div>
-    </div>
-
-    <div class="section claude-settings" style="display:none">
-      <label>Claude API Key</label>
-      <input type="password" id="claudeKey" placeholder="输入 Claude API Key">
-      <div style="font-size: 12px; color: #666; margin-top: 4px;">更多模型配置请前往设置页</div>
-    </div>
-
-    <div class="section ollama-settings" style="display:none">
-      <div style="font-size: 12px; color: #666;">Ollama 配置请前往设置页</div>
-    </div>
-
-    <div class="footer">
-      <div class="footer-shortcuts">
-        <span class="shortcut">全页: Alt+T</span>
-        <span class="shortcut">划词: Alt+S</span>
+        <!-- Multi-engine selection checkboxes -->
+        <div class="form-control border-t border-base-200/60 mt-1 pt-2.5">
+          <label class="label py-0.5"><span class="label-text font-bold text-[11px] text-base-content/85">多引擎比对 (划词多选)</span></label>
+          <div class="grid grid-cols-3 gap-2 mt-1.5 bg-base-200/30 p-2 rounded-xl border border-base-200/50" id="selectionEngines">
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="google" class="checkbox checkbox-primary checkbox-xs rounded-sm" checked />
+              <span class="truncate">Google</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="lingva" class="checkbox checkbox-primary checkbox-xs rounded-sm" checked />
+              <span class="truncate">Lingva</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="libre" class="checkbox checkbox-primary checkbox-xs rounded-sm" checked />
+              <span class="truncate">Libre</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="mymemory" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">MyMem</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="deepl" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">DeepL</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="custom" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">Custom</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="openai" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">OpenAI</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="gemini" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">Gemini</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="claude" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">Claude</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="ollama" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">Ollama</span>
+            </label>
+            <label class="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">
+              <input type="checkbox" value="webllm" class="checkbox checkbox-primary checkbox-xs rounded-sm" />
+              <span class="truncate">WebLLM</span>
+            </label>
+          </div>
+        </div>
       </div>
-      <div class="footer-links">
-        <a href="#" id="openWordbook" class="footer-link">📖 单词本</a>
-        <a href="#" id="openHistory" class="footer-link">📝 历史</a>
-        <a href="#" id="openPDF" class="footer-link">📄 PDF</a>
-        <a href="#" id="openSandbox" class="footer-link">🛠️ 快捷翻译</a>
-        <a href="#" id="openSettings" class="footer-link">⚙️ 设置</a>
+
+      <!-- Quick Info / Keyboard Shortcut Alert -->
+      <div class="alert alert-info alert-soft p-2.5 rounded-2xl flex items-start gap-2 shadow-sm text-[10px] shrink-0 border border-info/20">
+        <i data-lucide="info" class="w-3.5 h-3.5 shrink-0 text-info mt-0.5"></i>
+        <div class="flex-1 font-semibold text-base-content/75 leading-relaxed">
+          <span>快捷键提示：</span><br>
+          <span class="font-mono text-base-content/60"><kbd class="kbd kbd-xs bg-base-100">Alt + T</kbd> 全页翻译 | <kbd class="kbd kbd-xs bg-base-100">Alt + S</kbd> 划词翻译</span>
+        </div>
       </div>
+
     </div>
+
+    <!-- Footer Dock component -->
+    <div class="dock dock-sm border-t border-base-200/60 bg-base-100 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] shrink-0 z-20">
+      <button id="openSandbox" class="hover:text-primary transition-colors py-1">
+        <i data-lucide="zap" class="w-4 h-4 text-warning"></i>
+        <span class="dock-label font-extrabold text-[9px]">快捷翻译</span>
+      </button>
+      <button id="openWordbook" class="hover:text-primary transition-colors py-1">
+        <i data-lucide="book-open" class="w-4 h-4"></i>
+        <span class="dock-label font-extrabold text-[9px]">单词本</span>
+      </button>
+      <button id="openHistory" class="hover:text-primary transition-colors py-1">
+        <i data-lucide="history" class="w-4 h-4"></i>
+        <span class="dock-label font-extrabold text-[9px]">历史</span>
+      </button>
+      <button id="openSettings" class="hover:text-primary transition-colors py-1">
+        <i data-lucide="settings" class="w-4 h-4"></i>
+        <span class="dock-label font-extrabold text-[9px]">设置</span>
+      </button>
+    </div>
+
   </div>
+
+  <style>
+    /* Styling for active state color dot */
+    .color-dot.active {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 2.5px;
+      transform: scale(1.1);
+    }
+  </style>
+
   <script type="module" src="popup.js"></script>
 </body>
 </html>

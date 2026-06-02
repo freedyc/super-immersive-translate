@@ -1,10 +1,9 @@
-
 /**
  * Translator engine wrapper
  * Free engines: Google, MyMemory, LibreTranslate, Lingva, Yandex(browser)
  * Paid engines: DeepL, Custom API
  */
-class Translator {
+export class Translator {
   constructor() {
     this.engine = 'google';
     this.targetLang = 'zh-CN';
@@ -415,4 +414,5 @@ class Translator {
   }
 }
 
-window.translator = new Translator();
+export const translator = new Translator();
+window.translator = translator;

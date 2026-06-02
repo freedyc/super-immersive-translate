@@ -1,4 +1,5 @@
 import './selection.css';
+import { Translator } from '../utils/translator.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -13,7 +14,9 @@ import './selection.css';
 
   const ENGINE_ICONS = {
     google: '🔵', mymemory: '🟡', lingva: '🟢',
-    libre: '🟣', deepl: '🔷', custom: '⚙️'
+    libre: '🟣', deepl: '🔷', custom: '⚙️',
+    openai: '⚪', gemini: '✨', claude: '🔶',
+    ollama: '🦙', webllm: '💻'
   };
 
   const DEFAULT_SELECTION_ENGINES = ['google', 'lingva', 'libre'];
@@ -51,22 +54,28 @@ import './selection.css';
   loadSettings();
 
   // Listen for settings updates
-  chrome.storage.onChanged.addListener((changes) => {
-    if (changes.selectionMode || changes.selectionEngines || changes.deeplKey) {
-      loadSettings();
-    }
+  chrome.storage.onChanged.addListener(() => {
+    loadSettings();
   });
 
-  // Listen for shortcut from background
+  // Listen for shortcuts and settings updates from background
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.action === 'translateSelection') {
       const sel = window.getSelection();
-      const text = sel?.toString().trim();
+      const text = sel?.toString().trim() || msg.text;
       if (text && text.length >= 1) {
-        const range = sel.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
+        const range = sel && sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+        const rect = range ? range.getBoundingClientRect() : {
+          bottom: window.innerHeight / 2,
+          right: window.innerWidth / 2,
+          left: window.innerWidth / 2,
+          top: window.innerHeight / 2
+        };
         showPanel(text, rect);
       }
+      sendResponse({ ok: true });
+    } else if (msg.action === 'updateSettings') {
+      loadSettings();
       sendResponse({ ok: true });
     }
     return true;
@@ -409,44 +418,10 @@ import './selection.css';
     t.engine = engineId;
 
     try {
-      let result;
-      switch (engineId) {
-        case 'google':  result = await t._googleSingle(text); break;
-        case 'mymemory': result = await t._mymemorySingle(text); break;
-        case 'lingva':  result = await t._lingvaSingle(text); break;
-        case 'libre': {
-          const sl = t.sourceLang === 'auto' ? 'auto' : t.sourceLang;
-          const baseUrl = t.libreUrl || 'https://libretranslate.com';
-          const resp = await fetch(`${baseUrl}/translate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ q: text, source: sl, target: t.targetLang.split('-')[0] })
-          });
-          if (!resp.ok) throw new Error(`${resp.status}`);
-          const data = await resp.json();
-          result = data.translatedText || '';
-          break;
-        }
-        case 'deepl': {
-          if (!t.deeplKey) throw new Error('未设置 API Key');
-          const resp = await fetch('https://api-free.deepl.com/v2/translate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              auth_key: t.deeplKey, text: [text],
-              target_lang: t.targetLang.toUpperCase().replace('-', '')
-            })
-          });
-          if (!resp.ok) throw new Error(`${resp.status}`);
-          const data = await resp.json();
-          result = data.translations[0].text;
-          break;
-        }
-        default: result = '';
-      }
+      const result = await t.translate(text);
       updateEngineResult(engineId, result, null);
     } catch (err) {
-      updateEngineResult(engineId, null, `失败: ${err.message}`);
+      updateEngineResult(engineId, null, `失败: ${err.message || err}`);
     }
   }
 
@@ -488,6 +463,7 @@ import './selection.css';
       const anchor = sel.anchorNode?.parentElement;
       if (anchor?.closest('.' + PANEL_CLASS)) return;
 
+      if (!sel || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       pendingText = text;
@@ -512,6 +488,7 @@ import './selection.css';
       const text = sel?.toString().trim();
       if (!text || text.length < 1) return;
 
+      if (!sel || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
       showPanel(text, rect);

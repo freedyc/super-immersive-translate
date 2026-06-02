@@ -1,4 +1,5 @@
 import './youtube.css';
+import { translator } from '../utils/translator.js';
 
 /**
  * YouTube Subtitle Translation - Super Immersive Translate

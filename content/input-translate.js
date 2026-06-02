@@ -1,3 +1,5 @@
+import { translator } from '../utils/translator.js';
+
 /**
  * Input Translation Module - Super Immersive Translate
  * Real-time bilingual input: shows translation below text inputs as user types.
