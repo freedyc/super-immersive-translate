@@ -51,7 +51,7 @@ export async function setTheme(value) {
 }
 
 function syncControls(value) {
-  controls.forEach((sel) => { sel.value = value; });
+  controls.forEach((refresh) => refresh(value));
 }
 
 // 系统明暗变化：仅 system 模式时重新应用
@@ -67,21 +67,50 @@ chrome.storage.onChanged.addListener((changes, area) => {
   syncControls(value);
 });
 
-// 在 container 内渲染一个 daisyUI 下拉主题选择器
+// 在 container 内渲染一个图标按钮 + 弹出菜单的主题选择器
 export async function initThemeControl(container) {
   const current = await getStoredTheme();
-  const opts = [`<option value="${SYSTEM_VALUE}">跟随系统</option>`]
-    .concat(AVAILABLE_THEMES.map((n) => `<option value="${n}">${metaFor(n).label}</option>`))
-    .join('');
+  const items = [{ value: SYSTEM_VALUE, label: '跟随系统', icon: 'monitor' }]
+    .concat(AVAILABLE_THEMES.map((n) => ({ value: n, label: metaFor(n).label, icon: metaFor(n).icon })));
+
   container.innerHTML = `
-    <label class="flex items-center gap-1.5" title="主题">
-      <i data-lucide="palette" class="w-4 h-4"></i>
-      <select class="select select-bordered select-sm w-auto min-w-[7rem] bg-base-100 text-base-content" aria-label="主题">${opts}</select>
-    </label>`;
-  const select = container.querySelector('select');
-  select.value = current;
-  select.addEventListener('change', () => setTheme(select.value));
-  controls.add(select);
+    <div class="dropdown dropdown-end">
+      <div tabindex="0" role="button" class="btn btn-ghost btn-circle btn-sm" title="主题" aria-label="主题">
+        <i data-lucide="palette" class="w-4 h-4"></i>
+      </div>
+      <ul tabindex="0" class="dropdown-content menu bg-base-100 text-base-content rounded-box z-[1] w-36 p-2 shadow-lg border border-base-300">
+        ${items.map((it) => `
+          <li>
+            <a data-theme-value="${it.value}" class="flex items-center gap-2">
+              <i data-lucide="${it.icon}" class="w-4 h-4 shrink-0"></i>
+              <span class="flex-1">${it.label}</span>
+              <i data-lucide="check" class="w-4 h-4 shrink-0 theme-check"></i>
+            </a>
+          </li>`).join('')}
+      </ul>
+    </div>`;
+
+  const menu = container.querySelector('ul');
+
+  function refresh(value) {
+    menu.querySelectorAll('[data-theme-value]').forEach((a) => {
+      const active = a.dataset.themeValue === value;
+      a.classList.toggle('menu-active', active);
+      const check = a.querySelector('.theme-check');
+      if (check) check.style.visibility = active ? 'visible' : 'hidden';
+    });
+  }
+
+  menu.querySelectorAll('[data-theme-value]').forEach((a) => {
+    a.addEventListener('click', () => {
+      setTheme(a.dataset.themeValue);
+      a.blur();
+      container.querySelector('[role="button"]')?.blur();
+    });
+  });
+
   createIcons({ icons });
-  return select;
+  refresh(current); // 在 createIcons 之后，作用于已渲染的 svg
+  controls.add(refresh);
+  return container;
 }
