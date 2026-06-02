@@ -10,11 +10,13 @@
   <div class="flex flex-col h-full">
     
     <!-- Header -->
-    <div class="bg-primary text-primary-content px-4 py-3 flex justify-between items-center shadow-md shrink-0 relative overflow-hidden">
-      <!-- Gradient / Decorative Overlay -->
-      <div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-focus/80 opacity-95"></div>
-      <div class="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
-      
+    <div class="bg-primary text-primary-content px-4 py-3 flex justify-between items-center shadow-md shrink-0 relative">
+      <!-- Gradient / Decorative Overlay (clipped in its own layer so the header itself can let the theme menu overflow) -->
+      <div class="absolute inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute inset-0 bg-gradient-to-r from-primary to-primary-focus/80 opacity-95"></div>
+        <div class="absolute -right-8 -top-8 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+      </div>
+
       <h1 class="text-base font-extrabold flex items-center gap-1.5 relative z-10 tracking-wide">
         <i data-lucide="languages" class="w-5 h-5 text-warning fill-warning/20"></i> 超级翻译
       </h1>
@@ -30,7 +32,7 @@
     </div>
 
     <!-- Scrollable Content -->
-    <div class="p-3 overflow-y-auto flex-1 flex flex-col gap-3 bg-base-200 custom-scrollbar">
+    <div class="p-3 overflow-y-auto flex-1 min-h-0 flex flex-col gap-3 bg-base-200 custom-scrollbar">
       
       <!-- Mode Navigation Grid -->
       <div class="grid grid-cols-4 gap-2 shrink-0">

@@ -78,7 +78,7 @@ export async function initThemeControl(container) {
       <div tabindex="0" role="button" class="btn btn-ghost btn-circle btn-sm" title="主题" aria-label="主题">
         <i data-lucide="palette" class="w-4 h-4"></i>
       </div>
-      <ul tabindex="0" class="dropdown-content menu bg-base-100 text-base-content rounded-box z-[1] w-36 p-2 shadow-lg border border-base-300">
+      <ul tabindex="0" class="dropdown-content menu bg-base-100 text-base-content rounded-box z-50 w-36 p-2 shadow-lg border border-base-300">
         ${items.map((it) => `
           <li>
             <a data-theme-value="${it.value}" class="flex items-center gap-2">
