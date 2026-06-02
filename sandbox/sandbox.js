@@ -1,8 +1,11 @@
 import { createIcons, icons } from 'lucide';
 import { createWorker } from 'tesseract.js';
+import { applyTheme, initThemeControl } from '../utils/theme.js';
 
 // Initialize Lucide icons
 createIcons({ icons });
+applyTheme();
+initThemeControl(document.getElementById('themeControl'));
 
 document.addEventListener('DOMContentLoaded', async () => {
   const testEngine = document.getElementById('testEngine');
