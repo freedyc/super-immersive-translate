@@ -2,6 +2,9 @@
  * Wordbook - Super Immersive Translate
  * Word list, flashcards, quiz, stats
  */
+import { createIcons, icons } from 'lucide';
+import { applyTheme, initThemeControl } from '../utils/theme.js';
+
 (async function () {
   'use strict';
 
@@ -69,48 +72,55 @@
   // ========== Render ==========
   function render() {
     document.getElementById('wordCount').textContent = `${wordbook.length} 个单词`;
-    document.getElementById('emptyState').style.display = wordbook.length === 0 ? 'block' : 'none';
+    document.getElementById('emptyState').style.display = wordbook.length === 0 ? 'flex' : 'none';
     renderList();
   }
 
   function renderList() {
     const container = document.getElementById('wordList');
     if (filteredWords.length === 0 && wordbook.length > 0) {
-      container.innerHTML = '<div class="empty-state"><p>没有匹配的单词</p></div>';
+      container.innerHTML = '<div class="col-span-full text-center py-12 text-base-content/50"><p>没有匹配的单词</p></div>';
       return;
     }
 
     container.innerHTML = filteredWords.map((w, i) => {
       const translations = Object.entries(w.translations || {}).map(([engine, text]) =>
-        `<div class="word-trans-item">
-          <span class="word-trans-engine">${ENGINE_NAMES[engine] || engine}</span>
-          <span class="word-trans-text">${escapeHtml(text)}</span>
+        `<div class="flex gap-2 items-baseline text-sm">
+          <span class="badge badge-ghost badge-sm shrink-0">${ENGINE_NAMES[engine] || engine}</span>
+          <span class="text-base-content/80">${escapeHtml(text)}</span>
         </div>`
       ).join('');
 
       const status = w.known
-        ? '<span class="word-status known">已掌握</span>'
-        : '<span class="word-status unknown">学习中</span>';
+        ? '<span class="badge badge-success badge-sm">已掌握</span>'
+        : '<span class="badge badge-warning badge-sm">学习中</span>';
 
       const time = new Date(w.timestamp).toLocaleDateString('zh-CN');
       const source = w.url
-        ? `<a href="${escapeHtml(w.url)}" target="_blank" title="${escapeHtml(w.title || w.url)}">${escapeHtml(w.title || '来源页面')}</a>`
+        ? `<a href="${escapeHtml(w.url)}" target="_blank" class="link link-hover text-xs text-base-content/50" title="${escapeHtml(w.title || w.url)}">${escapeHtml(w.title || '来源页面')}</a>`
         : '';
 
       return `
-        <div class="word-card" data-index="${i}">
-          <div class="word-card-header">
-            <div class="word-text">${escapeHtml(w.text)}</div>
-            <div class="word-card-actions">
-              <button class="word-action toggle-known" title="${w.known ? '标记为未掌握' : '标记为已掌握'}">${w.known ? '✅' : '⬜'}</button>
-              <button class="word-action delete-word" title="删除">🗑️</button>
+        <div class="card bg-base-100 shadow word-card" data-index="${i}">
+          <div class="card-body gap-2 p-4">
+            <div class="flex items-start justify-between gap-2">
+              <div class="font-bold text-lg text-base-content">${escapeHtml(w.text)}</div>
+              <div class="flex gap-1 shrink-0">
+                <button class="btn btn-ghost btn-xs toggle-known" title="${w.known ? '标记为未掌握' : '标记为已掌握'}">
+                  <i data-lucide="${w.known ? 'check-circle' : 'circle'}" class="w-4 h-4 ${w.known ? 'text-success' : 'text-base-content/40'}"></i>
+                </button>
+                <button class="btn btn-ghost btn-xs delete-word" title="删除">
+                  <i data-lucide="trash-2" class="w-4 h-4 text-error/60"></i>
+                </button>
+              </div>
             </div>
+            <div class="flex flex-col gap-1">${translations}</div>
+            <div class="flex items-center gap-2 mt-1">${status} <span class="text-xs text-base-content/40">${time}</span> ${source}</div>
           </div>
-          <div class="word-translations">${translations}</div>
-          <div class="word-meta">${status} <span>${time}</span> ${source}</div>
         </div>
       `;
     }).join('');
+    createIcons({ icons });
 
     // Bind card events
     container.querySelectorAll('.toggle-known').forEach(btn => {
@@ -306,7 +316,7 @@
     // Recent words (last 20)
     const recent = wordbook.slice(0, 20);
     document.getElementById('recentWords').innerHTML = recent.map(w =>
-      `<span class="recent-tag">${escapeHtml(w.text)}</span>`
+      `<span class="badge badge-outline">${escapeHtml(w.text)}</span>`
     ).join('');
   }
 
@@ -381,5 +391,8 @@
   });
 
   // ========== Start ==========
+  await applyTheme();
+  await initThemeControl(document.getElementById('themeControl'));
+  createIcons({ icons });
   await loadWordbook();
 })();
