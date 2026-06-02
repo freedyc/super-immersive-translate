@@ -81,21 +81,7 @@ export class Translator {
     const texts = batch.map(b => b.text);
 
     try {
-      let results;
-      switch (this.engine) {
-        case 'google':   results = await this._googleBatch(texts); break;
-        case 'mymemory': results = await this._mymemoryBatch(texts); break;
-        case 'lingva':   results = await this._lingvaBatch(texts); break;
-        case 'libre':    results = await this._libreBatch(texts); break;
-        case 'deepl':    results = await this._deeplBatch(texts); break;
-        case 'custom':   results = await this._customBatch(texts); break;
-        case 'openai':   results = await this._openaiBatch(texts); break;
-        case 'gemini':   results = await this._geminiBatch(texts); break;
-        case 'claude':   results = await this._claudeBatch(texts); break;
-        case 'ollama':   results = await this._ollamaBatch(texts); break;
-        case 'webllm':   results = await this._webllmBatch(texts); break;
-        default:         results = await this._googleBatch(texts);
-      }
+      const results = await this._dispatchBatch(texts);
       batch.forEach((item, i) => {
         const translated = results[i] || '';
         this.cache.set(this.getCacheKey(item.text), translated);
@@ -121,6 +107,67 @@ export class Translator {
     }
 
     if (this.pendingQueue.length > 0) this._flushQueue();
+  }
+
+  // Route a batch of texts to the current engine's batch method.
+  _dispatchBatch(texts) {
+    switch (this.engine) {
+      case 'google':   return this._googleBatch(texts);
+      case 'mymemory': return this._mymemoryBatch(texts);
+      case 'lingva':   return this._lingvaBatch(texts);
+      case 'libre':    return this._libreBatch(texts);
+      case 'deepl':    return this._deeplBatch(texts);
+      case 'custom':   return this._customBatch(texts);
+      case 'openai':   return this._openaiBatch(texts);
+      case 'gemini':   return this._geminiBatch(texts);
+      case 'claude':   return this._claudeBatch(texts);
+      case 'ollama':   return this._ollamaBatch(texts);
+      case 'webllm':   return this._webllmBatch(texts);
+      default:         return this._googleBatch(texts);
+    }
+  }
+
+  // Translate an explicit array of texts in one call (used by the full-page
+  // concurrency pool). Reuses the cache, sends uncached texts as one batch via
+  // the current engine, and falls back to Google on error. Result is aligned to
+  // the input array.
+  async translateBatch(texts) {
+    const results = new Array(texts.length);
+    const uncached = [];
+    const uncachedIdx = [];
+
+    texts.forEach((text, i) => {
+      if (!text || !text.trim()) { results[i] = ''; return; }
+      const key = this.getCacheKey(text);
+      if (this.cache.has(key)) { results[i] = this.cache.get(key); return; }
+      uncached.push(text);
+      uncachedIdx.push(i);
+    });
+
+    if (uncached.length === 0) return results;
+
+    let out;
+    try {
+      out = await this._dispatchBatch(uncached);
+    } catch (err) {
+      console.warn('[Translator] translateBatch error:', err.message, '— falling back to Google');
+      if (this.engine !== 'google') {
+        try {
+          out = await this._googleBatch(uncached);
+        } catch (fallbackErr) {
+          out = uncached.map(() => `[翻译失败: ${err.message}]`);
+        }
+      } else {
+        out = uncached.map(() => `[翻译失败: ${err.message}]`);
+      }
+    }
+
+    uncached.forEach((text, k) => {
+      const translated = out[k] || '';
+      this.cache.set(this.getCacheKey(text), translated);
+      results[uncachedIdx[k]] = translated;
+    });
+    return results;
   }
 
   // --- Google (free, batch via separator) ---

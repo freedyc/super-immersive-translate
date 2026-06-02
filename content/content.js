@@ -35,7 +35,8 @@ import { translator } from '../utils/translator.js';
   const WRAPPER_CLASS = 'sit-wrapper';
   const TRANSLATION_CLASS = 'sit-translation';
   const ORIGINAL_CLASS = 'sit-original';
-  const BATCH_SIZE = 5;
+  const FULLPAGE_BATCH = 20;
+  const CONCURRENCY_LEVELS = { low: 2, medium: 5, high: 10 };
 
   let isTranslating = false;
   let isEnabled = false;
@@ -45,6 +46,7 @@ import { translator } from '../utils/translator.js';
   let translateAbortId = 0;
 
   let siteBlocked = false;
+  let concurrencySetting = 'medium';
 
   // ── Settings ─────────────────────────────────────────
 
@@ -82,7 +84,8 @@ import { translator } from '../utils/translator.js';
     translationBold: false,
     translationShowBorder: true,
     siteRules: { mode: 'blacklist', sites: [] },
-    siteEngines: {}
+    siteEngines: {},
+    translateConcurrency: 'medium'
   });
 
   applyTranslationColor(stored.translationColor);
@@ -90,6 +93,7 @@ import { translator } from '../utils/translator.js';
   applyTranslationStyles(stored);
   hoverTranslateEnabled = stored.hoverTranslate;
   siteBlocked = checkSiteBlocked(stored.siteRules);
+  concurrencySetting = stored.translateConcurrency;
 
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.translationColor) {
@@ -111,6 +115,9 @@ import { translator } from '../utils/translator.js';
     }
     if (changes.siteRules) {
       siteBlocked = checkSiteBlocked(changes.siteRules.newValue);
+    }
+    if (changes.translateConcurrency) {
+      concurrencySetting = changes.translateConcurrency.newValue;
     }
   });
 
@@ -302,6 +309,13 @@ import { translator } from '../utils/translator.js';
     }
   }
 
+  function resolveConcurrency() {
+    const base = CONCURRENCY_LEVELS[concurrencySetting] || CONCURRENCY_LEVELS.medium;
+    // WebLLM is a single in-browser engine instance — don't fire concurrent calls at it.
+    if (translator.engine === 'webllm') return 1;
+    return base;
+  }
+
   async function translatePage() {
     if (isTranslating || siteBlocked) return;
     isTranslating = true;
@@ -329,35 +343,51 @@ import { translator } from '../utils/translator.js';
       let completed = 0;
       showProgress(0, allBlocks.length);
 
-      for (let i = 0; i < allBlocks.length; i += BATCH_SIZE) {
-        if (myAbortId !== translateAbortId) return;
-
-        const batch = allBlocks.slice(i, i + BATCH_SIZE);
-        const texts = batch.map(el => getDirectText(el));
-        const translations = await Promise.all(
-          texts.map(t => translator.translate(t))
-        );
-
-        if (myAbortId !== translateAbortId) return;
-
-        translations.forEach((translated, j) => {
-          if (translated && !translated.startsWith('[翻译失败')) {
-            insertTranslation(batch[j], translated);
-          }
-        });
-
-        completed = Math.min(i + BATCH_SIZE, allBlocks.length);
-        showProgress(completed, allBlocks.length);
+      // Split blocks into batches, then translate several batches concurrently.
+      const batches = [];
+      for (let i = 0; i < allBlocks.length; i += FULLPAGE_BATCH) {
+        batches.push(allBlocks.slice(i, i + FULLPAGE_BATCH));
       }
 
+      const concurrency = resolveConcurrency();
+      let nextBatch = 0;
+
+      async function worker() {
+        while (true) {
+          if (myAbortId !== translateAbortId) return;
+          const idx = nextBatch++;
+          if (idx >= batches.length) return;
+
+          const batch = batches[idx];
+          const texts = batch.map(el => getDirectText(el));
+          const translations = await translator.translateBatch(texts);
+          if (myAbortId !== translateAbortId) return;
+
+          translations.forEach((translated, j) => {
+            if (translated && !translated.startsWith('[翻译失败')) {
+              insertTranslation(batch[j], translated);
+            }
+          });
+
+          completed += batch.length;
+          showProgress(Math.min(completed, allBlocks.length), allBlocks.length);
+        }
+      }
+
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, batches.length) }, () => worker())
+      );
+
+      if (myAbortId !== translateAbortId) return;
       finishProgress();
     } catch (err) {
       if (myAbortId !== translateAbortId) return;
       console.error('[SIT] Translation error:', err);
       finishProgress();
+    } finally {
+      // Always release the lock, even when aborted early, so future runs aren't blocked.
+      isTranslating = false;
     }
-
-    isTranslating = false;
   }
 
   function hasInteractiveContent(el) {
