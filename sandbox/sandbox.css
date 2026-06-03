@@ -5,3 +5,15 @@
 .translation-result {
   min-height: 120px;
 }
+
+/* ── 侧边栏（窄面板）形态：<html class="panel"> ── */
+.panel .max-w-5xl { max-width: 100%; }
+
+/* 文字标签的左右双栏在窄面板下改为上下堆叠 */
+.panel #content-text { flex-direction: column; }
+
+/* 收紧主要内边距 */
+.panel #content-page,
+.panel #content-image,
+.panel #content-document,
+.panel #content-website { padding: 1rem; }
