@@ -32,13 +32,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   } else if (info.menuItemId === 'translate-selection') {
     chrome.tabs.sendMessage(tab.id, { action: 'translateSelection', text: info.selectionText }).catch(() => {});
   } else if (info.menuItemId === 'open-side-panel') {
-    if (!tab?.id || !chrome.sidePanel) return;
-    await chrome.sidePanel.setOptions({
+    if (!chrome.sidePanel) return;
+    // sidePanel.open() must be called synchronously within the user gesture.
+    // Awaiting setOptions first consumes the gesture and makes open() fail, so
+    // fire setOptions without await and call open() in the same tick.
+    chrome.sidePanel.setOptions({
       tabId: tab.id,
       path: 'sandbox/index.html?context=panel',
       enabled: true
     });
-    await chrome.sidePanel.open({ tabId: tab.id });
+    chrome.sidePanel.open({ tabId: tab.id }).catch(() => {});
   }
 });
 
