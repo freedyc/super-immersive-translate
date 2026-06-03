@@ -478,6 +478,18 @@ import { Translator } from '../utils/translator.js';
     }, 10);
   });
 
+  // Broadcast any text selection to the side panel (independent of selection-translate mode).
+  document.addEventListener('mouseup', () => {
+    setTimeout(() => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim();
+      if (text && text.length >= 1 && text.length <= 5000) {
+        // No receiver when the panel is closed → ignore the rejection.
+        chrome.runtime.sendMessage({ action: 'panelSelection', text }).catch(() => {});
+      }
+    }, 10);
+  });
+
   // Double click → dblclick mode
   document.addEventListener('dblclick', (e) => {
     if (selectionMode !== 'dblclick') return;

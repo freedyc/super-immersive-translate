@@ -473,6 +473,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  if (isPanel) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.action !== 'panelSelection' || !msg.text) return;
+      switchTab(navPage, contentPage);
+      const selText = document.getElementById('pageSelectionText');
+      const selResult = document.getElementById('pageSelectionResult');
+      selText.textContent = msg.text;
+      selResult.textContent = '翻译中…';
+      if (testEngine) window.translator.engine = testEngine.value;
+      if (testLang) window.translator.targetLang = testLang.value;
+      window.translator.translate(msg.text)
+        .then(t => { selResult.textContent = t; })
+        .catch(() => { selResult.textContent = '翻译失败'; });
+    });
+  }
+
   // Switch to specific tab based on URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
   const initialTab = urlParams.get('tab');
