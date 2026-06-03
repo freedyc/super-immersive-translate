@@ -489,6 +489,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  if (isPanel) {
+    const translatePageBtn = document.getElementById('translatePageBtn');
+    if (translatePageBtn) {
+      translatePageBtn.addEventListener('click', async () => {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab?.id) return;
+        try {
+          await chrome.tabs.sendMessage(tab.id, { action: 'toggle' });
+        } catch (e) {
+          document.getElementById('pageUnavailable').classList.remove('hidden');
+        }
+      });
+    }
+  }
+
   // Switch to specific tab based on URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
   const initialTab = urlParams.get('tab');
