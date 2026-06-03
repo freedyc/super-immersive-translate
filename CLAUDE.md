@@ -98,7 +98,12 @@ CSS.
 - `popup/` — toolbar popup: quick engine/lang/mode settings.
 - `options/` — full settings page (5 sections: general/style/shortcuts/sites/data).
 - `sandbox/` — multi-tab translation workbench (text, image OCR via `tesseract.js`, doc,
-  website), clipboard paste.
+  website), clipboard paste. Opens either as a tab (`?tab=`) or as a Chrome **Side Panel**
+  (`chrome.sidePanel`, opened with `?context=panel` from the popup「侧边栏」button or the
+  right-click menu). In panel mode it adds a「当前页」tab that follows the active browser tab,
+  shows live page selections (content script broadcasts `panelSelection` on mouseup), and can
+  toggle full-page translation. `sandbox.js` branches on `isPanel`; `.panel` on `<html>` gates
+  narrow-width CSS.
 - `pdf/` — PDF/TXT/MD/HTML document translation viewer.
 - `wordbook/` — saved-word study UI (list, flashcards, spelling quiz, stats, JSON import/export).
 - `history/` — selection-translation history.
