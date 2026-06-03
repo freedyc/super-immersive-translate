@@ -16,6 +16,7 @@
       <!-- Header / Navigation -->
       <div class="w-full max-w-5xl flex flex-wrap justify-between items-center mb-6 px-4 gap-4">
         <div class="flex gap-2">
+          <button id="nav-page" class="btn btn-sm btn-ghost text-base-content/60 rounded-full px-4 hidden"><i data-lucide="globe-2" class="w-4 h-4 mr-1"></i>当前页</button>
           <button id="nav-text" class="btn btn-sm btn-primary rounded-full px-4"><i data-lucide="languages" class="w-4 h-4 mr-1"></i>文字</button>
           <button id="nav-image" class="btn btn-sm btn-ghost text-base-content/60 rounded-full px-4"><i data-lucide="image" class="w-4 h-4 mr-1"></i>图片</button>
           <button id="nav-doc" class="btn btn-sm btn-ghost text-base-content/60 rounded-full px-4"><i data-lucide="file-text" class="w-4 h-4 mr-1"></i>文档</button>
@@ -69,6 +70,31 @@
             <select id="testLang" class="select select-bordered select-sm text-primary font-bold bg-base-100 shadow-sm border-base-300 rounded-xl">
               <!-- populated by js -->
             </select>
+          </div>
+        </div>
+
+        <!-- 0. Current Page Tab Content (panel only) -->
+        <div id="content-page" class="hidden p-6 flex flex-col gap-4 min-h-[300px]">
+          <div class="card bg-base-100 border border-base-300 rounded-xl">
+            <div class="card-body p-4 gap-2">
+              <div class="flex items-center gap-2 text-sm font-semibold">
+                <i data-lucide="globe-2" class="w-4 h-4 text-primary"></i>
+                <span id="pageTitle" class="truncate">（未获取到当前页）</span>
+              </div>
+              <a id="pageUrl" href="#" target="_blank" class="link link-primary text-xs truncate"></a>
+              <button id="translatePageBtn" class="btn btn-primary btn-sm w-fit mt-1">
+                <i data-lucide="languages" class="w-4 h-4"></i> 翻译/还原当前页
+              </button>
+              <p id="pageUnavailable" class="hidden text-xs text-warning">当前页面不可翻译（受限页面）。</p>
+            </div>
+          </div>
+          <div class="card bg-base-100 border border-base-300 rounded-xl flex-1">
+            <div class="card-body p-4 gap-2">
+              <div class="text-xs font-semibold text-base-content/50">划词联动</div>
+              <div id="pageSelectionText" class="text-sm font-medium break-words">在网页中选中文字即可在此翻译</div>
+              <div class="divider my-1"></div>
+              <div id="pageSelectionResult" class="text-sm text-secondary break-words"></div>
+            </div>
           </div>
         </div>
 

@@ -432,10 +432,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (activeContent) activeContent.classList.remove('hidden');
   };
 
+  const isPanel = new URLSearchParams(window.location.search).get('context') === 'panel';
+  const navPage = document.getElementById('nav-page');
+  const contentPage = document.getElementById('content-page');
+  navs.push(navPage);
+  contents.push(contentPage);
+  if (isPanel) {
+    document.documentElement.classList.add('panel');
+    if (navPage) {
+      navPage.classList.remove('hidden');
+      navPage.addEventListener('click', () => switchTab(navPage, contentPage));
+    }
+  }
+
   if (navText) navText.addEventListener('click', () => switchTab(navText, contentText));
   if (navImage) navImage.addEventListener('click', () => switchTab(navImage, contentImage));
   if (navDoc) navDoc.addEventListener('click', () => switchTab(navDoc, contentDoc));
   if (navWeb) navWeb.addEventListener('click', () => switchTab(navWeb, contentWeb));
+
+  async function refreshCurrentPage() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      const titleEl = document.getElementById('pageTitle');
+      const urlEl = document.getElementById('pageUrl');
+      const unavailable = document.getElementById('pageUnavailable');
+      if (!tab) return;
+      titleEl.textContent = tab.title || '(无标题)';
+      urlEl.textContent = tab.url || '';
+      urlEl.href = tab.url || '#';
+      const restricted = !tab.url || /^(chrome|edge|about|chrome-extension|https:\/\/chrome\.google\.com\/webstore)/.test(tab.url);
+      unavailable.classList.toggle('hidden', !restricted);
+    } catch (e) { /* ignore */ }
+  }
+
+  if (isPanel) {
+    refreshCurrentPage();
+    chrome.tabs.onActivated.addListener(refreshCurrentPage);
+    chrome.tabs.onUpdated.addListener((id, info) => {
+      if (info.status === 'complete' || info.title || info.url) refreshCurrentPage();
+    });
+  }
 
   // Switch to specific tab based on URL query parameters
   const urlParams = new URLSearchParams(window.location.search);
@@ -448,6 +484,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     switchTab(navWeb, contentWeb);
   } else if (initialTab === 'text') {
     switchTab(navText, contentText);
+  } else if (isPanel) {
+    switchTab(navPage, contentPage);
   }
 
 
