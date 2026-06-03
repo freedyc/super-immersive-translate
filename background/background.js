@@ -14,6 +14,14 @@ chrome.runtime.onInstalled.addListener(() => {
     title: '⚡ 翻译选中文本',
     contexts: ['selection']
   });
+
+  if (chrome.sidePanel) {
+    chrome.contextMenus.create({
+      id: 'open-side-panel',
+      title: '⚡ 在侧边栏打开快捷翻译',
+      contexts: ['page', 'selection']
+    });
+  }
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -23,6 +31,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     chrome.tabs.sendMessage(tab.id, { action: 'toggle' }).catch(() => {});
   } else if (info.menuItemId === 'translate-selection') {
     chrome.tabs.sendMessage(tab.id, { action: 'translateSelection', text: info.selectionText }).catch(() => {});
+  } else if (info.menuItemId === 'open-side-panel') {
+    if (!tab?.id || !chrome.sidePanel) return;
+    await chrome.sidePanel.setOptions({
+      tabId: tab.id,
+      path: 'sandbox/index.html?context=panel',
+      enabled: true
+    });
+    await chrome.sidePanel.open({ tabId: tab.id });
   }
 });
 

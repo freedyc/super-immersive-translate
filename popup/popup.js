@@ -228,6 +228,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
+  // Side panel
+  const sidePanelBtn = document.getElementById('openSidePanel');
+  if (!chrome.sidePanel) {
+    sidePanelBtn.style.display = 'none';
+  } else {
+    sidePanelBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab?.id) return;
+      await chrome.sidePanel.setOptions({
+        tabId: tab.id,
+        path: 'sandbox/index.html?context=panel',
+        enabled: true
+      });
+      await chrome.sidePanel.open({ tabId: tab.id });
+      window.close();
+    });
+  }
+
   // Open pages
   document.getElementById('openWordbook').addEventListener('click', (e) => {
     e.preventDefault();
