@@ -2,6 +2,7 @@ import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { createWorker } from 'tesseract.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
+import { DEFAULTS } from '../utils/defaults.js';
 
 // Initialize Lucide icons
 createIcons({ icons });
@@ -58,25 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   populateLangs();
 
   // Load user default settings for engine, lang, and providers
-  const settings = await chrome.storage.sync.get({
-    engine: 'google',
-    sourceLang: 'auto',
-    targetLang: 'zh-CN',
-    deeplKey: '',
-    customApiUrl: '',
-    customApiKey: '',
-    libreUrl: 'https://libretranslate.com',
-    openaiKey: '',
-    openaiUrl: 'https://api.openai.com/v1/chat/completions',
-    openaiModel: 'gpt-3.5-turbo',
-    geminiKey: '',
-    geminiModel: 'gemini-1.5-flash',
-    claudeKey: '',
-    claudeModel: 'claude-3-haiku-20240307',
-    ollamaUrl: 'http://localhost:11434/api/chat',
-    ollamaModel: 'llama3',
-    webllmModel: 'Llama-3-8B-Instruct-q4f32_1-MLC'
-  });
+  const settings = await chrome.storage.sync.get(DEFAULTS);
   
   if (testEngine) testEngine.value = settings.engine;
   testSourceLang.value = settings.sourceLang || 'auto';

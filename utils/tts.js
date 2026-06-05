@@ -1,3 +1,5 @@
+import { pick } from './defaults.js';
+
 class TTSManager {
   constructor() {
     this.audioElement = new Audio();
@@ -16,16 +18,10 @@ class TTSManager {
   }
 
   async init() {
-    const settings = await chrome.storage.sync.get({
-      ttsEngine: 'browser',
-      ttsBrowserVoiceURI: '',
-      ttsBrowserRate: 1.0,
-      ttsBrowserPitch: 1.0,
-      openaiKey: '',
-      openaiUrl: 'https://api.openai.com/v1/chat/completions',
-      ttsOpenaiVoice: 'alloy',
-      ttsOpenaiSpeed: 1.0
-    });
+    const settings = await chrome.storage.sync.get(pick(
+      'ttsEngine', 'ttsBrowserVoiceURI', 'ttsBrowserRate', 'ttsBrowserPitch',
+      'openaiKey', 'openaiUrl', 'ttsOpenaiVoice', 'ttsOpenaiSpeed'
+    ));
 
     this.currentEngine = settings.ttsEngine;
     this.browserVoiceURI = settings.ttsBrowserVoiceURI;

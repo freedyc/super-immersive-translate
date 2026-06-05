@@ -1,5 +1,6 @@
 import './selection.css';
 import { Translator } from '../utils/translator.js';
+import { pick } from '../utils/defaults.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -33,11 +34,7 @@ import { Translator } from '../utils/translator.js';
   // Load settings
   async function loadSettings() {
     try {
-      const s = await chrome.storage.sync.get({
-        selectionMode: 'icon',
-        selectionEngines: DEFAULT_SELECTION_ENGINES,
-        deeplKey: ''
-      });
+      const s = await chrome.storage.sync.get(pick('selectionMode', 'selectionEngines', 'deeplKey'));
       selectionMode = s.selectionMode || 'icon';
       selectionEngines = (s.selectionEngines && s.selectionEngines.length > 0)
         ? s.selectionEngines : DEFAULT_SELECTION_ENGINES;

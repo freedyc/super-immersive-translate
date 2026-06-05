@@ -4,45 +4,9 @@
 import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
+import { DEFAULTS } from '../utils/defaults.js';
 
-const DEFAULT_SETTINGS = {
-  engine: 'google',
-  targetLang: 'zh-CN',
-  displayMode: 'bilingual',
-  translateConcurrency: 'medium',
-  translationColor: '#9b59b6',
-  hoverTranslate: false,
-  inputTranslate: false,
-  selectionMode: 'icon',
-  selectionEngines: ['google', 'lingva', 'libre'],
-  deeplKey: '',
-  customApiUrl: '',
-  customApiKey: '',
-  libreUrl: 'https://libretranslate.com',
-  openaiKey: '',
-  openaiModel: 'gpt-3.5-turbo',
-  openaiUrl: 'https://api.openai.com/v1/chat/completions',
-  geminiKey: '',
-  geminiModel: 'gemini-1.5-flash',
-  claudeKey: '',
-  claudeModel: 'claude-3-haiku-20240307',
-  ollamaModel: 'llama3',
-  ollamaUrl: 'http://localhost:11434/api/chat',
-  webllmModel: 'Llama-3-8B-Instruct-q4f32_1-MLC',
-  aiPrompt: 'Translate the following text to {targetLang}. Keep the exact separators "\\n\\u2581\\u2581\\u2581\\n" unchanged. Only output the translated text.',
-  translationFontSize: '0.92',
-  translationLineHeight: '1.6',
-  translationBold: false,
-  translationShowBorder: true,
-  siteRules: { mode: 'blacklist', sites: [] },
-  siteEngines: {},
-  ttsEngine: 'browser',
-  ttsBrowserVoiceURI: '',
-  ttsBrowserRate: '1.0',
-  ttsBrowserPitch: '1.0',
-  ttsOpenaiVoice: 'alloy',
-  ttsOpenaiSpeed: '1.0'
-};
+const DEFAULT_SETTINGS = DEFAULTS;
 
 const ENGINE_NAMES = {
   google: 'Google', mymemory: 'MyMemory', lingva: 'Lingva',

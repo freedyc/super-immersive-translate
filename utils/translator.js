@@ -3,6 +3,8 @@
  * Free engines: Google, MyMemory, LibreTranslate, Lingva, Yandex(browser)
  * Paid engines: DeepL, Custom API
  */
+import { pick } from './defaults.js';
+
 export class Translator {
   constructor() {
     this.engine = 'google';
@@ -30,26 +32,13 @@ export class Translator {
   };
 
   async init() {
-    const settings = await chrome.storage.sync.get({
-      engine: 'google',
-      targetLang: 'zh-CN',
-      sourceLang: 'auto',
-      deeplKey: '',
-      customApiUrl: '',
-      customApiKey: '',
-      libreUrl: 'https://libretranslate.com',
-      openaiKey: '',
-      openaiModel: 'gpt-3.5-turbo',
-      openaiUrl: 'https://api.openai.com/v1/chat/completions',
-      geminiKey: '',
-      geminiModel: 'gemini-1.5-flash',
-      claudeKey: '',
-      claudeModel: 'claude-3-haiku-20240307',
-      ollamaModel: 'llama3',
-      ollamaUrl: 'http://localhost:11434/api/chat',
-      webllmModel: 'Llama-3-8B-Instruct-q4f32_1-MLC',
-      aiPrompt: 'Translate the following text to {targetLang}. Keep the exact separators "\\n\\u2581\\u2581\\u2581\\n" unchanged. Only output the translated text.'
-    });
+    const settings = await chrome.storage.sync.get(pick(
+      'engine', 'targetLang', 'sourceLang',
+      'deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl',
+      'openaiKey', 'openaiModel', 'openaiUrl',
+      'geminiKey', 'geminiModel', 'claudeKey', 'claudeModel',
+      'ollamaModel', 'ollamaUrl', 'webllmModel', 'aiPrompt'
+    ));
     Object.assign(this, settings);
   }
 

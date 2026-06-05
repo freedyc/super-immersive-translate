@@ -1,6 +1,7 @@
 import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
+import { DEFAULTS } from '../utils/defaults.js';
 
 /**
  * Popup script - Super Immersive Translate
@@ -37,23 +38,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const engineSettingsContainer = document.getElementById('engineSettingsContainer');
 
   // Load settings
-  const settings = await chrome.storage.sync.get({
-    engine: 'google',
-    targetLang: 'zh-CN',
-    displayMode: 'bilingual',
-    translationColor: '#9b59b6',
-    hoverTranslate: false,
-    inputTranslate: false,
-    selectionMode: 'icon',
-    selectionEngines: ['google', 'lingva', 'libre'],
-    deeplKey: '',
-    customApiUrl: '',
-    customApiKey: '',
-    libreUrl: 'https://libretranslate.com',
-    openaiKey: '',
-    geminiKey: '',
-    claudeKey: ''
-  });
+  const settings = await chrome.storage.sync.get(DEFAULTS);
 
   engineSelect.value = settings.engine;
   targetLangSelect.value = settings.targetLang;

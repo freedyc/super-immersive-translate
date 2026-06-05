@@ -1,5 +1,6 @@
 import './content.css';
 import { translator } from '../utils/translator.js';
+import { DEFAULTS, pick } from '../utils/defaults.js';
 
 /**
  * Content script - Super Immersive Translate
@@ -80,18 +81,7 @@ import { translator } from '../utils/translator.js';
     return rules.sites.length > 0 && !rules.sites.some(s => host.includes(s));
   }
 
-  const stored = await chrome.storage.sync.get({
-    translationColor: '#9b59b6',
-    displayMode: 'bilingual',
-    hoverTranslate: false,
-    translationFontSize: '0.92',
-    translationLineHeight: '1.6',
-    translationBold: false,
-    translationShowBorder: true,
-    siteRules: { mode: 'blacklist', sites: [] },
-    siteEngines: {},
-    translateConcurrency: 'medium'
-  });
+  const stored = await chrome.storage.sync.get(DEFAULTS);
 
   applyTranslationColor(stored.translationColor);
   applyDisplayMode(stored.displayMode);
@@ -113,10 +103,9 @@ import { translator } from '../utils/translator.js';
     }
     if (changes.translationFontSize || changes.translationLineHeight ||
         changes.translationBold || changes.translationShowBorder) {
-      chrome.storage.sync.get({
-        translationFontSize: '0.92', translationLineHeight: '1.6',
-        translationBold: false, translationShowBorder: true
-      }).then(applyTranslationStyles);
+      chrome.storage.sync.get(
+        pick('translationFontSize', 'translationLineHeight', 'translationBold', 'translationShowBorder')
+      ).then(applyTranslationStyles);
     }
     if (changes.siteRules) {
       siteBlocked = checkSiteBlocked(changes.siteRules.newValue);

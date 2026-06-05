@@ -1,6 +1,7 @@
 /**
  * Background service worker - Super Immersive Translate
  */
+import { pick } from '../utils/defaults.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -58,17 +59,10 @@ chrome.commands.onCommand.addListener(async (command) => {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'getSettings') {
-    chrome.storage.sync.get({
-      engine: 'google',
-      targetLang: 'zh-CN',
-      sourceLang: 'auto',
-      selectionMode: 'icon',
-      selectionEngines: ['google', 'lingva', 'libre'],
-      deeplKey: '',
-      customApiUrl: '',
-      customApiKey: '',
-      libreUrl: 'https://libretranslate.com'
-    }).then(sendResponse);
+    chrome.storage.sync.get(pick(
+      'engine', 'targetLang', 'sourceLang', 'selectionMode', 'selectionEngines',
+      'deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl'
+    )).then(sendResponse);
     return true;
   }
 });
