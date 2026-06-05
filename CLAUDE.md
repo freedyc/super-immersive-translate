@@ -85,10 +85,12 @@ script via `chrome.tabs.sendMessage`. Also answers `getSettings` messages.
 All modules read/write `chrome.storage.sync`. Settings keys (engine, targetLang, sourceLang,
 selectionMode, selectionEngines, per-engine keys/URLs/models, aiPrompt, displayMode,
 siteRules, siteEngines, translation style vars, etc.) are an implicit shared schema across
-`popup/`, `options/`, all content scripts, and `translator.js`. **When adding a setting,
-update the default-object in every `chrome.storage.sync.get({...})` call that reads it** —
-defaults are duplicated, not centralized. Modules react live via
-`chrome.storage.onChanged`.
+`popup/`, `options/`, all content scripts, and `translator.js`. **Default values live in
+one place: `utils/defaults.js` (`DEFAULTS` + a `pick(...)` helper).** Consumers read the
+whole schema via `chrome.storage.sync.get(DEFAULTS)` or a subset via `get(pick('a','b'))`,
+so adding a setting means adding it to `DEFAULTS` once. Modules react live via
+`chrome.storage.onChanged`. (A few narrow single-key reads — `pdf/`, `input-translate.js`,
+`theme.js` — still inline their one default.)
 
 Styling is applied through CSS custom properties (`--sit-*`) on `document.documentElement`
 and a `data-sit-mode` attribute, set from stored style settings — not by editing injected
