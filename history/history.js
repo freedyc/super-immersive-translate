@@ -1,7 +1,8 @@
 /**
  * Translation History Page - Super Immersive Translate
  */
-import { createIcons, icons } from 'lucide';
+import { createIcons } from 'lucide';
+import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 
 (async function () {

@@ -1,4 +1,5 @@
-import { createIcons, icons } from 'lucide';
+import { createIcons } from 'lucide';
+import { icons } from '../utils/icons.js';
 import { createWorker } from 'tesseract.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 

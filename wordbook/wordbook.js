@@ -2,7 +2,8 @@
  * Wordbook - Super Immersive Translate
  * Word list, flashcards, quiz, stats
  */
-import { createIcons, icons } from 'lucide';
+import { createIcons } from 'lucide';
+import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 
 (async function () {

@@ -37,6 +37,11 @@ import { translator } from '../utils/translator.js';
   const ORIGINAL_CLASS = 'sit-original';
   const FULLPAGE_BATCH = 20;
   const CONCURRENCY_LEVELS = { low: 2, medium: 5, high: 10 };
+  // Per-engine concurrency ceilings — rate-limited / fan-out-heavy engines must not
+  // be hit with the full pool (MyMemory is sequential+throttled; Libre already fires
+  // one request per text per batch; Lingva is a shared public instance; WebLLM is a
+  // single in-browser engine). Engines not listed use the user's chosen level.
+  const ENGINE_MAX_CONCURRENCY = { webllm: 1, mymemory: 1, libre: 2, lingva: 3 };
 
   let isTranslating = false;
   let isEnabled = false;
@@ -311,9 +316,8 @@ import { translator } from '../utils/translator.js';
 
   function resolveConcurrency() {
     const base = CONCURRENCY_LEVELS[concurrencySetting] || CONCURRENCY_LEVELS.medium;
-    // WebLLM is a single in-browser engine instance — don't fire concurrent calls at it.
-    if (translator.engine === 'webllm') return 1;
-    return base;
+    const cap = ENGINE_MAX_CONCURRENCY[translator.engine];
+    return cap ? Math.min(base, cap) : base;
   }
 
   async function translatePage() {

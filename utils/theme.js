@@ -1,5 +1,6 @@
 // utils/theme.js — 全局统一、可扩展多主题
-import { createIcons, icons } from 'lucide';
+import { createIcons } from 'lucide';
+import { icons } from './icons.js';
 
 // === 主题清单：扩展多主题的单一数据源 ===
 // 新增主题：把名字加到 AVAILABLE_THEMES，并在 styles/theme.css 的 themes: 行启用同名主题。
