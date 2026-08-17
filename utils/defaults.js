@@ -16,6 +16,9 @@ export const DEFAULTS = {
   translateConcurrency: 'medium',
   theme: 'system',
 
+  // history
+  historyMaxItems: 0, // 0 = 不限制
+
   // selection translation
   selectionMode: 'icon',
   selectionEngines: ['google', 'lingva', 'libre'],
