@@ -1,6 +1,7 @@
 import './selection.css';
 import { Translator } from '../utils/translator.js';
 import { pick } from '../utils/defaults.js';
+import { saveHistoryEntry } from '../utils/history.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -373,20 +374,6 @@ import { pick } from '../utils/defaults.js';
   // ========== History ==========
   let historyPendingText = null;
 
-  async function saveToHistory(text, translation, engine) {
-    try {
-      const { translationHistory = [] } = await chrome.storage.local.get('translationHistory');
-      translationHistory.unshift({
-        text, translation, engine,
-        url: location.href,
-        title: document.title,
-        timestamp: Date.now()
-      });
-      if (translationHistory.length > 500) translationHistory.length = 500;
-      await chrome.storage.local.set({ translationHistory });
-    } catch (e) { /* ignore */ }
-  }
-
   // ========== Engine Translation ==========
   function updateEngineResult(engineId, result, error) {
     if (!panel) return;
@@ -403,7 +390,13 @@ import { pick } from '../utils/defaults.js';
       resultEl.textContent = result;
 
       if (historyPendingText && result) {
-        saveToHistory(historyPendingText, result, engineId);
+        saveHistoryEntry({
+          text: historyPendingText,
+          translation: result,
+          engine: engineId,
+          url: location.href,
+          title: document.title,
+        });
         historyPendingText = null;
       }
     }
