@@ -2,6 +2,7 @@
  * Background service worker - Super Immersive Translate
  */
 import { pick } from '../utils/defaults.js';
+import { syncNow } from '../utils/github-sync.js';
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
@@ -63,6 +64,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       'engine', 'targetLang', 'sourceLang', 'selectionMode', 'selectionEngines',
       'deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl'
     )).then(sendResponse);
+    return true;
+  }
+  if (msg.action === 'triggerHistorySync') {
+    syncNow().then(sendResponse);
     return true;
   }
 });
