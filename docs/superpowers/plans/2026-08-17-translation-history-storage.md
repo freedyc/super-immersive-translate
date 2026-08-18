@@ -699,12 +699,14 @@ git commit -m "feat(sync): wire manual GitHub sync trigger in background"
 **Interfaces:**
 - Consumes: `DEFAULT_SETTINGS.githubSyncEnabled` / `githubToken`（Task 6 的 `DEFAULTS`）；`chrome.runtime.sendMessage({ action: 'triggerHistorySync' })`（Task 7）
 
-- [ ] **Step 1: `utils/icons.js` 加 `Github` 图标**
+- [ ] **Step 1: `utils/icons.js` 加同步图标**
+
+> **注意（Task 8 执行时修正）**：原计划用 `Github` 品牌图标，但项目里锁定的 `lucide` 版本（1.17.0）不包含任何品牌 logo 图标（`Github`/`Slack`/`Twitter` 等都没有，实测确认），只有 `GitBranch`/`GitCommit` 等操作类图标。改用语义等价、且这个版本里确实存在的 `CloudSync`（对应 `data-lucide="cloud-sync"`）代表"云端同步"。
 
 ```js
 import {
   ArrowLeft, ArrowLeftRight, ArrowRight, BarChart2, BookOpen, Check, CheckCircle,
-  Copy, Database, Download, ExternalLink, File, FileText, Github, Globe, Globe2, HelpCircle,
+  CloudSync, Copy, Database, Download, ExternalLink, File, FileText, Globe, Globe2, HelpCircle,
   History, Image, Inbox, Info, Keyboard, Languages, Layers, List, Mic, Monitor, Moon,
   MousePointer2, Package, PackageOpen, Palette, PanelRight, PenLine, RotateCcw, RotateCw, SearchX,
   Settings, Settings2, Share2, Shuffle, SkipForward, Star, Sun, Trash2, Upload,
@@ -713,7 +715,7 @@ import {
 
 export const icons = {
   ArrowLeft, ArrowLeftRight, ArrowRight, BarChart2, BookOpen, Check, CheckCircle,
-  Copy, Database, Download, ExternalLink, File, FileText, Github, Globe, Globe2, HelpCircle,
+  CloudSync, Copy, Database, Download, ExternalLink, File, FileText, Globe, Globe2, HelpCircle,
   History, Image, Inbox, Info, Keyboard, Languages, Layers, List, Mic, Monitor, Moon,
   MousePointer2, Package, PackageOpen, Palette, PanelRight, PenLine, RotateCcw, RotateCw, SearchX,
   Settings, Settings2, Share2, Shuffle, SkipForward, Star, Sun, Trash2, Upload,
@@ -747,7 +749,7 @@ export const icons = {
         <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
           <div class="card-body p-5 gap-4">
             <h3 class="font-semibold text-sm flex items-center gap-2">
-              <i data-lucide="github" class="w-4 h-4"></i>
+              <i data-lucide="cloud-sync" class="w-4 h-4"></i>
               GitHub 跨设备同步
             </h3>
             <p class="text-xs text-base-content/40 -mt-2">开启后，翻译历史会通过你自己的 GitHub 账号同步到其他设备</p>
