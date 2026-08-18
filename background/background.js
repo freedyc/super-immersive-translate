@@ -4,6 +4,16 @@
 import { pick } from '../utils/defaults.js';
 import { syncNow } from '../utils/github-sync.js';
 
+async function setupPeriodicSyncAlarm() {
+  const { githubSyncEnabled, githubSyncMode, githubSyncIntervalMinutes } = await chrome.storage.sync.get(
+    pick('githubSyncEnabled', 'githubSyncMode', 'githubSyncIntervalMinutes')
+  );
+  await chrome.alarms.clear('history-sync-periodic');
+  if (githubSyncEnabled && githubSyncMode === 'auto') {
+    chrome.alarms.create('history-sync-periodic', { periodInMinutes: githubSyncIntervalMinutes });
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: 'translate-page',
@@ -23,6 +33,16 @@ chrome.runtime.onInstalled.addListener(() => {
       title: '⚡ 在侧边栏打开快捷翻译',
       contexts: ['page', 'selection']
     });
+  }
+
+  setupPeriodicSyncAlarm();
+});
+
+chrome.runtime.onStartup.addListener(setupPeriodicSyncAlarm);
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'sync' && (changes.githubSyncEnabled || changes.githubSyncMode || changes.githubSyncIntervalMinutes)) {
+    setupPeriodicSyncAlarm();
   }
 });
 
