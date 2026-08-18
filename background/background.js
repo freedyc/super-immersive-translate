@@ -12,6 +12,11 @@ async function setupPeriodicSyncAlarm() {
   if (githubSyncEnabled && githubSyncMode === 'auto') {
     chrome.alarms.create('history-sync-periodic', { periodInMinutes: githubSyncIntervalMinutes });
   }
+  if (!githubSyncEnabled) {
+    // 用户关闭同步开关时，顺带清掉可能还在排队的一次性防抖闹钟，
+    // 不用等它自己触发再被 onAlarm 里的二次检查挡下来。
+    await chrome.alarms.clear('history-sync-debounce');
+  }
 }
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -91,16 +96,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
   if (msg.action === 'historyChanged') {
-    chrome.storage.sync.get(pick('githubSyncEnabled')).then(({ githubSyncEnabled }) => {
-      if (githubSyncEnabled) {
+    chrome.storage.sync.get(pick('githubSyncEnabled', 'githubSyncMode')).then(({ githubSyncEnabled, githubSyncMode }) => {
+      // 只有「启用同步」且同步方式是「自动」时，写入后才排一次防抖同步；
+      // 手动模式下用户翻译后不应该被静默联网同步。
+      if (githubSyncEnabled && githubSyncMode === 'auto') {
         chrome.alarms.create('history-sync-debounce', { delayInMinutes: 1 });
       }
     });
   }
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
+chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === 'history-sync-debounce' || alarm.name === 'history-sync-periodic') {
+    // 排队期间用户可能已经关闭了同步开关：再确认一次，避免触发一次不该有的网络请求。
+    const { githubSyncEnabled } = await chrome.storage.sync.get(pick('githubSyncEnabled'));
+    if (!githubSyncEnabled) return;
     syncNow();
   }
 });
