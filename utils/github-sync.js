@@ -28,27 +28,35 @@ async function pullFromGist(headers, gistId) {
   return { list };
 }
 
+async function createGist(headers, content) {
+  const res = await fetch(`${API_BASE}/gists`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      description: 'Super Immersive Translate - 翻译历史同步',
+      public: false,
+      files: { [GIST_FILENAME]: { content } },
+    }),
+  });
+  if (!res.ok) throw new Error(`创建 Gist 失败: HTTP ${res.status}`);
+  const data = await res.json();
+  return data.id;
+}
+
 async function pushToGist(headers, gistId, list) {
   const content = JSON.stringify(list);
   if (!gistId) {
-    const res = await fetch(`${API_BASE}/gists`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        description: 'Super Immersive Translate - 翻译历史同步',
-        public: false,
-        files: { [GIST_FILENAME]: { content } },
-      }),
-    });
-    if (!res.ok) throw new Error(`创建 Gist 失败: HTTP ${res.status}`);
-    const data = await res.json();
-    return data.id;
+    return createGist(headers, content);
   }
   const res = await fetch(`${API_BASE}/gists/${gistId}`, {
     method: 'PATCH',
     headers,
     body: JSON.stringify({ files: { [GIST_FILENAME]: { content } } }),
   });
+  if (res.status === 404) {
+    // 远端 gist 被用户手动删除：视为空远端，创建一个新 gist 顶替，调用方会把新 id 回填到设置里。
+    return createGist(headers, content);
+  }
   if (!res.ok) throw new Error(`更新 Gist 失败: HTTP ${res.status}`);
   return gistId;
 }
