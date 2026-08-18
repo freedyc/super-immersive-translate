@@ -302,11 +302,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       chrome.storage.sync.get(null),
       chrome.storage.local.get({ wordbook: [], translationHistory: [] })
     ]);
+    // GitHub token 是账号级权限（尤其 repo 权限的 PAT），不应该明文写进导出文件；
+    // 浅拷贝后删除，不影响实际存储里的数据。
+    const exportSettings = { ...settings };
+    delete exportSettings.githubToken;
+    delete exportSettings.githubOAuthAccessToken;
     const bundle = {
       type: 'super-immersive-translate-backup',
       version: 1,
       exportedAt: new Date().toISOString(),
-      settings,
+      settings: exportSettings,
       wordbook: local.wordbook || [],
       history: local.translationHistory || []
     };
@@ -482,7 +487,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       githubSyncEnabled: $('githubSyncEnabled').checked,
       githubToken: $('githubToken').value,
       githubSyncMode: document.querySelector('input[name="githubSyncMode"]:checked')?.value || 'manual',
-      githubSyncIntervalMinutes: parseInt($('githubSyncIntervalMinutes').value, 10) || DEFAULT_SETTINGS.githubSyncIntervalMinutes,
+      githubSyncIntervalMinutes: Math.max(1, parseInt($('githubSyncIntervalMinutes').value, 10) || DEFAULT_SETTINGS.githubSyncIntervalMinutes),
       githubSyncTargetType: document.querySelector('input[name="githubSyncTargetType"]:checked')?.value || 'gist',
       githubRepoOwner: $('githubRepoOwner').value,
       githubRepoName: $('githubRepoName').value,
