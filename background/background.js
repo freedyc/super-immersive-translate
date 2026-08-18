@@ -70,4 +70,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     syncNow().then(sendResponse);
     return true;
   }
+  if (msg.action === 'historyChanged') {
+    chrome.storage.sync.get(pick('githubSyncEnabled')).then(({ githubSyncEnabled }) => {
+      if (githubSyncEnabled) {
+        chrome.alarms.create('history-sync-debounce', { delayInMinutes: 1 });
+      }
+    });
+  }
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'history-sync-debounce' || alarm.name === 'history-sync-periodic') {
+    syncNow();
+  }
 });
