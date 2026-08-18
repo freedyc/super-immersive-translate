@@ -19,6 +19,20 @@ export const DEFAULTS = {
   // history
   historyMaxItems: 0, // 0 = 不限制
 
+  // GitHub 跨设备同步
+  githubSyncEnabled: false,
+  githubSyncAuthMethod: 'pat', // 'pat' | 'oauth'（oauth 暂未实现，预留）
+  githubToken: '',
+  githubOAuthAccessToken: '', // 预留给未来的 Device Flow 登录
+  githubSyncTargetType: 'gist', // 'gist' | 'repo'
+  githubGistId: '',
+  githubRepoOwner: '',
+  githubRepoName: '',
+  githubRepoBranch: 'main',
+  githubRepoPath: 'translation-history.json',
+  githubSyncMode: 'manual', // 'auto' | 'manual'
+  githubSyncIntervalMinutes: 30,
+
   // selection translation
   selectionMode: 'icon',
   selectionEngines: ['google', 'lingva', 'libre'],
