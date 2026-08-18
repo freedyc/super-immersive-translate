@@ -3,6 +3,7 @@ import { icons } from '../utils/icons.js';
 import { createWorker } from 'tesseract.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { DEFAULTS } from '../utils/defaults.js';
+import { saveHistoryEntry } from '../utils/history.js';
 
 // Initialize Lucide icons
 createIcons({ icons });
@@ -157,7 +158,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         // Save history and prepare wordbook data
         currentSaveData = { source: text, target: translatedText, engine: window.translator.engine };
-        saveToHistory(text, translatedText, window.translator.engine);
+        saveHistoryEntry({ text, translation: translatedText, engine: window.translator.engine });
       } else {
         targetText.textContent = '翻译返回空结果';
       }
@@ -272,21 +273,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveIcon.classList.add('text-warning');
     saveIcon.setAttribute('fill', 'currentColor');
   });
-
-  // History saving function
-  async function saveToHistory(source, target, engine) {
-    const { translationHistory = [] } = await chrome.storage.local.get('translationHistory');
-    translationHistory.unshift({
-      text: source,
-      translation: target,
-      engine: engine,
-      timestamp: Date.now()
-    });
-    if (translationHistory.length > 1000) {
-      translationHistory.pop();
-    }
-    await chrome.storage.local.set({ translationHistory });
-  }
 
   clearBtn.addEventListener('click', () => {
     sourceText.value = '';
