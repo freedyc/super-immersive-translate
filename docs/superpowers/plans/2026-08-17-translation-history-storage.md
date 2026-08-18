@@ -1190,7 +1190,7 @@ async function pullFromRepo(headers, { owner, repo, branch, path }) {
 
 async function pushToRepo(headers, target, list, attempt = 0) {
   const { list: remoteList, sha } = await pullFromRepo(headers, target);
-  const toWrite = attempt === 0 ? list : mergeHistories(list, remoteList);
+  const toWrite = mergeHistories(list, remoteList);
   const body = {
     message: 'Update translation history',
     content: toBase64(JSON.stringify(toWrite)),
@@ -1281,6 +1281,8 @@ export async function pushRemoteHistory(list) {
 ```
 
 注意：`pushToRepo` 内部用到了 `mergeHistories`，它定义在这两个 export 函数之后。JS 里 `function` 声明会整体提升，模块顶层的具名函数在同一模块内互相调用没有顺序限制，不需要挪动 `mergeHistories` 的位置。
+
+> **注意（分支整体审查后修正）**：原计划里 `toWrite` 只在 `attempt !== 0`（重试时）才 `mergeHistories(list, remoteList)`，首次尝试（`attempt === 0`）直接用调用方传入的 `list` 覆盖推送，完全没用到刚拉到的 `remoteList`。这意味着两台设备并发同步时，后写入的会把先写入的新增记录直接冲掉，而且大概率不会触发 409（用的就是最新 sha），指望的"409 冲突重试再合并"这层保护基本不生效。已改成不论第几次尝试都 `mergeHistories(list, remoteList)`，即上面代码块和 Step 1 都已按最终版本（去掉 `attempt === 0` 判断）呈现。
 
 - [ ] **Step 3: 构建 + 手动验证（需要一个有 `repo` 权限的测试 Token 和一个测试仓库）**
 

@@ -83,7 +83,9 @@ async function pullFromRepo(headers, { owner, repo, branch, path }) {
 
 async function pushToRepo(headers, target, list, attempt = 0) {
   const { list: remoteList, sha } = await pullFromRepo(headers, target);
-  const toWrite = attempt === 0 ? list : mergeHistories(list, remoteList);
+  // 每次尝试都要与刚拉到的远端最新内容合并（而不仅在重试时），否则并发同步会互相覆盖，
+  // 且大概率不会命中 409（因为用的就是最新 sha），下面的冲突重试保护也就形同虚设。
+  const toWrite = mergeHistories(list, remoteList);
   const body = {
     message: 'Update translation history',
     content: toBase64(JSON.stringify(toWrite)),
@@ -148,7 +150,15 @@ export function mergeHistories(local, remote) {
   return Array.from(byId.values()).sort((a, b) => b.timestamp - a.timestamp);
 }
 
+// 进行中标记：防抖闹钟和周期闹钟可能前后脚触发，避免两次 syncNow 并发跑（并发跑会互相踩读-改-写窗口）。
+let syncInFlight = false;
+
 export async function syncNow() {
+  if (syncInFlight) {
+    // 已经有一次同步在跑，本次直接跳过（不算错误）；下一轮闹钟很快会补上。
+    return { ok: true, error: null };
+  }
+  syncInFlight = true;
   try {
     const { translationHistory: rawLocal = [] } = await chrome.storage.local.get('translationHistory');
     const local = rawLocal.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
@@ -156,14 +166,24 @@ export async function syncNow() {
 
     const remote = await pullRemoteHistory();
     const merged = mergeHistories(local, remote);
-    const localSlice = historyMaxItems > 0 ? merged.slice(0, historyMaxItems) : merged;
+
+    // pullRemoteHistory() 期间（网络请求，可能几秒）本地可能又通过 saveHistoryEntry 写入了新记录。
+    // 写回本地前重新读一次最新快照并再合并一次，避免用"读取时的旧快照"覆盖掉这段时间内的新写入，
+    // 同时把这份最新数据一并推送到远端，避免新记录永远没被同步出去。
+    const { translationHistory: latestRawLocal = [] } = await chrome.storage.local.get('translationHistory');
+    const latestLocal = latestRawLocal.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
+    const finalMerged = mergeHistories(latestLocal, merged);
+
+    const localSlice = historyMaxItems > 0 ? finalMerged.slice(0, historyMaxItems) : finalMerged;
 
     await chrome.storage.local.set({ translationHistory: localSlice });
-    await pushRemoteHistory(merged);
+    await pushRemoteHistory(finalMerged);
     await chrome.storage.local.set({ githubSyncStatus: { lastSyncAt: Date.now(), lastError: null } });
-    return { ok: true };
+    return { ok: true, error: null };
   } catch (err) {
     await chrome.storage.local.set({ githubSyncStatus: { lastSyncAt: Date.now(), lastError: err.message } });
     return { ok: false, error: err.message };
+  } finally {
+    syncInFlight = false;
   }
 }

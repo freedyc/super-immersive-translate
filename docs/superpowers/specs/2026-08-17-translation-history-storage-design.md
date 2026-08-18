@@ -94,7 +94,7 @@ githubSyncIntervalMinutes: 30,
 - `pullRemoteHistory()` —— 按 `githubSyncTargetType` 走 Gist（`GET /gists/{id}`）或 Repo Contents（`GET /repos/{owner}/{repo}/contents/{path}?ref={branch}`，base64 解码）；目标不存在（gist id 为空、或 repo 404）时返回空数组
 - `pushRemoteHistory(list)` —— 全量覆盖式写回（写的是**合并后的全量数据**，不是增量）：
   - Gist：`githubGistId` 为空则 `POST /gists`（secret gist）创建并回填 id；否则 `PATCH /gists/{id}`
-  - Repo：先 `GET` 拿当前 `sha`（文件不存在则不带 sha，走创建语义），再 `PUT /repos/{owner}/{repo}/contents/{path}`；`sha` 冲突（409）时重新 `GET` 最新内容与 `sha`，与本地合并结果再 merge 一次后重试一次，仍失败则记录错误、等下一轮
+  - Repo：先 `GET` 拿当前 `sha`（文件不存在则不带 sha，走创建语义），**每次尝试（含首次）**都把待写入列表与刚拉到的 `remoteList` 再 `mergeHistories` 一次后才 `PUT /repos/{owner}/{repo}/contents/{path}`；`sha` 冲突（409）时重试一次（重试会重新 `GET` 最新内容与 `sha`，同样先 merge 再写），仍失败则记录错误、等下一轮（**注意（分支整体审查后修正）**：首次尝试如果跳过合并直接覆盖推送，并发同步时会互相冲掉对方新增的记录，且大概率不会触发 409，"冲突重试再合并"这层保护也就形同虚设——所以合并必须发生在每次尝试，不能只发生在重试时）
 - `mergeHistories(local, remote)` —— 按 `id` 去重 union，按 `timestamp` 降序排序，返回合并后全量列表（不做本地上限裁剪，裁剪只发生在写入本地 `chrome.storage.local` 之前）
 - `syncNow()`：`pullRemoteHistory()` → `mergeHistories(local, remote)` → 按 `historyMaxItems` 裁出本地要存的子集写 `chrome.storage.local`，同时把**未裁剪的合并全量**通过 `pushRemoteHistory()` 写回远端 → 更新 `chrome.storage.local` 里的 `githubSyncStatus: { lastSyncAt, lastError }`（本地专用状态，不参与同步）
 
