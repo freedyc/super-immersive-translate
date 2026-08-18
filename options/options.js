@@ -103,6 +103,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('githubToken').value = settings.githubToken;
   updateGithubSyncUI(settings.githubSyncEnabled);
   refreshSyncStatus();
+  $('githubSyncIntervalMinutes').value = settings.githubSyncIntervalMinutes;
+  document.querySelectorAll('input[name="githubSyncMode"]').forEach((r) => {
+    r.checked = r.value === settings.githubSyncMode;
+  });
 
   // Load voices for browser TTS
   function loadVoices() {
@@ -394,6 +398,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   $('githubToken').addEventListener('input', debounce(saveAll, 500));
 
+  document.querySelectorAll('input[name="githubSyncMode"]').forEach((r) => {
+    r.addEventListener('change', saveAll);
+  });
+  $('githubSyncIntervalMinutes').addEventListener('input', debounce(saveAll, 500));
+
   $('githubSyncNowBtn').addEventListener('click', async () => {
     const btn = $('githubSyncNowBtn');
     btn.disabled = true;
@@ -450,6 +459,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       historyMaxItems: parseInt($('historyMaxItems').value, 10) || 0,
       githubSyncEnabled: $('githubSyncEnabled').checked,
       githubToken: $('githubToken').value,
+      githubSyncMode: document.querySelector('input[name="githubSyncMode"]:checked')?.value || 'manual',
+      githubSyncIntervalMinutes: parseInt($('githubSyncIntervalMinutes').value, 10) || DEFAULT_SETTINGS.githubSyncIntervalMinutes,
     };
     await chrome.storage.sync.set(newSettings);
   }

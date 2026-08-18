@@ -511,6 +511,22 @@
                 </a>
               </div>
 
+              <div class="flex flex-col gap-1">
+                <label class="text-sm text-base-content/70">同步方式</label>
+                <div class="flex items-center gap-4 flex-wrap">
+                  <label class="label cursor-pointer gap-2 px-0">
+                    <input type="radio" name="githubSyncMode" id="githubSyncModeAuto" value="auto" class="radio radio-sm" />
+                    <span class="label-text text-sm">自动，每隔</span>
+                  </label>
+                  <input type="number" min="1" step="1" id="githubSyncIntervalMinutes" class="input input-bordered input-xs w-16" />
+                  <span class="text-sm text-base-content/70">分钟</span>
+                  <label class="label cursor-pointer gap-2 px-0">
+                    <input type="radio" name="githubSyncMode" id="githubSyncModeManual" value="manual" class="radio radio-sm" />
+                    <span class="label-text text-sm">手动</span>
+                  </label>
+                </div>
+              </div>
+
               <div class="flex items-center gap-3">
                 <button class="btn btn-outline btn-sm" id="githubSyncNowBtn">
                   <i data-lucide="rotate-cw" class="w-4 h-4"></i>
