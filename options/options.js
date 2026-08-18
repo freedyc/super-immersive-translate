@@ -95,6 +95,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderSiteList(settings.siteRules.sites);
   renderSiteEngines(settings.siteEngines);
 
+  // History
+  $('historyMaxItems').value = settings.historyMaxItems;
+
   // Load voices for browser TTS
   function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
@@ -167,7 +170,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const saveFields = [
     'engine', 'targetLang', 'displayMode', 'translateConcurrency', 'selectionMode',
     'hoverTranslate', 'inputTranslate',
-    'translationBold', 'translationShowBorder', 'siteMode'
+    'translationBold', 'translationShowBorder', 'siteMode', 'historyMaxItems'
   ];
   saveFields.forEach(id => {
     const el = $(id);
@@ -394,7 +397,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       ttsOpenaiVoice: $('ttsOpenaiVoice').value,
       ttsOpenaiSpeed: $('ttsOpenaiSpeed').value,
       siteRules: { mode: $('siteMode').value, sites: current.siteRules.sites },
-      siteEngines: current.siteEngines
+      siteEngines: current.siteEngines,
+      historyMaxItems: parseInt($('historyMaxItems').value, 10) || 0,
     };
     await chrome.storage.sync.set(newSettings);
   }

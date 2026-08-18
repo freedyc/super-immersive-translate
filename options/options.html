@@ -479,6 +479,18 @@
 
         <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
           <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm">历史记录</h3>
+            <p class="text-xs text-base-content/40 -mt-2">翻译历史默认仅保存在本机，不会上传到任何服务器；如需多设备同步，可在下方开启 GitHub 同步</p>
+            <div class="flex items-center gap-3">
+              <label class="text-sm text-base-content/70" for="historyMaxItems">保存条数上限</label>
+              <input type="number" min="0" step="1" id="historyMaxItems" class="input input-bordered input-sm w-28" />
+              <span class="text-xs text-base-content/40">0 = 不限制</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
             <h3 class="font-semibold text-sm">导出 / 导入配置</h3>
             <p class="text-xs text-base-content/40 -mt-2">导出所有设置（包括站点规则、样式配置等），方便备份或迁移到其他设备</p>
             <div class="flex gap-3 flex-wrap">
