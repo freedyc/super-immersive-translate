@@ -170,6 +170,13 @@ export async function syncNow() {
   try {
     const { translationHistory: rawLocal = [] } = await chrome.storage.local.get('translationHistory');
     const local = rawLocal.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
+    const hasLegacyIdBackfill = local.some((e, i) => e !== rawLocal[i]);
+    if (hasLegacyIdBackfill) {
+      // 旧记录（无 id）刚被回填：立刻写回本地，避免下面第二次读取时对同一条记录
+      // 再次调用 randomUUID() 生成不同的新 id，导致 mergeHistories 按 id 去重时
+      // 把同一条旧记录误判成两条不同记录（重复且不会自愈）。
+      await chrome.storage.local.set({ translationHistory: local });
+    }
     const { historyMaxItems = 0 } = await chrome.storage.sync.get(pick('historyMaxItems'));
 
     const remote = await pullRemoteHistory();

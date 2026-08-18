@@ -588,6 +588,8 @@ export async function syncNow() {
 }
 ```
 
+> **注意（分支整体审查修复阶段修正）**：后续为修另一个竞态条件（`pullRemoteHistory()` 网络请求期间本地又写入新记录），`syncNow` 改为读取本地 `translationHistory` 两次并各自独立回填缺失的 `id`。这带来一个新问题：同一条无 `id` 的旧记录在两次回填里会各自调用一次 `crypto.randomUUID()`，得到两个不同的新 id，`mergeHistories` 按 id 去重时会把它们当成两条不同记录，导致重复且不会自愈。修法：第一次读取并回填后，如果确实新增了 id（`local` 与 `rawLocal` 不完全相同），立刻把 `local` 写回 `chrome.storage.local`，这样第二次读取时所有条目都已有 `id`，不会再重新生成。详见 `utils/github-sync.js` 实际实现。
+
 - [ ] **Step 3: 构建验证**
 
 Run: `npm run build`
