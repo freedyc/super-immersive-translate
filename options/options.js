@@ -98,6 +98,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // History
   $('historyMaxItems').value = settings.historyMaxItems;
 
+  // GitHub sync
+  $('githubSyncEnabled').checked = settings.githubSyncEnabled;
+  $('githubToken').value = settings.githubToken;
+  updateGithubSyncUI(settings.githubSyncEnabled);
+  refreshSyncStatus();
+
   // Load voices for browser TTS
   function loadVoices() {
     const voices = window.speechSynthesis.getVoices();
@@ -355,6 +361,49 @@ document.addEventListener('DOMContentLoaded', async () => {
     el.style.paddingLeft = border ? '8px' : '0';
   }
 
+  function updateGithubSyncUI(enabled) {
+    $('githubSyncSettings').style.display = enabled ? 'flex' : 'none';
+  }
+
+  async function refreshSyncStatus() {
+    const { githubSyncStatus } = await chrome.storage.local.get('githubSyncStatus');
+    const el = $('githubSyncStatus');
+    if (!githubSyncStatus || !githubSyncStatus.lastSyncAt) {
+      el.textContent = '尚未同步';
+      el.className = 'text-xs text-base-content/40';
+      return;
+    }
+    const time = new Date(githubSyncStatus.lastSyncAt).toLocaleString();
+    if (githubSyncStatus.lastError) {
+      el.textContent = `上次同步失败（${time}）：${githubSyncStatus.lastError}`;
+      el.className = 'text-xs text-error';
+    } else {
+      el.textContent = `上次同步成功：${time}`;
+      el.className = 'text-xs text-success';
+    }
+  }
+
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.githubSyncStatus) refreshSyncStatus();
+  });
+
+  $('githubSyncEnabled').addEventListener('change', (e) => {
+    updateGithubSyncUI(e.target.checked);
+    saveAll();
+  });
+
+  $('githubToken').addEventListener('input', debounce(saveAll, 500));
+
+  $('githubSyncNowBtn').addEventListener('click', async () => {
+    const btn = $('githubSyncNowBtn');
+    btn.disabled = true;
+    try {
+      await chrome.runtime.sendMessage({ action: 'triggerHistorySync' });
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   async function saveAll() {
     const selEngines = [];
     document.querySelectorAll('#selectionEngines input:checked').forEach(cb => selEngines.push(cb.value));
@@ -399,6 +448,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       siteRules: { mode: $('siteMode').value, sites: current.siteRules.sites },
       siteEngines: current.siteEngines,
       historyMaxItems: parseInt($('historyMaxItems').value, 10) || 0,
+      githubSyncEnabled: $('githubSyncEnabled').checked,
+      githubToken: $('githubToken').value,
     };
     await chrome.storage.sync.set(newSettings);
   }

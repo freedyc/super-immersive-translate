@@ -491,6 +491,39 @@
 
         <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
           <div class="card-body p-5 gap-4">
+            <h3 class="font-semibold text-sm flex items-center gap-2">
+              <i data-lucide="cloud-sync" class="w-4 h-4"></i>
+              GitHub 跨设备同步
+            </h3>
+            <p class="text-xs text-base-content/40 -mt-2">开启后，翻译历史会通过你自己的 GitHub 账号同步到其他设备</p>
+
+            <label class="label cursor-pointer justify-start gap-3 px-0">
+              <input type="checkbox" id="githubSyncEnabled" class="toggle toggle-primary toggle-sm" />
+              <span class="label-text text-sm">启用 GitHub 同步</span>
+            </label>
+
+            <div id="githubSyncSettings" class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-sm text-base-content/70" for="githubToken">Personal Access Token</label>
+                <input type="password" id="githubToken" placeholder="ghp_..." class="input input-bordered input-sm w-full max-w-sm" />
+                <a href="https://github.com/settings/tokens/new?scopes=gist&description=Super%20Immersive%20Translate" target="_blank" rel="noopener" class="text-xs link link-primary w-fit">
+                  去 GitHub 创建 Token（需要 gist 权限）
+                </a>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <button class="btn btn-outline btn-sm" id="githubSyncNowBtn">
+                  <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                  立即同步
+                </button>
+                <span id="githubSyncStatus" class="text-xs text-base-content/40">尚未同步</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm mb-4 rounded-xl">
+          <div class="card-body p-5 gap-4">
             <h3 class="font-semibold text-sm">导出 / 导入配置</h3>
             <p class="text-xs text-base-content/40 -mt-2">导出所有设置（包括站点规则、样式配置等），方便备份或迁移到其他设备</p>
             <div class="flex gap-3 flex-wrap">
