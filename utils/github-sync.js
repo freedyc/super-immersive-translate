@@ -53,21 +53,86 @@ async function pushToGist(headers, gistId, list) {
   return gistId;
 }
 
+function toBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary);
+}
+
+function fromBase64(b64) {
+  const binary = atob(b64.replace(/\n/g, ''));
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+async function pullFromRepo(headers, { owner, repo, branch, path }) {
+  if (!owner || !repo) return { list: [], sha: '' };
+  const res = await fetch(
+    `${API_BASE}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(branch)}`,
+    { headers }
+  );
+  if (res.status === 404) return { list: [], sha: '' };
+  if (!res.ok) throw new Error(`读取仓库文件失败: HTTP ${res.status}`);
+  const data = await res.json();
+  const list = data.content ? JSON.parse(fromBase64(data.content)) : [];
+  return { list, sha: data.sha };
+}
+
+async function pushToRepo(headers, target, list, attempt = 0) {
+  const { list: remoteList, sha } = await pullFromRepo(headers, target);
+  const toWrite = attempt === 0 ? list : mergeHistories(list, remoteList);
+  const body = {
+    message: 'Update translation history',
+    content: toBase64(JSON.stringify(toWrite)),
+    branch: target.branch,
+  };
+  if (sha) body.sha = sha;
+  const res = await fetch(
+    `${API_BASE}/repos/${target.owner}/${target.repo}/contents/${encodeURIComponent(target.path)}`,
+    { method: 'PUT', headers, body: JSON.stringify(body) }
+  );
+  if (res.status === 409 && attempt === 0) {
+    return pushToRepo(headers, target, list, attempt + 1);
+  }
+  if (!res.ok) throw new Error(`写入仓库文件失败: HTTP ${res.status}`);
+}
+
 export async function pullRemoteHistory() {
-  const settings = await chrome.storage.sync.get(pick('githubSyncTargetType', 'githubGistId'));
+  const settings = await chrome.storage.sync.get(pick(
+    'githubSyncTargetType', 'githubGistId',
+    'githubRepoOwner', 'githubRepoName', 'githubRepoBranch', 'githubRepoPath'
+  ));
   const headers = await getAuthHeaders();
   if (settings.githubSyncTargetType === 'repo') {
-    throw new Error('仓库同步尚未实现');
+    const { list } = await pullFromRepo(headers, {
+      owner: settings.githubRepoOwner,
+      repo: settings.githubRepoName,
+      branch: settings.githubRepoBranch,
+      path: settings.githubRepoPath,
+    });
+    return list;
   }
   const { list } = await pullFromGist(headers, settings.githubGistId);
   return list;
 }
 
 export async function pushRemoteHistory(list) {
-  const settings = await chrome.storage.sync.get(pick('githubSyncTargetType', 'githubGistId'));
+  const settings = await chrome.storage.sync.get(pick(
+    'githubSyncTargetType', 'githubGistId',
+    'githubRepoOwner', 'githubRepoName', 'githubRepoBranch', 'githubRepoPath'
+  ));
   const headers = await getAuthHeaders();
   if (settings.githubSyncTargetType === 'repo') {
-    throw new Error('仓库同步尚未实现');
+    await pushToRepo(headers, {
+      owner: settings.githubRepoOwner,
+      repo: settings.githubRepoName,
+      branch: settings.githubRepoBranch,
+      path: settings.githubRepoPath,
+    }, list);
+    return;
   }
   const gistId = await pushToGist(headers, settings.githubGistId, list);
   if (gistId !== settings.githubGistId) {
