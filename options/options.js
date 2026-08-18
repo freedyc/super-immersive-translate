@@ -107,6 +107,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.querySelectorAll('input[name="githubSyncMode"]').forEach((r) => {
     r.checked = r.value === settings.githubSyncMode;
   });
+  document.querySelectorAll('input[name="githubSyncTargetType"]').forEach((r) => {
+    r.checked = r.value === settings.githubSyncTargetType;
+  });
+  $('githubRepoOwner').value = settings.githubRepoOwner;
+  $('githubRepoName').value = settings.githubRepoName;
+  $('githubRepoBranch').value = settings.githubRepoBranch;
+  $('githubRepoPath').value = settings.githubRepoPath;
+  updateGithubTargetUI(settings.githubSyncTargetType);
 
   // Load voices for browser TTS
   function loadVoices() {
@@ -369,6 +377,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('githubSyncSettings').style.display = enabled ? 'flex' : 'none';
   }
 
+  function updateGithubTargetUI(targetType) {
+    $('githubRepoFields').style.display = targetType === 'repo' ? 'flex' : 'none';
+  }
+
   async function refreshSyncStatus() {
     const { githubSyncStatus } = await chrome.storage.local.get('githubSyncStatus');
     const el = $('githubSyncStatus');
@@ -402,6 +414,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     r.addEventListener('change', saveAll);
   });
   $('githubSyncIntervalMinutes').addEventListener('input', debounce(saveAll, 500));
+
+  document.querySelectorAll('input[name="githubSyncTargetType"]').forEach((r) => {
+    r.addEventListener('change', (e) => {
+      updateGithubTargetUI(e.target.value);
+      saveAll();
+    });
+  });
+  ['githubRepoOwner', 'githubRepoName', 'githubRepoBranch', 'githubRepoPath'].forEach((id) => {
+    $(id).addEventListener('input', debounce(saveAll, 500));
+  });
 
   $('githubSyncNowBtn').addEventListener('click', async () => {
     const btn = $('githubSyncNowBtn');
@@ -461,6 +483,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       githubToken: $('githubToken').value,
       githubSyncMode: document.querySelector('input[name="githubSyncMode"]:checked')?.value || 'manual',
       githubSyncIntervalMinutes: parseInt($('githubSyncIntervalMinutes').value, 10) || DEFAULT_SETTINGS.githubSyncIntervalMinutes,
+      githubSyncTargetType: document.querySelector('input[name="githubSyncTargetType"]:checked')?.value || 'gist',
+      githubRepoOwner: $('githubRepoOwner').value,
+      githubRepoName: $('githubRepoName').value,
+      githubRepoBranch: $('githubRepoBranch').value || 'main',
+      githubRepoPath: $('githubRepoPath').value || 'translation-history.json',
     };
     await chrome.storage.sync.set(newSettings);
   }
