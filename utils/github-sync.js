@@ -150,6 +150,23 @@ export async function pushRemoteHistory(list) {
   }
 }
 
+// 为缺失 id 的旧记录计算确定性 id：内容不变则无论回填多少次、在哪个执行上下文回填，
+// 算出来的 id 都完全一样，天然避免"同一条记录被回填出两个不同随机 id 导致重复"的问题，
+// 不再需要依赖"回填后抢先写回 storage"这种时序技巧。
+async function computeLegacyId(entry) {
+  const key = `${entry.text}|${entry.translation}|${entry.engine}|${entry.timestamp}`;
+  const data = new TextEncoder().encode(key);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  return `legacy-${hex}`;
+}
+
+async function backfillIds(rawList) {
+  return Promise.all(rawList.map(async (e) => (e.id ? e : { ...e, id: await computeLegacyId(e) })));
+}
+
 export function mergeHistories(local, remote) {
   const byId = new Map();
   [...remote, ...local].forEach((entry) => {
@@ -169,14 +186,7 @@ export async function syncNow() {
   syncInFlight = true;
   try {
     const { translationHistory: rawLocal = [] } = await chrome.storage.local.get('translationHistory');
-    const local = rawLocal.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
-    const hasLegacyIdBackfill = local.some((e, i) => e !== rawLocal[i]);
-    if (hasLegacyIdBackfill) {
-      // 旧记录（无 id）刚被回填：立刻写回本地，避免下面第二次读取时对同一条记录
-      // 再次调用 randomUUID() 生成不同的新 id，导致 mergeHistories 按 id 去重时
-      // 把同一条旧记录误判成两条不同记录（重复且不会自愈）。
-      await chrome.storage.local.set({ translationHistory: local });
-    }
+    const local = await backfillIds(rawLocal);
     const { historyMaxItems = 0 } = await chrome.storage.sync.get(pick('historyMaxItems'));
 
     const remote = await pullRemoteHistory();
@@ -186,7 +196,7 @@ export async function syncNow() {
     // 写回本地前重新读一次最新快照并再合并一次，避免用"读取时的旧快照"覆盖掉这段时间内的新写入，
     // 同时把这份最新数据一并推送到远端，避免新记录永远没被同步出去。
     const { translationHistory: latestRawLocal = [] } = await chrome.storage.local.get('translationHistory');
-    const latestLocal = latestRawLocal.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
+    const latestLocal = await backfillIds(latestRawLocal);
     const finalMerged = mergeHistories(latestLocal, merged);
 
     const localSlice = historyMaxItems > 0 ? finalMerged.slice(0, historyMaxItems) : finalMerged;

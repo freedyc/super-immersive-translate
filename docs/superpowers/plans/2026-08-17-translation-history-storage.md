@@ -588,7 +588,9 @@ export async function syncNow() {
 }
 ```
 
-> **注意（分支整体审查修复阶段修正）**：后续为修另一个竞态条件（`pullRemoteHistory()` 网络请求期间本地又写入新记录），`syncNow` 改为读取本地 `translationHistory` 两次并各自独立回填缺失的 `id`。这带来一个新问题：同一条无 `id` 的旧记录在两次回填里会各自调用一次 `crypto.randomUUID()`，得到两个不同的新 id，`mergeHistories` 按 id 去重时会把它们当成两条不同记录，导致重复且不会自愈。修法：第一次读取并回填后，如果确实新增了 id（`local` 与 `rawLocal` 不完全相同），立刻把 `local` 写回 `chrome.storage.local`，这样第二次读取时所有条目都已有 `id`，不会再重新生成。详见 `utils/github-sync.js` 实际实现。
+> **注意（分支整体审查修复阶段修正）**：后续为修另一个竞态条件（`pullRemoteHistory()` 网络请求期间本地又写入新记录），`syncNow` 改为读取本地 `translationHistory` 两次并各自独立回填缺失的 `id`。这带来一个新问题：同一条无 `id` 的旧记录在两次回填里会各自调用一次 `crypto.randomUUID()`，得到两个不同的新 id，`mergeHistories` 按 id 去重时会把它们当成两条不同记录，导致重复且不会自愈。
+>
+> **注意（复核后二次修正）**：上一条注记里"回填后立刻写回 storage 防重复"的做法本身仍有一个更窄的残留竞态——如果这次中间写回恰好和另一个执行上下文里 `saveHistoryEntry` 的读-改-写时序交错，旧记录还是会被回填出不同的随机 id。根本修法是把回填逻辑从随机 UUID 改成用 `crypto.subtle.digest('SHA-256', ...)` 对 `text|translation|engine|timestamp` 算出的确定性哈希（加 `legacy-` 前缀）：同一条旧记录内容不变，无论回填多少次、在哪个上下文回填，算出来的 id 都完全一样，两次独立读取即使各自生成新对象也不会产生不同 id，因此不再需要"回填后抢先写回 storage"这一步。详见 `utils/github-sync.js` 实际实现。
 
 - [ ] **Step 3: 构建验证**
 
