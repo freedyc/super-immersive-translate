@@ -194,21 +194,29 @@ const WORDBOOK_REPO_PATH = 'wordbook.json';
 export function mergeWordbook(local, remote) {
   const byText = new Map();
   // remote 在前、local 在后：同一个 key 第二次出现时（一定是 local）该次的字段优先，
-  // 从而实现"本地同引擎覆盖远端、id 优先取本地"的约定；known/timestamp 用哪边都一样
+  // 从而实现"本地同引擎覆盖远端"的约定；known/timestamp 用哪边都一样
   // （|| 和 Math.min 本身顺序无关）。
+  // id 字段是唯一的例外：取 prior（远端）优先，而不是本地优先。id 不参与任何展示/业务逻辑，
+  // 只用于去重；一旦"本地优先"，两台设备互推时 id 会在两个随机值之间来回切换——内容完全没变
+  // 也会产生一次无意义的 commit/版本变更。远端优先能让 id 在第一次推送后收敛、不再变化。
   [...remote, ...local].forEach((entry) => {
-    const key = entry.text.toLowerCase();
+    // 远端文件可能被手动编辑成畸形数据（缺 text 或整条为 null），跳过而不是让 toLowerCase() 抛异常。
+    const key = entry?.text?.toLowerCase();
+    if (!key) return;
     const prior = byText.get(key);
     if (!prior) {
       byText.set(key, entry);
       return;
     }
+    const priorTs = prior.timestamp ?? Infinity;
+    const entryTs = entry.timestamp ?? Infinity;
+    const minTs = Math.min(priorTs, entryTs);
     byText.set(key, {
-      id: entry.id || prior.id,
+      id: prior.id || entry.id,
       text: prior.text,
       translations: { ...prior.translations, ...entry.translations },
       known: prior.known || entry.known,
-      timestamp: Math.min(prior.timestamp, entry.timestamp),
+      timestamp: minTs === Infinity ? Date.now() : minTs,
       url: entry.url || prior.url,
       title: entry.title || prior.title,
     });
