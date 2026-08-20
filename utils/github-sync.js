@@ -89,13 +89,13 @@ async function pullFromRepo(headers, { owner, repo, branch, path }) {
   return { list, sha: data.sha };
 }
 
-async function pushToRepo(headers, target, list, mergeFn, attempt = 0) {
+async function pushToRepo(headers, target, list, mergeFn, commitMessage, attempt = 0) {
   const { list: remoteList, sha } = await pullFromRepo(headers, target);
   // 每次尝试都要与刚拉到的远端最新内容合并（而不仅在重试时），否则并发同步会互相覆盖，
   // 且大概率不会命中 409（因为用的就是最新 sha），下面的冲突重试保护也就形同虚设。
   const toWrite = mergeFn(list, remoteList);
   const body = {
-    message: 'Update translation history',
+    message: commitMessage,
     content: toBase64(JSON.stringify(toWrite)),
     branch: target.branch,
   };
@@ -105,7 +105,7 @@ async function pushToRepo(headers, target, list, mergeFn, attempt = 0) {
     { method: 'PUT', headers, body: JSON.stringify(body) }
   );
   if (res.status === 409 && attempt === 0) {
-    return pushToRepo(headers, target, list, mergeFn, attempt + 1);
+    return pushToRepo(headers, target, list, mergeFn, commitMessage, attempt + 1);
   }
   if (!res.ok) throw new Error(`写入仓库文件失败: HTTP ${res.status}`);
 }
@@ -132,7 +132,7 @@ async function pullRemoteFile(gistFilename, repoPath) {
   return list;
 }
 
-async function pushRemoteFile(gistFilename, repoPath, mergeFn, list) {
+async function pushRemoteFile(gistFilename, repoPath, mergeFn, list, commitMessage) {
   const settings = await chrome.storage.sync.get(pick(
     'githubSyncTargetType', 'githubGistId',
     'githubRepoOwner', 'githubRepoName', 'githubRepoBranch'
@@ -144,7 +144,7 @@ async function pushRemoteFile(gistFilename, repoPath, mergeFn, list) {
       repo: settings.githubRepoName,
       branch: settings.githubRepoBranch,
       path: repoPath,
-    }, list, mergeFn);
+    }, list, mergeFn, commitMessage);
     return;
   }
   const gistId = await pushToGist(headers, settings.githubGistId, gistFilename, list);
@@ -160,7 +160,7 @@ export async function pullRemoteHistory() {
 
 export async function pushRemoteHistory(list) {
   const { githubRepoPath } = await chrome.storage.sync.get(pick('githubRepoPath'));
-  return pushRemoteFile(HISTORY_GIST_FILENAME, githubRepoPath, mergeHistories, list);
+  return pushRemoteFile(HISTORY_GIST_FILENAME, githubRepoPath, mergeHistories, list, 'Update translation history');
 }
 
 // 为缺失 id 的旧记录计算确定性 id：内容不变则无论回填多少次、在哪个执行上下文回填，
@@ -236,7 +236,7 @@ async function pullRemoteWordbook() {
 }
 
 async function pushRemoteWordbook(list) {
-  return pushRemoteFile(WORDBOOK_GIST_FILENAME, WORDBOOK_REPO_PATH, mergeWordbook, list);
+  return pushRemoteFile(WORDBOOK_GIST_FILENAME, WORDBOOK_REPO_PATH, mergeWordbook, list, 'Update wordbook');
 }
 
 async function syncHistoryNow() {
