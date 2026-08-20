@@ -2,7 +2,7 @@
 import { pick } from './defaults.js';
 
 const API_BASE = 'https://api.github.com';
-const GIST_FILENAME = 'translation-history.json';
+const HISTORY_GIST_FILENAME = 'translation-history.json';
 
 async function getAuthHeaders() {
   const { githubSyncAuthMethod, githubToken, githubOAuthAccessToken } = await chrome.storage.sync.get(
@@ -17,25 +17,25 @@ async function getAuthHeaders() {
   };
 }
 
-async function pullFromGist(headers, gistId) {
+async function pullFromGist(headers, gistId, filename) {
   if (!gistId) return { list: [] };
   const res = await fetch(`${API_BASE}/gists/${gistId}`, { headers });
   if (res.status === 404) return { list: [] };
   if (!res.ok) throw new Error(`读取 Gist 失败: HTTP ${res.status}`);
   const data = await res.json();
-  const file = data.files?.[GIST_FILENAME];
+  const file = data.files?.[filename];
   const list = file?.content ? JSON.parse(file.content) : [];
   return { list };
 }
 
-async function createGist(headers, content) {
+async function createGist(headers, filename, content) {
   const res = await fetch(`${API_BASE}/gists`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
-      description: 'Super Immersive Translate - 翻译历史同步',
+      description: 'Super Immersive Translate - 数据同步',
       public: false,
-      files: { [GIST_FILENAME]: { content } },
+      files: { [filename]: { content } },
     }),
   });
   if (!res.ok) throw new Error(`创建 Gist 失败: HTTP ${res.status}`);
@@ -43,19 +43,19 @@ async function createGist(headers, content) {
   return data.id;
 }
 
-async function pushToGist(headers, gistId, list) {
+async function pushToGist(headers, gistId, filename, list) {
   const content = JSON.stringify(list);
   if (!gistId) {
-    return createGist(headers, content);
+    return createGist(headers, filename, content);
   }
   const res = await fetch(`${API_BASE}/gists/${gistId}`, {
     method: 'PATCH',
     headers,
-    body: JSON.stringify({ files: { [GIST_FILENAME]: { content } } }),
+    body: JSON.stringify({ files: { [filename]: { content } } }),
   });
   if (res.status === 404) {
     // 远端 gist 被用户手动删除：视为空远端，创建一个新 gist 顶替，调用方会把新 id 回填到设置里。
-    return createGist(headers, content);
+    return createGist(headers, filename, content);
   }
   if (!res.ok) throw new Error(`更新 Gist 失败: HTTP ${res.status}`);
   return gistId;
@@ -89,11 +89,11 @@ async function pullFromRepo(headers, { owner, repo, branch, path }) {
   return { list, sha: data.sha };
 }
 
-async function pushToRepo(headers, target, list, attempt = 0) {
+async function pushToRepo(headers, target, list, mergeFn, attempt = 0) {
   const { list: remoteList, sha } = await pullFromRepo(headers, target);
   // 每次尝试都要与刚拉到的远端最新内容合并（而不仅在重试时），否则并发同步会互相覆盖，
   // 且大概率不会命中 409（因为用的就是最新 sha），下面的冲突重试保护也就形同虚设。
-  const toWrite = mergeHistories(list, remoteList);
+  const toWrite = mergeFn(list, remoteList);
   const body = {
     message: 'Update translation history',
     content: toBase64(JSON.stringify(toWrite)),
@@ -105,15 +105,18 @@ async function pushToRepo(headers, target, list, attempt = 0) {
     { method: 'PUT', headers, body: JSON.stringify(body) }
   );
   if (res.status === 409 && attempt === 0) {
-    return pushToRepo(headers, target, list, attempt + 1);
+    return pushToRepo(headers, target, list, mergeFn, attempt + 1);
   }
   if (!res.ok) throw new Error(`写入仓库文件失败: HTTP ${res.status}`);
 }
 
-export async function pullRemoteHistory() {
+// filename 用于 Gist 场景（同一个 Gist 里多个文件按文件名区分）；
+// repoPath 用于仓库场景（Contents API 按路径读写，跟 Gist 文件名分开传是因为
+// 历史记录的仓库路径是用户在设置里自定义的 githubRepoPath，不一定等于 Gist 文件名）。
+async function pullRemoteFile(gistFilename, repoPath) {
   const settings = await chrome.storage.sync.get(pick(
     'githubSyncTargetType', 'githubGistId',
-    'githubRepoOwner', 'githubRepoName', 'githubRepoBranch', 'githubRepoPath'
+    'githubRepoOwner', 'githubRepoName', 'githubRepoBranch'
   ));
   const headers = await getAuthHeaders();
   if (settings.githubSyncTargetType === 'repo') {
@@ -121,18 +124,18 @@ export async function pullRemoteHistory() {
       owner: settings.githubRepoOwner,
       repo: settings.githubRepoName,
       branch: settings.githubRepoBranch,
-      path: settings.githubRepoPath,
+      path: repoPath,
     });
     return list;
   }
-  const { list } = await pullFromGist(headers, settings.githubGistId);
+  const { list } = await pullFromGist(headers, settings.githubGistId, gistFilename);
   return list;
 }
 
-export async function pushRemoteHistory(list) {
+async function pushRemoteFile(gistFilename, repoPath, mergeFn, list) {
   const settings = await chrome.storage.sync.get(pick(
     'githubSyncTargetType', 'githubGistId',
-    'githubRepoOwner', 'githubRepoName', 'githubRepoBranch', 'githubRepoPath'
+    'githubRepoOwner', 'githubRepoName', 'githubRepoBranch'
   ));
   const headers = await getAuthHeaders();
   if (settings.githubSyncTargetType === 'repo') {
@@ -140,14 +143,24 @@ export async function pushRemoteHistory(list) {
       owner: settings.githubRepoOwner,
       repo: settings.githubRepoName,
       branch: settings.githubRepoBranch,
-      path: settings.githubRepoPath,
-    }, list);
+      path: repoPath,
+    }, list, mergeFn);
     return;
   }
-  const gistId = await pushToGist(headers, settings.githubGistId, list);
+  const gistId = await pushToGist(headers, settings.githubGistId, gistFilename, list);
   if (gistId !== settings.githubGistId) {
     await chrome.storage.sync.set({ githubGistId: gistId });
   }
+}
+
+export async function pullRemoteHistory() {
+  const { githubRepoPath } = await chrome.storage.sync.get(pick('githubRepoPath'));
+  return pullRemoteFile(HISTORY_GIST_FILENAME, githubRepoPath);
+}
+
+export async function pushRemoteHistory(list) {
+  const { githubRepoPath } = await chrome.storage.sync.get(pick('githubRepoPath'));
+  return pushRemoteFile(HISTORY_GIST_FILENAME, githubRepoPath, mergeHistories, list);
 }
 
 // 为缺失 id 的旧记录计算确定性 id：内容不变则无论回填多少次、在哪个执行上下文回填，
