@@ -104,6 +104,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
     });
   }
+  if (msg.action === 'wordbookChanged') {
+    chrome.storage.sync.get(pick('githubSyncEnabled', 'githubSyncMode', 'githubSyncWordbook')).then(
+      ({ githubSyncEnabled, githubSyncMode, githubSyncWordbook }) => {
+        // 同样只在「启用同步」+「自动」+「单词本同步开关也开着」时才排队；
+        // 单词本同步被单独关掉时，光是存单词不应该触发联网同步。
+        if (githubSyncEnabled && githubSyncMode === 'auto' && githubSyncWordbook) {
+          chrome.alarms.create('history-sync-debounce', { delayInMinutes: 1 });
+        }
+      }
+    );
+  }
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
