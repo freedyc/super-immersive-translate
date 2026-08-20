@@ -53,7 +53,9 @@
 
 把原本写死给 `translationHistory` 用的 Gist/仓库读写，抽成按文件名参数化：
 
-- `pullRemoteFile(filename)` —— Gist 分支走 `GET /gists/{id}`（一次请求拿到所有文件，取 `files[filename]`）；仓库分支走 `GET /repos/.../contents/{filename}`（每个文件独立一次请求）
+- `pullRemoteFile(filename)` —— Gist 分支走 `GET /gists/{id}`（单次请求本身会返回该 Gist 下所有文件，取 `files[filename]`）；仓库分支走 `GET /repos/.../contents/{filename}`（每个文件独立一次请求）
+
+  **注意（分支整体审查后修正）**：`pullRemoteHistory`/`pullRemoteWordbook` 各自独立调用 `pullRemoteFile`，Gist 场景下实际会各发一次 `GET /gists/{id}`（历史、单词本一次同步周期共两次请求），并没有共享同一次响应。之前设计时以为"Gist 单次请求返回所有文件"这个 API 特性能自动省成一次网络调用，但因为两条同步路径没有共享读取结果，这个优化没有真正发生。影响很小（相对 5000 次/小时的配额多打一次请求），不值得为此引入跨函数共享缓存的复杂度，v1 接受这个现状，下面第 7 条验收标准相应调整为"最多两次"而不是"只有一次"。
 - `pushRemoteFile(filename, content)` —— Gist 分支 PATCH 时只带这一个文件（不影响 Gist 里的其他文件）；仓库分支走对应 `contents/{filename}` 的 PUT，sha 获取/409 重试逻辑保持不变（对每个文件独立处理）
 
 `pullRemoteHistory`/`pushRemoteHistory`（历史记录专用）改为基于这两个通用函数实现，文件名固定 `translation-history.json`，行为不变。
@@ -139,7 +141,7 @@ githubSyncWordbook: true, // 单词本是否跟着同步，默认开；受总开
 4. 开启同步后：两台设备各自新增不同单词，同步后互相能看到对方新增的单词
 5. 两台设备给同一个单词分别用了不同引擎翻译，同步后 `translations` 是两边的合并（不是互相覆盖）
 6. 一台设备把某个单词标记为「已掌握」，同步后另一台设备也变成已掌握（且不会被没标记的一端合并掉）
-7. Gist 场景下，一次同步周期只拉一次 Gist（能在网络面板里确认历史和单词本共用同一次 `GET /gists/{id}` 请求），不是两次独立请求
+7. ~~Gist 场景下，一次同步周期只拉一次 Gist~~（**分支整体审查后修正**：实现里历史和单词本各自独立拉取，一次同步周期会发两次 `GET /gists/{id}` 请求，不是共享一次；影响很小，v1 接受，见上面架构第 2 节的说明）
 8. token 失效等错误时，`githubSyncStatus` 能正确反映失败原因，不区分是历史还是单词本导致的
 
 ## 风险
