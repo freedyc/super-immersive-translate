@@ -188,6 +188,87 @@ export function mergeHistories(local, remote) {
   return Array.from(byId.values()).sort((a, b) => b.timestamp - a.timestamp);
 }
 
+const WORDBOOK_GIST_FILENAME = 'wordbook.json';
+const WORDBOOK_REPO_PATH = 'wordbook.json';
+
+export function mergeWordbook(local, remote) {
+  const byText = new Map();
+  // remote 在前、local 在后：同一个 key 第二次出现时（一定是 local）该次的字段优先，
+  // 从而实现"本地同引擎覆盖远端、id 优先取本地"的约定；known/timestamp 用哪边都一样
+  // （|| 和 Math.min 本身顺序无关）。
+  [...remote, ...local].forEach((entry) => {
+    const key = entry.text.toLowerCase();
+    const prior = byText.get(key);
+    if (!prior) {
+      byText.set(key, entry);
+      return;
+    }
+    byText.set(key, {
+      id: entry.id || prior.id,
+      text: prior.text,
+      translations: { ...prior.translations, ...entry.translations },
+      known: prior.known || entry.known,
+      timestamp: Math.min(prior.timestamp, entry.timestamp),
+      url: entry.url || prior.url,
+      title: entry.title || prior.title,
+    });
+  });
+  return Array.from(byText.values()).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+// 单词本按 text 去重，id 不参与去重判断，所以旧条目回填 id 不需要像历史记录那样用
+// 确定性哈希——哪怕两次独立读取给同一个单词生成了两个不同的随机 id，mergeWordbook
+// 依然会按 text 把它们合并成一条（id 字段取本地那个），不会重现历史记录同步踩过的坑。
+function backfillWordbookIds(rawList) {
+  return rawList.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
+}
+
+async function pullRemoteWordbook() {
+  return pullRemoteFile(WORDBOOK_GIST_FILENAME, WORDBOOK_REPO_PATH);
+}
+
+async function pushRemoteWordbook(list) {
+  return pushRemoteFile(WORDBOOK_GIST_FILENAME, WORDBOOK_REPO_PATH, mergeWordbook, list);
+}
+
+async function syncHistoryNow() {
+  const { translationHistory: rawLocal = [] } = await chrome.storage.local.get('translationHistory');
+  const local = await backfillIds(rawLocal);
+  const { historyMaxItems = 0 } = await chrome.storage.sync.get(pick('historyMaxItems'));
+
+  const remote = await pullRemoteHistory();
+  const merged = mergeHistories(local, remote);
+
+  // pullRemoteHistory() 期间（网络请求，可能几秒）本地可能又通过 saveHistoryEntry 写入了新记录。
+  // 写回本地前重新读一次最新快照并再合并一次，避免用"读取时的旧快照"覆盖掉这段时间内的新写入，
+  // 同时把这份最新数据一并推送到远端，避免新记录永远没被同步出去。
+  const { translationHistory: latestRawLocal = [] } = await chrome.storage.local.get('translationHistory');
+  const latestLocal = await backfillIds(latestRawLocal);
+  const finalMerged = mergeHistories(latestLocal, merged);
+
+  const localSlice = historyMaxItems > 0 ? finalMerged.slice(0, historyMaxItems) : finalMerged;
+
+  await chrome.storage.local.set({ translationHistory: localSlice });
+  await pushRemoteHistory(finalMerged);
+}
+
+async function syncWordbookNow() {
+  const { wordbook: rawLocal = [] } = await chrome.storage.local.get('wordbook');
+  const local = backfillWordbookIds(rawLocal);
+
+  const remote = await pullRemoteWordbook();
+  const merged = mergeWordbook(local, remote);
+
+  // 同样防竞态：网络请求期间本地可能又存了新单词，写回前重新读一次再合并一次。
+  const { wordbook: latestRawLocal = [] } = await chrome.storage.local.get('wordbook');
+  const latestLocal = backfillWordbookIds(latestRawLocal);
+  const finalMerged = mergeWordbook(latestLocal, merged);
+
+  // 单词本没有类似 historyMaxItems 的上限设置，全量保留，不裁剪。
+  await chrome.storage.local.set({ wordbook: finalMerged });
+  await pushRemoteWordbook(finalMerged);
+}
+
 // 进行中标记：防抖闹钟和周期闹钟可能前后脚触发，避免两次 syncNow 并发跑（并发跑会互相踩读-改-写窗口）。
 let syncInFlight = false;
 
@@ -198,24 +279,13 @@ export async function syncNow() {
   }
   syncInFlight = true;
   try {
-    const { translationHistory: rawLocal = [] } = await chrome.storage.local.get('translationHistory');
-    const local = await backfillIds(rawLocal);
-    const { historyMaxItems = 0 } = await chrome.storage.sync.get(pick('historyMaxItems'));
+    await syncHistoryNow();
 
-    const remote = await pullRemoteHistory();
-    const merged = mergeHistories(local, remote);
+    const { githubSyncWordbook } = await chrome.storage.sync.get(pick('githubSyncWordbook'));
+    if (githubSyncWordbook) {
+      await syncWordbookNow();
+    }
 
-    // pullRemoteHistory() 期间（网络请求，可能几秒）本地可能又通过 saveHistoryEntry 写入了新记录。
-    // 写回本地前重新读一次最新快照并再合并一次，避免用"读取时的旧快照"覆盖掉这段时间内的新写入，
-    // 同时把这份最新数据一并推送到远端，避免新记录永远没被同步出去。
-    const { translationHistory: latestRawLocal = [] } = await chrome.storage.local.get('translationHistory');
-    const latestLocal = await backfillIds(latestRawLocal);
-    const finalMerged = mergeHistories(latestLocal, merged);
-
-    const localSlice = historyMaxItems > 0 ? finalMerged.slice(0, historyMaxItems) : finalMerged;
-
-    await chrome.storage.local.set({ translationHistory: localSlice });
-    await pushRemoteHistory(finalMerged);
     await chrome.storage.local.set({ githubSyncStatus: { lastSyncAt: Date.now(), lastError: null } });
     return { ok: true, error: null };
   } catch (err) {
