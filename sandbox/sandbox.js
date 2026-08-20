@@ -261,7 +261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   saveWordBtn.addEventListener('click', async () => {
     if (!currentSaveData) return;
     const { wordbook = [] } = await chrome.storage.local.get('wordbook');
-    if (!wordbook.some(w => w.text === currentSaveData.source)) {
+    if (!wordbook.some(w => w.text.toLowerCase() === currentSaveData.source.toLowerCase())) {
       wordbook.unshift({
         id: crypto.randomUUID(),
         text: currentSaveData.source,

@@ -231,7 +231,7 @@ import { saveHistoryEntry } from '../utils/history.js';
       // Avoid duplicates
       const exists = wordbook.findIndex(w => w.text.toLowerCase() === sourceText.toLowerCase());
       if (exists >= 0) {
-        word.id = wordbook[exists].id || word.id; // 更新已有条目时保留原 id，不必要地重新生成
+        word.id = wordbook[exists].id || word.id; // 更新已有条目时保留原 id，避免不必要地重新生成
         wordbook[exists] = { ...wordbook[exists], ...word };
       } else {
         wordbook.unshift(word);
