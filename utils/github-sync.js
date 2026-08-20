@@ -261,6 +261,18 @@ async function syncHistoryNow() {
 }
 
 async function syncWordbookNow() {
+  // 仓库模式下，历史记录的路径是用户在设置里自定义的 githubRepoPath；单词本固定用
+  // WORDBOOK_REPO_PATH（'wordbook.json'）。如果两者恰好相同，会导致历史和单词本
+  // 用两套不同的合并函数读写同一个仓库文件，互相破坏对方数据，必须提前拦截。
+  const { githubSyncTargetType, githubRepoPath } = await chrome.storage.sync.get(
+    pick('githubSyncTargetType', 'githubRepoPath')
+  );
+  if (githubSyncTargetType === 'repo' && githubRepoPath === WORDBOOK_REPO_PATH) {
+    throw new Error(
+      `仓库路径与单词本同步文件 ${WORDBOOK_REPO_PATH} 冲突，请修改「同步载体」里的仓库文件路径设置`
+    );
+  }
+
   const { wordbook: rawLocal = [] } = await chrome.storage.local.get('wordbook');
   const local = backfillWordbookIds(rawLocal);
 
