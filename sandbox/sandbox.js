@@ -263,12 +263,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const { wordbook = [] } = await chrome.storage.local.get('wordbook');
     if (!wordbook.some(w => w.text === currentSaveData.source)) {
       wordbook.unshift({
+        id: crypto.randomUUID(),
         text: currentSaveData.source,
         translations: { [currentSaveData.engine]: currentSaveData.target },
         known: false,
         timestamp: Date.now()
       });
       await chrome.storage.local.set({ wordbook });
+      chrome.runtime.sendMessage({ action: 'wordbookChanged' }).catch(() => {});
     }
     saveIcon.classList.add('text-warning');
     saveIcon.setAttribute('fill', 'currentColor');
