@@ -32,6 +32,7 @@ export const DEFAULTS = {
   githubRepoPath: 'translation-history.json',
   githubSyncMode: 'manual', // 'auto' | 'manual'
   githubSyncIntervalMinutes: 30,
+  githubSyncWordbook: true, // 单词本是否跟着一起同步，默认开，受 githubSyncEnabled 总开关约束
 
   // selection translation
   selectionMode: 'icon',
