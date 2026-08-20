@@ -30,7 +30,7 @@
 
 历史记录同步在实现过程中踩过一个坑：合并去重是**按 `id`** 判断的，如果旧记录（上线前保存、没有 `id`）在两次独立读取里各自用 `crypto.randomUUID()` 回填，会产生两个不同的 id，被 `mergeHistories` 误判成两条不同记录，造成永久重复（最终改成基于内容的确定性哈希才根治）。
 
-单词本的合并去重是**按 `text.toLowerCase()`**，`id` 只是附带的稳定标识、完全不参与去重判断。哪怕两次独立回填给同一个单词生成了两个不同的随机 UUID，`mergeWordbook` 依然会按 text 把它们合并成一条（`id` 字段取本地那个）。这个类别的 bug 在这里不成立，所以可以放心用更简单的随机 UUID，不需要重复历史记录那套确定性哈希的复杂度。
+单词本的合并去重是**按 `text.toLowerCase()`**，`id` 只是附带的稳定标识、完全不参与去重判断。哪怕两次独立回填给同一个单词生成了两个不同的随机 UUID，`mergeWordbook` 依然会按 text 把它们合并成一条（`id` 字段取哪一边的值，见下面 mergeWordbook 实现里的说明）。这个类别的 bug 在这里不成立，所以可以放心用更简单的随机 UUID，不需要重复历史记录那套确定性哈希的复杂度。
 
 ## 架构
 
@@ -70,27 +70,36 @@
 export function mergeWordbook(local, remote) {
   const byText = new Map();
   // remote 在前、local 在后：同一个 key 第二次出现时（一定是 local，或者
-  // local 内部的重复项）该次的字段优先，从而实现"本地优先"。
+  // local 内部的重复项）该次的字段优先，从而实现"本地优先"（id 字段除外，见下）。
   [...remote, ...local].forEach((entry) => {
-    const key = entry.text.toLowerCase();
+    // 远端文件可能被手动编辑成畸形数据（缺 text 或整条为 null），跳过而不是让 toLowerCase() 抛异常。
+    const key = entry?.text?.toLowerCase();
+    if (!key) return;
     const prior = byText.get(key);
     if (!prior) {
       byText.set(key, entry);
       return;
     }
+    const priorTs = prior.timestamp ?? Infinity;
+    const entryTs = entry.timestamp ?? Infinity;
+    const minTs = Math.min(priorTs, entryTs);
     byText.set(key, {
-      id: entry.id || prior.id,
+      id: prior.id || entry.id,
       text: prior.text,
       translations: { ...prior.translations, ...entry.translations },
       known: prior.known || entry.known,
-      timestamp: Math.min(prior.timestamp, entry.timestamp),
+      timestamp: minTs === Infinity ? Date.now() : minTs,
+      url: entry.url || prior.url,
+      title: entry.title || prior.title,
     });
   });
   return Array.from(byText.values()).sort((a, b) => b.timestamp - a.timestamp);
 }
 ```
 
-（`prior` 是同一个 key 里先出现的那条，`entry` 是后出现的那条；`translations`/`id` 取值都以后出现的 `entry` 为准，因为 `local` 数组排在 `remote` 之后，所以后出现的必然是本地这一份——这就是"本地同引擎覆盖远端、id 优先取本地"这条约定的实现方式。`known`/`timestamp` 用 `prior`/`entry` 哪个都一样，因为 `||` 和 `Math.min` 本身就是顺序无关的。）
+（`prior` 是同一个 key 里先出现的那条（remote），`entry` 是后出现的那条（local）；`translations` 取值以后出现的 `entry`（本地）为准——这是"本地同引擎覆盖远端"这条约定的实现方式。`known`/`timestamp` 用 `prior`/`entry` 哪个都一样，因为 `||` 和 `Math.min` 本身就是顺序无关的；`timestamp` 额外用 `?? Infinity` 防止一方缺失时产生 `NaN`，两边都缺失才兜底成当前时间。
+
+**注意（分支整体审查后修正）**：`id` 字段改成了 `prior.id || entry.id`（远端优先），跟其他字段的"本地优先"方向相反——这是有意为之。`id` 只用来去重、不参与任何展示或业务逻辑，如果沿用"本地优先"，两台设备互相同步时 id 会在两个随机值之间无限来回切换（内容完全没变也会触发一次无意义的写入/commit）；远端优先能让 id 在第一次推送后收敛，不再变化。）
 
 `syncWordbookNow()`：读本地 `wordbook` → 缺 `id` 的条目回填随机 UUID → 拉远端 `wordbook.json` → `mergeWordbook` → （不裁剪，单词本没有类似 `historyMaxItems` 的上限设置，全量保留）→ 写回本地 → 推送到远端。
 
