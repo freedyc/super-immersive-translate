@@ -103,6 +103,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('githubToken').value = settings.githubToken;
   updateGithubSyncUI(settings.githubSyncEnabled);
   refreshSyncStatus();
+  $('githubSyncWordbook').checked = settings.githubSyncWordbook;
   $('githubSyncIntervalMinutes').value = settings.githubSyncIntervalMinutes;
   document.querySelectorAll('input[name="githubSyncMode"]').forEach((r) => {
     r.checked = r.value === settings.githubSyncMode;
@@ -415,6 +416,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   $('githubToken').addEventListener('input', debounce(saveAll, 500));
 
+  $('githubSyncWordbook').addEventListener('change', saveAll);
+
   document.querySelectorAll('input[name="githubSyncMode"]').forEach((r) => {
     r.addEventListener('change', saveAll);
   });
@@ -486,6 +489,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       historyMaxItems: parseInt($('historyMaxItems').value, 10) || 0,
       githubSyncEnabled: $('githubSyncEnabled').checked,
       githubToken: $('githubToken').value,
+      githubSyncWordbook: $('githubSyncWordbook').checked,
       githubSyncMode: document.querySelector('input[name="githubSyncMode"]:checked')?.value || 'manual',
       githubSyncIntervalMinutes: Math.max(1, parseInt($('githubSyncIntervalMinutes').value, 10) || DEFAULT_SETTINGS.githubSyncIntervalMinutes),
       githubSyncTargetType: document.querySelector('input[name="githubSyncTargetType"]:checked')?.value || 'gist',
