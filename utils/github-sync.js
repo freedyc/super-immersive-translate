@@ -226,7 +226,8 @@ export function mergeWordbook(local, remote) {
 
 // 单词本按 text 去重，id 不参与去重判断，所以旧条目回填 id 不需要像历史记录那样用
 // 确定性哈希——哪怕两次独立读取给同一个单词生成了两个不同的随机 id，mergeWordbook
-// 依然会按 text 把它们合并成一条（id 字段取本地那个），不会重现历史记录同步踩过的坑。
+// 依然会按 text 把它们合并成一条（id 字段取远端那个，减少无意义的重复推送），
+// 不会重现历史记录同步踩过的坑。
 function backfillWordbookIds(rawList) {
   return rawList.map((e) => (e.id ? e : { ...e, id: crypto.randomUUID() }));
 }
