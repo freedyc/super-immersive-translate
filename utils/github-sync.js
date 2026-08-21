@@ -191,6 +191,38 @@ export function mergeHistories(local, remote) {
 const WORDBOOK_GIST_FILENAME = 'wordbook.json';
 const WORDBOOK_REPO_PATH = 'wordbook.json';
 
+// contexts 数组按 sentence+url 去重取并集：每条上下文是独立的"捕获事件"，
+// 不是会演变的状态，两边各自收集的都要保留，不能"新覆盖旧"。
+function mergeContexts(a = [], b = []) {
+  const seen = new Map();
+  [...a, ...b].forEach((ctx) => {
+    if (!ctx?.sentence) return;
+    const key = `${ctx.sentence}|${ctx.url || ''}`;
+    if (!seen.has(key)) seen.set(key, ctx);
+  });
+  return Array.from(seen.values());
+}
+
+// srs 是"模式名 -> FSRSCard"的开放字典：按 key 遍历合并，某个 key 只在一边存在时
+// 直接取那一边；两边都有同一个 key 时，取 last_review 较新的那一整张卡（不拆开卡内部
+// 字段合并，因为 FSRS 的 difficulty/stability 等字段彼此关联，混着来会破坏算法的假设）。
+// 这条"字典型字段按 key 合并、每个 key 内部整体取更优先一方"的约定，供以后任何新增的
+// 字典型字段（比如未来的听力模式）复用，不需要每次新增字段都重新设计一遍合并规则。
+function mergeSrs(a = {}, b = {}) {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  const result = {};
+  keys.forEach((mode) => {
+    const cardA = a[mode];
+    const cardB = b[mode];
+    if (!cardA) { result[mode] = cardB; return; }
+    if (!cardB) { result[mode] = cardA; return; }
+    const tsA = cardA.last_review ? new Date(cardA.last_review).getTime() : 0;
+    const tsB = cardB.last_review ? new Date(cardB.last_review).getTime() : 0;
+    result[mode] = tsA >= tsB ? cardA : cardB;
+  });
+  return result;
+}
+
 export function mergeWordbook(local, remote) {
   const byText = new Map();
   // remote 在前、local 在后：同一个 key 第二次出现时（一定是 local）该次的字段优先，
@@ -219,6 +251,8 @@ export function mergeWordbook(local, remote) {
       timestamp: minTs === Infinity ? Date.now() : minTs,
       url: entry.url || prior.url,
       title: entry.title || prior.title,
+      contexts: mergeContexts(prior.contexts, entry.contexts),
+      srs: mergeSrs(prior.srs, entry.srs),
     });
   });
   return Array.from(byText.values()).sort((a, b) => b.timestamp - a.timestamp);
