@@ -29,6 +29,7 @@
     "vite": "^8.0.14"
   },
   "dependencies": {
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "ts-fsrs": "5.4.1"
   }
 }
