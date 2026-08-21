@@ -35,6 +35,17 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
     await chrome.storage.local.set({ wordbook });
   }
 
+  // 后台自动同步可能在用户复习/浏览期间把远端合并结果写回 wordbook，如果不监听
+  // 就会被内存里的旧快照在下次保存时覆盖掉。任何外部变更都重新读取 + 重渲染当前视图，
+  // 顺带重新应用搜索框里已经输入的关键字，不会打断用户正在做的筛选。
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.wordbook) {
+      wordbook = changes.wordbook.newValue || [];
+      applySearchFilter();
+      render();
+    }
+  });
+
   // ========== Navigation ==========
   document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', (e) => {
@@ -57,8 +68,8 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
   }
 
   // ========== Search ==========
-  document.getElementById('searchInput').addEventListener('input', (e) => {
-    const q = e.target.value.trim().toLowerCase();
+  function applySearchFilter() {
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
     if (!q) {
       filteredWords = [...wordbook];
     } else {
@@ -67,6 +78,10 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
         Object.values(w.translations || {}).some(t => t.toLowerCase().includes(q))
       );
     }
+  }
+
+  document.getElementById('searchInput').addEventListener('input', () => {
+    applySearchFilter();
     renderList();
   });
 
