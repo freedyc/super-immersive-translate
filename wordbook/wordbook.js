@@ -365,6 +365,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
       .filter(Boolean);
     const distractors = shuffleInPlace([...distractorPool]).slice(0, 3);
     const options = shuffleInPlace([correctAnswer, ...distractors].filter(Boolean));
+    const correctIndex = options.indexOf(correctAnswer);
 
     document.getElementById('reviewQuestion').innerHTML = `
       <div class="card bg-base-100 shadow-sm rounded-xl mb-4">
@@ -376,7 +377,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
             </button>
           </div>
           <div class="flex flex-col gap-2" id="reviewOptions">
-            ${options.map(opt => `<button class="btn btn-outline justify-start" data-option="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`).join('')}
+            ${options.map((opt, i) => `<button class="btn btn-outline justify-start" data-index="${i}">${escapeHtml(opt)}</button>`).join('')}
           </div>
           ${reviewSentenceHtml(word)}
         </div>
@@ -393,12 +394,12 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     document.getElementById('reviewOptions').querySelectorAll('button').forEach((btn) => {
       btn.addEventListener('click', () => {
         const elapsed = Date.now() - startedAt;
-        const isCorrect = btn.dataset.option === correctAnswer;
+        const isCorrect = parseInt(btn.dataset.index, 10) === correctIndex;
         const optionButtons = document.getElementById('reviewOptions').querySelectorAll('button');
         optionButtons.forEach(b => { b.disabled = true; });
         btn.classList.add(isCorrect ? 'btn-success' : 'btn-error');
         if (!isCorrect) {
-          const correctBtn = [...optionButtons].find(b => b.dataset.option === correctAnswer);
+          const correctBtn = [...optionButtons].find(b => parseInt(b.dataset.index, 10) === correctIndex);
           correctBtn?.classList.add('btn-success');
         }
 
