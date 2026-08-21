@@ -9,7 +9,7 @@ import {
   ArrowLeft, ArrowLeftRight, ArrowRight, BarChart2, BookOpen, Check, CheckCircle,
   CloudSync, Copy, Database, Download, ExternalLink, File, FileText, Globe, Globe2, HelpCircle,
   History, Image, Inbox, Info, Keyboard, Languages, Layers, List, Mic, Monitor, Moon,
-  MousePointer2, Package, PackageOpen, Palette, PanelRight, PenLine, RotateCcw, RotateCw, SearchX,
+  MousePointer2, Package, PackageOpen, Palette, PanelRight, PenLine, Plus, RotateCcw, RotateCw, SearchX,
   Settings, Settings2, Share2, Shuffle, SkipForward, Star, Sun, Trash2, Upload,
   Volume2, X, Zap,
 } from 'lucide';
@@ -18,7 +18,7 @@ export const icons = {
   ArrowLeft, ArrowLeftRight, ArrowRight, BarChart2, BookOpen, Check, CheckCircle,
   CloudSync, Copy, Database, Download, ExternalLink, File, FileText, Globe, Globe2, HelpCircle,
   History, Image, Inbox, Info, Keyboard, Languages, Layers, List, Mic, Monitor, Moon,
-  MousePointer2, Package, PackageOpen, Palette, PanelRight, PenLine, RotateCcw, RotateCw, SearchX,
+  MousePointer2, Package, PackageOpen, Palette, PanelRight, PenLine, Plus, RotateCcw, RotateCw, SearchX,
   Settings, Settings2, Share2, Shuffle, SkipForward, Star, Sun, Trash2, Upload,
   Volume2, X, Zap,
 };

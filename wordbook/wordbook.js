@@ -5,14 +5,14 @@
 import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
-import { isDue, deserializeCard } from '../utils/srs.js';
+import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from '../utils/srs.js';
 
 (async function () {
   'use strict';
 
   let wordbook = [];
   let filteredWords = [];
-  let currentView = 'list';
+  let currentView = 'review';
   let cardIndex = 0;
   let quizIndex = 0;
   let quizCorrect = 0;
@@ -63,6 +63,7 @@ import { isDue, deserializeCard } from '../utils/srs.js';
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(view + 'View')?.classList.add('active');
 
+    if (view === 'review') initReview();
     if (view === 'cards') initCards();
     if (view === 'quiz') initQuiz();
     if (view === 'stats') renderStats();
@@ -200,6 +201,222 @@ import { isDue, deserializeCard } from '../utils/srs.js';
     cardIndex = Math.floor(Math.random() * wordbook.length);
     renderCard();
   });
+
+  // ========== Review (FSRS) ==========
+  function findWordByKey(key) {
+    return wordbook.find(w => w.text.toLowerCase() === key);
+  }
+
+  function buildReviewQueue() {
+    const now = new Date();
+    const queue = [];
+    wordbook.forEach((w) => {
+      ['recall', 'recognition'].forEach((mode) => {
+        const raw = w.srs?.[mode];
+        const card = raw ? deserializeCard(raw) : null;
+        if (isDue(card, now)) {
+          queue.push({ key: w.text.toLowerCase(), mode });
+        }
+      });
+    });
+    shuffleInPlace(queue);
+    return queue;
+  }
+
+  function shuffleInPlace(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  let reviewQueue = [];
+  let reviewIndex = 0;
+
+  function initReview() {
+    reviewQueue = buildReviewQueue();
+    reviewIndex = 0;
+    renderReviewQuestion();
+  }
+
+  function renderReviewQuestion() {
+    const dueCountEl = document.getElementById('reviewDueCount');
+    const emptyEl = document.getElementById('reviewEmpty');
+    const questionEl = document.getElementById('reviewQuestion');
+
+    if (reviewIndex >= reviewQueue.length) {
+      questionEl.style.display = 'none';
+      emptyEl.style.display = 'flex';
+      dueCountEl.textContent = '0';
+      createIcons({ icons });
+      return;
+    }
+
+    const item = reviewQueue[reviewIndex];
+    const word = findWordByKey(item.key);
+    if (!word) {
+      // 复习队列生成之后、答到这道题之前，这个词被删掉了：跳过。
+      reviewIndex++;
+      renderReviewQuestion();
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    questionEl.style.display = '';
+    dueCountEl.textContent = String(reviewQueue.length - reviewIndex);
+
+    if (item.mode === 'recall') {
+      renderRecallQuestion(word);
+    } else {
+      renderRecognitionQuestion(word);
+    }
+  }
+
+  async function recordReviewResult(word, mode, grade) {
+    const now = new Date();
+    const raw = word.srs?.[mode];
+    const card = raw ? deserializeCard(raw) : createCard(now);
+    const nextCard = scheduleNext(card, grade, now);
+
+    const idx = wordbook.findIndex(w => w.text.toLowerCase() === word.text.toLowerCase());
+    if (idx >= 0) {
+      wordbook[idx].srs = wordbook[idx].srs || {};
+      wordbook[idx].srs[mode] = serializeCard(nextCard);
+      await saveWordbook();
+    }
+
+    reviewIndex++;
+    renderReviewQuestion();
+  }
+
+  document.getElementById('reviewLearnNewBtn').addEventListener('click', () => {
+    const newQueue = [];
+    wordbook.forEach((w) => {
+      ['recall', 'recognition'].forEach((mode) => {
+        if (!w.srs?.[mode]) newQueue.push({ key: w.text.toLowerCase(), mode });
+      });
+    });
+    shuffleInPlace(newQueue);
+    reviewQueue = newQueue;
+    reviewIndex = 0;
+    renderReviewQuestion();
+  });
+
+  function reviewSentenceHtml(word) {
+    const ctx = word.contexts && word.contexts.length > 0 ? word.contexts[word.contexts.length - 1] : null;
+    if (!ctx || !ctx.sentence) return '';
+    return `<div class="text-sm text-base-content/50 italic mt-2">${escapeHtml(ctx.sentence)}</div>`;
+  }
+
+  function renderRecallQuestion(word) {
+    const trans = Object.values(word.translations || {});
+    const prompt = trans[0] || '???';
+    document.getElementById('reviewQuestion').innerHTML = `
+      <div class="card bg-base-100 shadow-sm rounded-xl mb-4">
+        <div class="card-body gap-4">
+          <div class="text-xl text-base-content/70 leading-relaxed">${escapeHtml(prompt)}</div>
+          <input type="text" id="reviewRecallInput" class="input input-bordered text-center text-lg" placeholder="输入单词..." autocomplete="off" />
+          <div id="reviewRecallFeedback" class="quiz-feedback text-base font-semibold min-h-6"></div>
+          <div id="reviewRecallGrades" class="flex justify-center gap-2" style="display:none">
+            <button class="btn btn-sm btn-outline" data-grade="hard">困难</button>
+            <button class="btn btn-sm btn-outline" data-grade="good">记得</button>
+            <button class="btn btn-sm btn-outline" data-grade="easy">简单</button>
+          </div>
+          ${reviewSentenceHtml(word)}
+        </div>
+      </div>
+    `;
+
+    const input = document.getElementById('reviewRecallInput');
+    input.focus();
+
+    function check() {
+      const answer = input.value.trim().toLowerCase();
+      const correct = word.text.toLowerCase();
+      const feedback = document.getElementById('reviewRecallFeedback');
+      input.disabled = true;
+
+      if (answer === correct) {
+        feedback.textContent = '✅ 正确！选一个难易度：';
+        feedback.className = 'quiz-feedback correct';
+        document.getElementById('reviewRecallGrades').style.display = 'flex';
+      } else {
+        feedback.textContent = `❌ 正确答案: ${word.text}`;
+        feedback.className = 'quiz-feedback wrong';
+        setTimeout(() => recordReviewResult(word, 'recall', 'again'), 900);
+      }
+    }
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !input.disabled) check();
+    });
+
+    document.getElementById('reviewRecallGrades').querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', () => recordReviewResult(word, 'recall', btn.dataset.grade));
+    });
+  }
+
+  function renderRecognitionQuestion(word) {
+    const correctAnswer = Object.values(word.translations || {})[0] || '';
+    const distractorPool = wordbook
+      .filter(w => w.text.toLowerCase() !== word.text.toLowerCase())
+      .map(w => Object.values(w.translations || {})[0])
+      .filter(Boolean);
+    const distractors = shuffleInPlace([...distractorPool]).slice(0, 3);
+    const options = shuffleInPlace([correctAnswer, ...distractors].filter(Boolean));
+
+    document.getElementById('reviewQuestion').innerHTML = `
+      <div class="card bg-base-100 shadow-sm rounded-xl mb-4">
+        <div class="card-body gap-4">
+          <div class="flex items-center justify-center gap-2">
+            <div class="text-3xl font-bold">${escapeHtml(word.text)}</div>
+            <button id="reviewSpeakBtn" class="btn btn-ghost btn-sm btn-circle" title="发音">
+              <i data-lucide="volume-2" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <div class="flex flex-col gap-2" id="reviewOptions">
+            ${options.map(opt => `<button class="btn btn-outline justify-start" data-option="${escapeHtml(opt)}">${escapeHtml(opt)}</button>`).join('')}
+          </div>
+          ${reviewSentenceHtml(word)}
+        </div>
+      </div>
+    `;
+    createIcons({ icons });
+
+    const startedAt = Date.now();
+
+    document.getElementById('reviewSpeakBtn').addEventListener('click', () => {
+      window.ttsManager.speak(word.text, 'auto');
+    });
+
+    document.getElementById('reviewOptions').querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const elapsed = Date.now() - startedAt;
+        const isCorrect = btn.dataset.option === correctAnswer;
+        const optionButtons = document.getElementById('reviewOptions').querySelectorAll('button');
+        optionButtons.forEach(b => { b.disabled = true; });
+        btn.classList.add(isCorrect ? 'btn-success' : 'btn-error');
+        if (!isCorrect) {
+          const correctBtn = [...optionButtons].find(b => b.dataset.option === correctAnswer);
+          correctBtn?.classList.add('btn-success');
+        }
+
+        let grade;
+        if (!isCorrect) {
+          grade = 'again';
+        } else if (elapsed < 2000) {
+          grade = 'easy';
+        } else if (elapsed < 5000) {
+          grade = 'good';
+        } else {
+          grade = 'hard';
+        }
+
+        setTimeout(() => recordReviewResult(word, 'recognition', grade), 700);
+      });
+    });
+  }
 
   // ========== Quiz ==========
   function initQuiz() {
@@ -396,6 +613,14 @@ import { isDue, deserializeCard } from '../utils/srs.js';
   // ========== Start ==========
   await applyTheme();
   await initThemeControl(document.getElementById('themeControl'));
+  await window.ttsManager.init();
   createIcons({ icons });
   await loadWordbook();
+
+  const requestedView = new URLSearchParams(location.search).get('view');
+  if (requestedView && document.getElementById(requestedView + 'View')) {
+    switchView(requestedView);
+  } else {
+    switchView('review');
+  }
 })();

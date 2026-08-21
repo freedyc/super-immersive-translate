@@ -24,7 +24,13 @@
       <nav class="flex-1 py-2">
         <ul class="menu menu-md gap-0.5 w-full px-0">
           <li>
-            <a href="#" class="nav-item active" data-view="list">
+            <a href="#" class="nav-item active" data-view="review">
+              <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+              今日复习
+            </a>
+          </li>
+          <li>
+            <a href="#" class="nav-item" data-view="list">
               <i data-lucide="list" class="w-4 h-4"></i>
               单词列表
             </a>
@@ -87,8 +93,29 @@
       <!-- Views container -->
       <main class="flex-1 p-6">
 
+        <!-- Review View -->
+        <div id="reviewView" class="view active">
+          <div class="max-w-xl mx-auto mt-6">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold">今日复习</h2>
+              <span class="badge badge-primary badge-lg" id="reviewDueCount">0</span>
+            </div>
+
+            <div id="reviewQuestion"></div>
+
+            <div id="reviewEmpty" class="flex flex-col items-center justify-center py-16 text-base-content/50" style="display:none">
+              <i data-lucide="check-circle" class="w-16 h-16 mb-4 text-success/60"></i>
+              <h3 class="text-lg font-semibold mb-1 text-base-content/60">今天的复习完成了 🎉</h3>
+              <button id="reviewLearnNewBtn" class="btn btn-primary btn-sm mt-4 gap-1">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                提前学新词
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- List View -->
-        <div id="listView" class="view active">
+        <div id="listView" class="view">
           <div id="wordList" class="grid gap-4" style="grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));"></div>
           <div id="emptyState" class="flex flex-col items-center justify-center py-20 text-base-content/50">
             <i data-lucide="book-open" class="w-16 h-16 mb-4 text-base-content/30"></i>
@@ -206,6 +233,7 @@
     </div>
   </div>
 
+  <script type="module" src="../utils/tts.js"></script>
   <script type="module" src="wordbook.js"></script>
 </body>
 </html>
