@@ -279,9 +279,10 @@
         <i data-lucide="panel-right" class="w-4 h-4"></i>
         <span class="font-extrabold text-[9px]">侧边栏</span>
       </button>
-      <button id="openWordbook" class="flex-1 flex flex-col items-center gap-0.5 py-2 hover:text-primary transition-colors">
+      <button id="openWordbook" class="flex-1 flex flex-col items-center gap-0.5 py-2 hover:text-primary transition-colors relative">
         <i data-lucide="book-open" class="w-4 h-4"></i>
         <span class="font-extrabold text-[9px]">单词本</span>
+        <span id="wordbookDueBadge" class="badge badge-error badge-xs absolute top-0.5 right-3" style="display:none">0</span>
       </button>
       <button id="openHistory" class="flex-1 flex flex-col items-center gap-0.5 py-2 hover:text-primary transition-colors">
         <i data-lucide="history" class="w-4 h-4"></i>

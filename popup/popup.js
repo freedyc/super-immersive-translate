@@ -2,6 +2,7 @@ import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { DEFAULTS } from '../utils/defaults.js';
+import { isDue, deserializeCard } from '../utils/srs.js';
 
 /**
  * Popup script - Super Immersive Translate
@@ -236,7 +237,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Open pages
   document.getElementById('openWordbook').addEventListener('click', (e) => {
     e.preventDefault();
-    chrome.tabs.create({ url: chrome.runtime.getURL('wordbook/index.html') });
+    chrome.tabs.create({ url: chrome.runtime.getURL('wordbook/index.html?view=review') });
   });
 
   document.getElementById('openHistory').addEventListener('click', (e) => {
@@ -248,5 +249,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     e.preventDefault();
     chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
   });
+
+  // Wordbook due-count badge
+  (async () => {
+    const { wordbook = [] } = await chrome.storage.local.get('wordbook');
+    const now = new Date();
+    let dueCount = 0;
+    wordbook.forEach((w) => {
+      ['recall', 'recognition'].forEach((mode) => {
+        const raw = w.srs?.[mode];
+        const card = raw ? deserializeCard(raw) : null;
+        if (isDue(card, now)) dueCount++;
+      });
+    });
+    const badge = document.getElementById('wordbookDueBadge');
+    if (dueCount > 0) {
+      badge.textContent = dueCount > 99 ? '99+' : String(dueCount);
+      badge.style.display = '';
+    }
+  })();
 });
 
