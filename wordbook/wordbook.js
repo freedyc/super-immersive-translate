@@ -235,8 +235,10 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
 
   let reviewQueue = [];
   let reviewIndex = 0;
+  let pendingGradeTimer = null;
 
   function initReview() {
+    if (pendingGradeTimer) { clearTimeout(pendingGradeTimer); pendingGradeTimer = null; }
     reviewQueue = buildReviewQueue();
     reviewIndex = 0;
     renderReviewQuestion();
@@ -357,7 +359,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
       } else {
         feedback.textContent = `❌ 正确答案: ${word.text}`;
         feedback.className = 'quiz-feedback wrong';
-        setTimeout(() => recordReviewResult(word, 'recall', 'again'), 900);
+        pendingGradeTimer = setTimeout(() => recordReviewResult(word, 'recall', 'again'), 900);
       }
     }
 
@@ -366,7 +368,10 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     });
 
     document.getElementById('reviewRecallGrades').querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', () => recordReviewResult(word, 'recall', btn.dataset.grade));
+      btn.addEventListener('click', () => {
+        document.getElementById('reviewRecallGrades').querySelectorAll('button').forEach((b) => { b.disabled = true; });
+        recordReviewResult(word, 'recall', btn.dataset.grade);
+      });
     });
   }
 
@@ -427,7 +432,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
           grade = 'hard';
         }
 
-        setTimeout(() => recordReviewResult(word, 'recognition', grade), 700);
+        pendingGradeTimer = setTimeout(() => recordReviewResult(word, 'recognition', grade), 700);
       });
     });
   }
