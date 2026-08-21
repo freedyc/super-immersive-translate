@@ -275,16 +275,25 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
 
   async function recordReviewResult(word, mode, grade) {
     const now = new Date();
-    const raw = word.srs?.[mode];
+    // 不要相信传入的 word 参数里的 srs 字段：后台同步可能在用户答题期间把
+    // wordbook 整个替换成新数组（新对象引用），word 闭包里存的仍是旧对象。
+    // 必须先用 findIndex 定位到当前（可能已被同步更新过的）数组里的真实位置，
+    // 后续读写都基于这个实时位置，避免用过时的 FSRS 状态覆盖刚合并进来的新状态。
+    const idx = wordbook.findIndex(w => w.text.toLowerCase() === word.text.toLowerCase());
+    if (idx < 0) {
+      // 复习中途这个词被删掉了：跳过，不写入任何东西。
+      reviewIndex++;
+      renderReviewQuestion();
+      return;
+    }
+
+    const raw = wordbook[idx].srs?.[mode];
     const card = raw ? deserializeCard(raw) : createCard(now);
     const nextCard = scheduleNext(card, grade, now);
 
-    const idx = wordbook.findIndex(w => w.text.toLowerCase() === word.text.toLowerCase());
-    if (idx >= 0) {
-      wordbook[idx].srs = wordbook[idx].srs || {};
-      wordbook[idx].srs[mode] = serializeCard(nextCard);
-      await saveWordbook();
-    }
+    wordbook[idx].srs = wordbook[idx].srs || {};
+    wordbook[idx].srs[mode] = serializeCard(nextCard);
+    await saveWordbook();
 
     reviewIndex++;
     renderReviewQuestion();
