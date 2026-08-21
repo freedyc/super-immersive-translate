@@ -31,6 +31,8 @@ import { saveHistoryEntry } from '../utils/history.js';
   let selectionEngines = DEFAULT_SELECTION_ENGINES;
   let pendingText = '';
   let pendingRect = null;
+  let pendingSentence = '';
+  let currentSentence = '';
 
   // Load settings
   async function loadSettings() {
@@ -69,6 +71,7 @@ import { saveHistoryEntry } from '../utils/history.js';
           left: window.innerWidth / 2,
           top: window.innerHeight / 2
         };
+        pendingSentence = range ? extractSentenceContext(range, text) : '';
         showPanel(text, rect);
       }
       sendResponse({ ok: true });
@@ -226,14 +229,20 @@ import { saveHistoryEntry } from '../utils/history.js';
         timestamp: Date.now()
       };
 
+      const newContext = currentSentence
+        ? [{ sentence: currentSentence, url: window.location.href, title: document.title, timestamp: Date.now() }]
+        : [];
+
       // Save to storage
       const { wordbook = [] } = await chrome.storage.local.get('wordbook');
       // Avoid duplicates
       const exists = wordbook.findIndex(w => w.text.toLowerCase() === sourceText.toLowerCase());
       if (exists >= 0) {
         word.id = wordbook[exists].id || word.id; // 更新已有条目时保留原 id，避免不必要地重新生成
-        wordbook[exists] = { ...wordbook[exists], ...word };
+        const existingContexts = wordbook[exists].contexts || [];
+        wordbook[exists] = { ...wordbook[exists], ...word, contexts: [...existingContexts, ...newContext] };
       } else {
+        word.contexts = newContext;
         wordbook.unshift(word);
       }
       await chrome.storage.local.set({ wordbook });
@@ -418,6 +427,45 @@ import { saveHistoryEntry } from '../utils/history.js';
     }
   }
 
+  // 从一个 Range 所在的最近块级祖先元素里，找出包含选中文字的那一句话，
+  // 作为收藏单词时的记忆上下文。找不到就返回空字符串，不影响主流程。
+  const SENTENCE_BLOCK_TAGS = new Set([
+    'P', 'DIV', 'LI', 'TD', 'TH', 'BLOCKQUOTE', 'ARTICLE', 'SECTION',
+    'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'FIGCAPTION'
+  ]);
+
+  function extractSentenceContext(range, selectedText) {
+    try {
+      let node = range.commonAncestorContainer;
+      if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+
+      let block = node;
+      while (block && block !== document.body && !SENTENCE_BLOCK_TAGS.has(block.tagName)) {
+        block = block.parentElement;
+      }
+      if (!block || block === document.body) return '';
+
+      const blockText = block.textContent.replace(/\s+/g, ' ').trim();
+      const needle = selectedText.trim();
+      const idx = blockText.indexOf(needle);
+      if (idx === -1) return '';
+
+      const sentences = blockText.match(/[^。！？.!?]+[。！？.!?]?/g) || [blockText];
+      let pos = 0;
+      for (const s of sentences) {
+        const start = pos;
+        const end = pos + s.length;
+        if (idx >= start && idx < end) {
+          return s.trim().slice(0, 200);
+        }
+        pos = end;
+      }
+      return blockText.slice(0, 200);
+    } catch (e) {
+      return '';
+    }
+  }
+
   function showPanel(text, rect) {
     removeIcon();
     if (panel && !isPinned) forceRemovePanel();
@@ -429,6 +477,7 @@ import { saveHistoryEntry } from '../utils/history.js';
     }));
 
     historyPendingText = text;
+    currentSentence = pendingSentence;
     renderPanel(text, engineResults);
     positionPanel(rect);
 
@@ -461,6 +510,7 @@ import { saveHistoryEntry } from '../utils/history.js';
       const rect = range.getBoundingClientRect();
       pendingText = text;
       pendingRect = rect;
+      pendingSentence = extractSentenceContext(range, text);
 
       if (selectionMode === 'icon') {
         createIcon(rect);
@@ -496,6 +546,7 @@ import { saveHistoryEntry } from '../utils/history.js';
       if (!sel || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
       const rect = range.getBoundingClientRect();
+      pendingSentence = extractSentenceContext(range, text);
       showPanel(text, rect);
     }, 10);
   });
