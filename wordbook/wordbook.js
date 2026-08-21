@@ -211,7 +211,9 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     const now = new Date();
     const queue = [];
     wordbook.forEach((w) => {
+      const hasTranslation = Object.values(w.translations || {}).some(Boolean);
       ['recall', 'recognition'].forEach((mode) => {
+        if (mode === 'recognition' && !hasTranslation) return; // 没有翻译的词无法出选择题，只能出拼写题
         const raw = w.srs?.[mode];
         const card = raw ? deserializeCard(raw) : null;
         if (isDue(card, now)) {
@@ -302,7 +304,9 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
   document.getElementById('reviewLearnNewBtn').addEventListener('click', () => {
     const newQueue = [];
     wordbook.forEach((w) => {
+      const hasTranslation = Object.values(w.translations || {}).some(Boolean);
       ['recall', 'recognition'].forEach((mode) => {
+        if (mode === 'recognition' && !hasTranslation) return; // 没有翻译的词无法出选择题，只能出拼写题
         if (!w.srs?.[mode]) newQueue.push({ key: w.text.toLowerCase(), mode });
       });
     });
