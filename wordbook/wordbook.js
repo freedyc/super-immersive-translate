@@ -5,6 +5,7 @@
 import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
+import { isDue, deserializeCard } from '../utils/srs.js';
 
 (async function () {
   'use strict';
@@ -107,9 +108,8 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
         </div>`
       ).join('');
 
-      const status = w.known
-        ? '<span class="badge badge-success badge-sm">已掌握</span>'
-        : '<span class="badge badge-warning badge-sm">学习中</span>';
+      const badge = getMasteryBadge(w);
+      const status = `<span class="badge ${badge.cls} badge-sm">${badge.text}</span>`;
 
       const time = new Date(w.timestamp).toLocaleDateString('zh-CN');
       const source = w.url
@@ -122,9 +122,6 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
             <div class="flex items-start justify-between gap-2">
               <div class="font-bold text-lg text-base-content">${escapeHtml(w.text)}</div>
               <div class="flex gap-1 shrink-0">
-                <button class="btn btn-ghost btn-xs toggle-known" title="${w.known ? '标记为未掌握' : '标记为已掌握'}">
-                  <i data-lucide="${w.known ? 'check-circle' : 'circle'}" class="w-4 h-4 ${w.known ? 'text-success' : 'text-base-content/40'}"></i>
-                </button>
                 <button class="btn btn-ghost btn-xs delete-word" title="删除">
                   <i data-lucide="trash-2" class="w-4 h-4 text-error/60"></i>
                 </button>
@@ -139,18 +136,6 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
     createIcons({ icons });
 
     // Bind card events
-    container.querySelectorAll('.toggle-known').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const idx = getCardIndex(e);
-        if (idx < 0) return;
-        const realIdx = wordbook.indexOf(filteredWords[idx]);
-        wordbook[realIdx].known = !wordbook[realIdx].known;
-        filteredWords[idx].known = wordbook[realIdx].known;
-        saveWordbook();
-        renderList();
-      });
-    });
-
     container.querySelectorAll('.delete-word').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const idx = getCardIndex(e);
@@ -208,22 +193,6 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
 
   document.getElementById('cardNext').addEventListener('click', () => {
     if (cardIndex < wordbook.length - 1) { cardIndex++; renderCard(); }
-  });
-
-  document.getElementById('cardKnow').addEventListener('click', () => {
-    if (wordbook.length === 0) return;
-    wordbook[cardIndex].known = true;
-    saveWordbook();
-    if (cardIndex < wordbook.length - 1) { cardIndex++; }
-    renderCard();
-  });
-
-  document.getElementById('cardDontKnow').addEventListener('click', () => {
-    if (wordbook.length === 0) return;
-    wordbook[cardIndex].known = false;
-    saveWordbook();
-    if (cardIndex < wordbook.length - 1) { cardIndex++; }
-    renderCard();
   });
 
   document.getElementById('cardShuffle').addEventListener('click', () => {
@@ -319,7 +288,7 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
   // ========== Stats ==========
   function renderStats() {
     const total = wordbook.length;
-    const known = wordbook.filter(w => w.known).length;
+    const known = wordbook.filter(isMastered).length;
     const unknown = total - known;
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const today = wordbook.filter(w => w.timestamp >= todayStart.getTime()).length;
@@ -391,6 +360,24 @@ import { applyTheme, initThemeControl } from '../utils/theme.js';
   });
 
   // ========== Utils ==========
+  // 稳定性达到约 3 周（21 天）视为"已掌握"，这是一个可调阈值，不是 FSRS 算法本身规定的。
+  const MASTERED_STABILITY_DAYS = 21;
+
+  function isMastered(word) {
+    const raw = word.srs?.recall;
+    if (!raw || raw.reps === 0) return false;
+    return deserializeCard(raw).stability >= MASTERED_STABILITY_DAYS;
+  }
+
+  function getMasteryBadge(word) {
+    const raw = word.srs?.recall;
+    if (!raw || raw.reps === 0) return { text: '未学习', cls: 'badge-ghost' };
+    const card = deserializeCard(raw);
+    if (card.stability >= MASTERED_STABILITY_DAYS) return { text: '已掌握', cls: 'badge-success' };
+    if (isDue(card)) return { text: '待复习', cls: 'badge-warning' };
+    return { text: '学习中', cls: 'badge-info' };
+  }
+
   function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
