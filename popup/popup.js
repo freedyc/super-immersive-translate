@@ -258,7 +258,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     wordbook.forEach((w) => {
       ['recall', 'recognition'].forEach((mode) => {
         const raw = w.srs?.[mode];
-        const card = raw ? deserializeCard(raw) : null;
+        if (!raw) return; // 还没学过的词只能通过"学新词"按钮进入，不计入待复习徽章
+        const card = deserializeCard(raw);
         if (isDue(card, now)) dueCount++;
       });
     });

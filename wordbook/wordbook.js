@@ -215,7 +215,8 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
       ['recall', 'recognition'].forEach((mode) => {
         if (mode === 'recognition' && !hasTranslation) return; // 没有翻译的词无法出选择题，只能出拼写题
         const raw = w.srs?.[mode];
-        const card = raw ? deserializeCard(raw) : null;
+        if (!raw) return; // 还没学过的词只能通过"学新词"按钮进入，不会自动出现在今日复习里
+        const card = deserializeCard(raw);
         if (isDue(card, now)) {
           queue.push({ key: w.text.toLowerCase(), mode });
         }
