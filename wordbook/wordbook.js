@@ -6,6 +6,8 @@ import { createIcons } from 'lucide';
 import { icons } from '../utils/icons.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from '../utils/srs.js';
+import { Translator } from '../utils/translator.js';
+import { generateExampleSentence } from '../utils/example-sentence.js';
 
 (async function () {
   'use strict';
@@ -63,6 +65,11 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     document.getElementById(view + 'View')?.classList.add('active');
 
+    // 切换页签同步更新 URL，刷新页面时能回到刚才停留的那个页签，不会一律弹回"今日复习"
+    const url = new URL(location.href);
+    url.searchParams.set('view', view);
+    history.replaceState(null, '', url);
+
     if (view === 'review') initReview();
     if (view === 'cards') initCards();
     if (view === 'quiz') initQuiz();
@@ -111,25 +118,65 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
 
       const badge = getMasteryBadge(w);
       const status = `<span class="badge ${badge.cls} badge-sm">${badge.text}</span>`;
+      const percent = getMasteryPercent(w);
+      const progressCls = percent >= 100 ? 'progress-success' : (badge.cls === 'badge-warning' ? 'progress-warning' : 'progress-primary');
+      const posBadge = w.pos ? `<span class="badge badge-outline badge-sm">${escapeHtml(w.pos)}</span>` : '';
+      const ipaText = w.ipa ? `<span class="text-xs text-base-content/40 font-mono">${escapeHtml(w.ipa)}</span>` : '';
 
       const time = new Date(w.timestamp).toLocaleDateString('zh-CN');
       const source = w.url
         ? `<a href="${escapeHtml(w.url)}" target="_blank" class="link link-hover text-xs text-base-content/50" title="${escapeHtml(w.title || w.url)}">${escapeHtml(w.title || '来源页面')}</a>`
         : '';
 
+      const ctx = w.contexts && w.contexts.length > 0 ? w.contexts[w.contexts.length - 1] : null;
+      const exampleHtml = ctx?.sentence ? `
+        <div class="flex flex-col gap-1 mt-1 p-2 rounded-lg bg-base-200/50 text-xs">
+          <div class="flex items-start gap-1.5">
+            <span class="italic text-base-content/70 flex-1">${escapeHtml(ctx.sentence)}</span>
+            <button class="example-speak btn btn-ghost btn-xs btn-circle shrink-0" data-lang="en-US" data-text="${escapeAttr(ctx.sentence)}" title="朗读例句">
+              <i data-lucide="volume-2" class="w-3 h-3"></i>
+            </button>
+          </div>
+          ${ctx.translation ? `
+          <div class="flex items-start gap-1.5">
+            <span class="text-base-content/50 flex-1">${escapeHtml(ctx.translation)}</span>
+            <button class="example-speak btn btn-ghost btn-xs btn-circle shrink-0" data-lang="zh-CN" data-text="${escapeAttr(ctx.translation)}" title="朗读译文">
+              <i data-lucide="volume-2" class="w-3 h-3"></i>
+            </button>
+          </div>` : ''}
+        </div>
+      ` : '';
+
       return `
-        <div class="card bg-base-100 shadow word-card" data-index="${i}">
+        <div class="card bg-base-100 shadow rounded-xl hover:shadow-lg transition-shadow word-card" data-index="${i}">
           <div class="card-body gap-2 p-4">
             <div class="flex items-start justify-between gap-2">
-              <div class="font-bold text-lg text-base-content">${escapeHtml(w.text)}</div>
+              <div class="flex items-center gap-2">
+                <div class="font-bold text-lg text-base-content">${escapeHtml(w.text)}</div>
+                ${ipaText}
+                ${posBadge}
+              </div>
               <div class="flex gap-1 shrink-0">
+                <button class="word-speak btn btn-ghost btn-xs btn-circle" title="发音">
+                  <i data-lucide="volume-2" class="w-4 h-4"></i>
+                </button>
+                <button class="regenerate-word btn btn-ghost btn-xs btn-circle" title="AI 生成新例句 / 补全音标词性">
+                  <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+                </button>
                 <button class="btn btn-ghost btn-xs delete-word" title="删除">
                   <i data-lucide="trash-2" class="w-4 h-4 text-error/60"></i>
                 </button>
               </div>
             </div>
             <div class="flex flex-col gap-1">${translations}</div>
+            ${exampleHtml}
             <div class="flex items-center gap-2 mt-1">${status} <span class="text-xs text-base-content/40">${time}</span> ${source}</div>
+            <div class="mt-1">
+              <div class="flex justify-between text-[10px] text-base-content/40 mb-0.5">
+                <span>掌握度</span><span>${percent}%</span>
+              </div>
+              <progress class="progress ${progressCls} w-full h-1.5" value="${percent}" max="100"></progress>
+            </div>
           </div>
         </div>
       `;
@@ -146,6 +193,55 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
         filteredWords.splice(idx, 1);
         saveWordbook();
         render();
+      });
+    });
+
+    container.querySelectorAll('.word-speak').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = getCardIndex(e);
+        if (idx < 0) return;
+        window.ttsManager.speak(filteredWords[idx].text, 'auto');
+      });
+    });
+
+    container.querySelectorAll('.example-speak').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (btn.dataset.text) window.ttsManager.speak(btn.dataset.text, btn.dataset.lang);
+      });
+    });
+
+    container.querySelectorAll('.regenerate-word').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const idx = getCardIndex(e);
+        if (idx < 0) return;
+        const word = filteredWords[idx];
+        btn.disabled = true;
+        btn.classList.add('animate-spin');
+        try {
+          const t = new Translator();
+          await t.init();
+          const generated = await generateExampleSentence(word.text, t);
+          if (!generated) return;
+          const realIdx = wordbook.indexOf(word);
+          if (realIdx < 0) return;
+          wordbook[realIdx].contexts = [...(wordbook[realIdx].contexts || []), {
+            sentence: generated.sentence,
+            translation: generated.translation,
+            tokens: generated.tokens,
+            url: null,
+            title: 'AI 生成',
+            timestamp: Date.now(),
+            source: 'ai'
+          }];
+          if (generated.pos && !wordbook[realIdx].pos) wordbook[realIdx].pos = generated.pos;
+          if (generated.ipa && !wordbook[realIdx].ipa) wordbook[realIdx].ipa = generated.ipa;
+          await saveWordbook();
+          render();
+        } finally {
+          btn.disabled = false;
+          btn.classList.remove('animate-spin');
+        }
       });
     });
   }
@@ -166,9 +262,12 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     const words = wordbook.length > 0 ? wordbook : [];
     if (words.length === 0) {
       document.getElementById('cardWord').textContent = '没有单词';
+      document.getElementById('cardIpa').textContent = '';
+      document.getElementById('cardPos').textContent = '';
       document.getElementById('cardTranslation').textContent = '';
       document.getElementById('cardSource').textContent = '';
       document.getElementById('cardProgress').textContent = '0 / 0';
+      document.getElementById('cardExample').innerHTML = '';
       return;
     }
 
@@ -178,14 +277,55 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
 
     flashcard.classList.remove('flipped');
     document.getElementById('cardWord').textContent = w.text;
+    document.getElementById('cardIpa').textContent = w.ipa || '';
+    document.getElementById('cardPos').textContent = w.pos || '';
+    document.getElementById('cardPos').style.display = w.pos ? '' : 'none';
     document.getElementById('cardTranslation').textContent = trans[0] || '无翻译';
     document.getElementById('cardSource').textContent = trans.length > 1
       ? trans.slice(1).join(' / ') : (w.title || '');
     document.getElementById('cardProgress').textContent = `${cardIndex + 1} / ${words.length}`;
+    document.getElementById('cardExample').innerHTML = cardExampleHtml(w);
+  }
+
+  function cardExampleHtml(word) {
+    const ctx = word.contexts && word.contexts.length > 0 ? word.contexts[word.contexts.length - 1] : null;
+    if (!ctx || !ctx.sentence) return '';
+    const translationLine = ctx.translation
+      ? `<div class="text-xs text-base-content/40 mt-1">${escapeHtml(ctx.translation)}</div>` : '';
+    return `
+      <div>${renderTaggedSentenceChips(ctx.sentence, ctx.tokens)}</div>
+      ${translationLine}
+    `;
+  }
+
+  // 词类 → daisyUI badge 语义色，10 个词类复用 8 种语义色（部分虚词共用同一色）
+  const POS_BADGE_CLASS = {
+    '名词': 'badge-primary', '代词': 'badge-neutral', '动词': 'badge-secondary',
+    '形容词': 'badge-accent', '副词': 'badge-info', '介词': 'badge-neutral',
+    '连词': 'badge-neutral', '感叹词': 'badge-warning', '冠词': 'badge-neutral',
+    '限定词': 'badge-neutral',
+  };
+
+  // 把 tokens（{text, pos}[]）渲染成按词类上色的词块序列（悬浮显示中文词类名）。
+  // 没有 tokens（比如真实抓取的例句，没经过 AI 标注）就退回纯文本展示。
+  function renderTaggedSentenceChips(sentence, tokens) {
+    if (!tokens || tokens.length === 0) return `<span class="italic">${escapeHtml(sentence)}</span>`;
+    const chips = tokens
+      .filter(tok => tok?.text)
+      .map(tok => `<span class="badge ${POS_BADGE_CLASS[tok.pos] || 'badge-neutral'} badge-sm align-middle" title="${escapeAttr(tok.pos || '')}">${escapeHtml(tok.text)}</span>`)
+      .join('');
+    return `<span class="inline-flex flex-wrap gap-1 items-center">${chips}</span>`;
   }
 
   document.getElementById('flashcard').addEventListener('click', () => {
     document.getElementById('flashcard').classList.toggle('flipped');
+  });
+
+  document.getElementById('cardSpeakBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const words = wordbook.length > 0 ? wordbook : [];
+    const w = words[cardIndex];
+    if (w) window.ttsManager.speak(w.text, 'auto');
   });
 
   document.getElementById('cardPrev').addEventListener('click', () => {
@@ -247,6 +387,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
 
   function renderReviewQuestion() {
     const dueCountEl = document.getElementById('reviewDueCount');
+    const progressRing = document.getElementById('reviewProgressRing');
     const emptyEl = document.getElementById('reviewEmpty');
     const questionEl = document.getElementById('reviewQuestion');
 
@@ -254,6 +395,8 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
       questionEl.style.display = 'none';
       emptyEl.style.display = 'flex';
       dueCountEl.textContent = '0';
+      progressRing.style.setProperty('--value', 100);
+      hideGrammarSidebar();
       createIcons({ icons });
       return;
     }
@@ -270,6 +413,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     emptyEl.style.display = 'none';
     questionEl.style.display = '';
     dueCountEl.textContent = String(reviewQueue.length - reviewIndex);
+    progressRing.style.setProperty('--value', Math.round((reviewIndex / reviewQueue.length) * 100));
 
     if (item.mode === 'recall') {
       renderRecallQuestion(word);
@@ -322,10 +466,60 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
   function reviewSentenceHtml(word) {
     const ctx = word.contexts && word.contexts.length > 0 ? word.contexts[word.contexts.length - 1] : null;
     if (!ctx || !ctx.sentence) return '';
-    return `<div class="text-sm text-base-content/50 italic mt-2">${escapeHtml(ctx.sentence)}</div>`;
+    const translationLine = ctx.translation
+      ? `<div class="text-xs text-base-content/40 mt-1">${escapeHtml(ctx.translation)}</div>` : '';
+    return `
+      <div class="text-sm mt-2">${renderTaggedSentenceChips(ctx.sentence, ctx.tokens)}</div>
+      ${translationLine}
+    `;
+  }
+
+  // 语法角色拆解侧栏——按 tokens 里的 role 字段分组展示（跟词性是两个维度，
+  // role 是这个词在这句话里当的成分）。旧数据/没生成过 role 的例句直接不显示，不留空壳。
+  const ROLE_ORDER = ['主语', '谓语', '宾语', '定语', '状语', '补语', '其他'];
+  function renderGrammarSidebarHtml(word) {
+    const ctx = word.contexts && word.contexts.length > 0 ? word.contexts[word.contexts.length - 1] : null;
+    const tokens = ctx?.tokens;
+    if (!tokens || !tokens.some(t => t.role)) return '';
+    const groups = {};
+    tokens.forEach((t) => {
+      if (!t.role) return;
+      (groups[t.role] = groups[t.role] || []).push(t.text);
+    });
+    const rows = ROLE_ORDER
+      .filter((role) => groups[role]?.length)
+      .map((role) => `
+        <div class="flex items-start gap-2 py-1.5 border-b border-base-200 last:border-0">
+          <span class="badge badge-outline badge-sm shrink-0 w-14 justify-center">${escapeHtml(role)}</span>
+          <span class="text-sm text-base-content/70">${escapeHtml(groups[role].join(' / '))}</span>
+        </div>
+      `).join('');
+    if (!rows) return '';
+    return `
+      <div class="card bg-base-100 shadow-sm rounded-xl">
+        <div class="card-body p-4 gap-1">
+          <h3 class="text-xs font-bold uppercase tracking-wide text-base-content/40 mb-1">语法拆解</h3>
+          ${rows}
+        </div>
+      </div>
+    `;
+  }
+
+  function updateGrammarSidebar(word) {
+    const el = document.getElementById('reviewGrammarHint');
+    if (!el) return;
+    const html = renderGrammarSidebarHtml(word);
+    el.innerHTML = html;
+    el.style.display = html ? '' : 'none';
+  }
+
+  function hideGrammarSidebar() {
+    const el = document.getElementById('reviewGrammarHint');
+    if (el) el.style.display = 'none';
   }
 
   function renderRecallQuestion(word) {
+    hideGrammarSidebar(); // 答题前不能提前展示——语法拆解里会带出要默写的这个词本身
     const trans = Object.values(word.translations || {});
     const prompt = trans[0] || '???';
     document.getElementById('reviewQuestion').innerHTML = `
@@ -339,7 +533,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
             <button class="btn btn-sm btn-outline" data-grade="good">记得</button>
             <button class="btn btn-sm btn-outline" data-grade="easy">简单</button>
           </div>
-          ${reviewSentenceHtml(word)}
+          <div id="reviewRecallExample"></div>
         </div>
       </div>
     `;
@@ -352,6 +546,9 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
       const correct = word.text.toLowerCase();
       const feedback = document.getElementById('reviewRecallFeedback');
       input.disabled = true;
+      // 例句本身就包含要默写的这个词，答题前显示等于直接给答案，所以延到判分之后才揭晓
+      document.getElementById('reviewRecallExample').innerHTML = reviewSentenceHtml(word);
+      updateGrammarSidebar(word);
 
       if (answer === correct) {
         feedback.textContent = '✅ 正确！选一个难易度：';
@@ -403,6 +600,7 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
       </div>
     `;
     createIcons({ icons });
+    updateGrammarSidebar(word); // 识别题单词本身已经明摆着显示了，不存在剧透问题，直接展示
 
     const startedAt = Date.now();
 
@@ -615,10 +813,21 @@ import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from 
     return { text: '学习中', cls: 'badge-info' };
   }
 
+  function getMasteryPercent(word) {
+    const raw = word.srs?.recall;
+    if (!raw || raw.reps === 0) return 0;
+    return Math.min(100, Math.round((deserializeCard(raw).stability / MASTERED_STABILITY_DAYS) * 100));
+  }
+
   function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str || '';
     return d.innerHTML;
+  }
+
+  // escapeHtml 走 textContent/innerHTML 往返，不转义双引号，放进 HTML 属性值前要额外处理
+  function escapeAttr(str) {
+    return escapeHtml(str).replace(/"/g, '&quot;');
   }
 
   // ========== Keyboard shortcuts ==========
