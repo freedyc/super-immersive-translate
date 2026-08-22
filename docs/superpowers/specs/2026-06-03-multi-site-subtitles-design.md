@@ -2,12 +2,13 @@
 
 日期：2026-06-03
 状态：已批准设计，待写实现计划
+补充：2026-08-22 追加会议实时字幕适配器（Zoom / Google Meet / Microsoft Teams），见下方"补充"小节；架构和其余站点均未改动。
 
 ## 背景与目标
 
 现状：`content/youtube.js` 只在 `youtube.com` 生效，用"DOM 抓字幕"方式（监听 `.ytp-caption-window-container` 的 DOM 变化 → 读 `.ytp-caption-segment` 文本 → `translator.translate()` → 注入 `.sit-subtitle-translation` 译文）。核心逻辑通用，只有**域名判断 + 三个选择器**是 YouTube 专属。
 
-目标：把它重构成**配置化的多站点字幕引擎**，核心逻辑只写一遍，每个站点用一份小配置接入；首批覆盖 YouTube / Netflix / Bilibili / Coursera / Udemy / TED + 一个通用 `<video>` 原生字幕兜底；加一个总开关让用户可关。
+目标：把它重构成**配置化的多站点字幕引擎**，核心逻辑只写一遍，每个站点用一份小配置接入；首批覆盖 YouTube / Netflix / Bilibili / Coursera / Udemy / TED + 一个通用 `<video>` 原生字幕兜底；加一个总开关让用户可关。第二批（2026-08-22 追加）覆盖 Zoom / Google Meet / Microsoft Teams 三个网页版会议客户端的实时字幕——跟视频平台字幕是同一套机制，只是内容从"视频台词"换成"会议发言"，不需要新架构。
 
 ## 关键决策
 
@@ -51,6 +52,43 @@
 - **udemy**：`hostIncludes:['udemy.com']`，`[class*="captions-display--captions-container"]`。
 - **ted**：`hostIncludes:['ted.com']`，原生 `.vjs-text-track-display`（或走兜底）。
 
+### 补充（2026-08-22）：会议实时字幕适配器
+
+选择器来自公开的同类开源项目（不是我凭空猜的，各条标了来源），跟原有六个站点一样**待真实环境验证**；置信度是"这份公开代码大概率还在维护、选择器大概率还有效"，不是我本人验证过。
+
+- **Google Meet**（`hostIncludes:['meet.google.com']`）—— 置信度高，参考 `yunho0130/google-meet-cc-to-srt`（`content/meet-cc-simple.js`）：
+  - `containerSelector`: `[jsname="dsyhDe"]`（找不到再退到 `[role="region"][aria-label*="caption" i]`）
+  - `segmentSelector`: `.ygicle.VbkSUe`（主选择器），`.iTTPOb`（旧版兜底）
+  - `mountSelector`: 同 `containerSelector`
+  - 备注：`jsname` 是 Google 内部测试钩子，比同层的混淆 CSS 模块类名（`.ygicle`/`.NWpY1d` 这类）更抗得住界面改版，优先信 `jsname`/`aria-label`，class 名当兜底。
+
+- **Microsoft Teams（网页版）**（`hostIncludes:['teams.microsoft.com', 'teams.live.com']`）—— 置信度高，参考 `Zerg00s/Live-Captions-Saver`（`teams-captions-saver/content_script.js`，MIT，持续维护中）：
+  - `containerSelector`: `[data-tid='closed-caption-v2-window-wrapper'], [data-tid='closed-captions-renderer'], [data-tid*='closed-caption']`
+  - `segmentSelector`: `[data-tid="closed-caption-text"]`（发言人：`[data-tid="author"]`）
+  - `mountSelector`: 同 `containerSelector`
+  - 备注：`data-tid` 是微软自己的测试 id 约定，三个平台里最抗改版；上游代码历史上遇到过 Teams 更新后字幕唯一 id 消失的情况，所以保留了 `[data-tid*='closed-caption']` 通配兜底，照抄不要丢。
+
+- **Zoom 网页客户端**（`hostIncludes:['zoom.us']`，仅浏览器版会议室 `/wc/`，不是桌面客户端）—— 置信度中，参考 `aalemoro/meetrecap`（`src/content/zoom.js`，同时支持 Meet+Teams+Zoom 网页版）：
+  - `containerSelector`: `#live-transcription-subtitle`（兜底 `[class*="live-transcription-subtitle"]` / `[class*="live-transcription"]` / `[role="region"][aria-label]` 按"captions/subtitles/transcription"关键字匹配）
+  - `segmentSelector`: `.live-transcription-subtitle__item`（兜底退到泛用的 `li`/`p`/`span`）
+  - `mountSelector`: 同 `containerSelector`
+  - **需要额外处理**：Zoom 常见的更新方式是复用同一个覆盖层节点、每句话整体替换文本，且文本内容形如 `"发言人：说的话"`，不是像其他站点那样纯字幕正文。直接拿 `segmentSelector` 的 `textContent` 会把发言人名字也一起送去翻译。因此 Zoom 这条适配器需要在标准的 `{ containerSelector, segmentSelector, mountSelector }` 之外，多一个**可选的** `parseText(rawText)` 钩子（不填就默认原样返回，YouTube/Netflix/Meet/Teams 等其余适配器都不用管这个字段）：
+    ```js
+    {
+      name: 'zoom',
+      hostIncludes: ['zoom.us'],
+      containerSelector: '#live-transcription-subtitle, [class*="live-transcription-subtitle"], [class*="live-transcription"]',
+      segmentSelector: '.live-transcription-subtitle__item',
+      mountSelector: '#live-transcription-subtitle, [class*="live-transcription-subtitle"], [class*="live-transcription"]',
+      parseText(raw) {
+        // "张三: 今天的进度..." → 去掉发言人前缀，只翻译发言内容
+        const idx = raw.indexOf(': ');
+        return idx > -1 && idx < 30 ? raw.slice(idx + 2) : raw;
+      },
+    }
+    ```
+    引擎在"读取 `segmentSelector` 拼出当前字幕文本"这一步之后，加一句"如果适配器定义了 `parseText`，用它处理一遍再送去翻译"，其余流程不变。
+
 ### 3. 通用 `<video>` cue 兜底适配器
 
 当无站点适配器命中时启用：
@@ -72,7 +110,7 @@
 ## 单元边界
 
 - **引擎**（observe/debounce/translate/inject/cleanup/开关）：与具体站点解耦，只依赖"当前适配器"接口。
-- **适配器注册表**：纯数据 + 少量可选钩子；加站点/改选择器只动这里。
+- **适配器注册表**：纯数据 + 少量可选钩子（如 2026-08-22 追加的 `parseText`，用于 Zoom 那种"发言人: 内容"需要拆分的场景）；加站点/改选择器只动这里。
 - **兜底适配器**：独立的 cue 监听逻辑，与 DOM 抓字幕型并列。
 - 三者可分别理解与替换；引擎不需要知道任何具体站点。
 
@@ -83,6 +121,7 @@
 3. **加站点适配器**：Netflix / Bilibili / Coursera / Udemy / TED 各加一条配置。验收：构建通过；逐站点由用户真实环境核对选择器（注明待验证）。
 4. **通用 cue 兜底**：`<video>` textTrack 监听 + 覆盖层。验收：在一个用原生 track 的页面出双语。
 5. **收尾**：更新 CLAUDE.md（字幕从 YouTube 专属 → 多站点配置化引擎 + 开关）。
+6. **（2026-08-22 追加）会议字幕适配器**：Zoom / Google Meet / Microsoft Teams 三条配置，引擎加对可选 `parseText` 钩子的支持（有就用它处理一遍原始文本再送翻译，没有就跟现在一样直接用）。验收：构建通过；三个平台由用户在真实会议中核对选择器（注明待验证，Zoom 额外验证 `parseText` 的发言人前缀切分是否正确）。
 
 ## 不在范围内
 
@@ -98,9 +137,11 @@
 3. 各站点适配器存在且选择器有注释来源；用户在真实站点能据此快速微调（阶段 3）。
 4. 通用 cue 兜底在使用原生 `<video>` track 的页面能显示双语（阶段 4）。
 5. 加新站点/修选择器只需改 `SITE_ADAPTERS` 一处。
+6. Zoom / Meet / Teams 三个适配器存在且选择器有来源注释（阶段 6）；Zoom 适配器的 `parseText` 能正确从 `"发言人: 内容"` 里切出发言内容。
 
 ## 风险
 
 - **选择器易失效/无法预先验证**：核心风险。缓解：配置化集中、注释来源、用户可快速改；首批仅保证 YouTube（迁移自现有可用代码）确定可用，其余 best-effort。
+- **会议平台选择器来自第三方开源项目而非官方文档**（2026-08-22 追加批次）：Google Meet/Teams 的来源项目选用了较抗改版的 `jsname`/`data-tid` 属性，风险相对可控；Zoom 的来源置信度中等，且它"复用同一节点、发言人前缀混在正文里"的更新方式跟其余平台不一样，最容易在真实会议里表现跟预期不符，验证时优先核对 Zoom。
 - **性能**：多 `<video>`/频繁 cuechange 可能高频触发；用 150ms 去抖 + `lastText` 去重 + translator 缓存控制。
 - **站点 CSP/DOM 变动**：内容脚本读 DOM 不受 CSP 阻挡；DOM 结构变动靠配置化快速修。
