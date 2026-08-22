@@ -1,5 +1,20 @@
 /* styles/theme.css — daisyUI 主题启用清单（CSS 侧单一来源）
-   新增主题：在下面 themes: 追加同名主题，并同步 utils/theme.js 的 AVAILABLE_THEMES。 */
+   新增主题：在下面 themes: 追加同名主题，并同步 utils/theme.js 的 AVAILABLE_THEMES。
+
+   字体的 Google Fonts @import 不能放在这个文件里：CSS 规定 @import 必须在其它规则之前，
+   但这个文件是被每个页面自己的 css 用 `@import "../styles/theme.css";` 引进去的，
+   引入时机已经在 `@import "tailwindcss";` 展开的一大堆规则之后，@import 放这儿必然违规。
+   所以字体导入挪到了每个页面自己 css 文件的第一行（在 @import "tailwindcss" 之前），
+   这个文件只保留跟顺序无关的 font-family 规则。 */
 @plugin "daisyui" {
   themes: light --default, dark --prefersdark;
+}
+
+/* 字体：全局统一，别在单个页面里单独换——6 个页面共用这一份，避免各页字体不一致 */
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+h1, h2, h3, .card-title {
+  font-family: 'Lexend', 'Inter', ui-sans-serif, system-ui, sans-serif;
 }
