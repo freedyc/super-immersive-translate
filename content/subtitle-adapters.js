@@ -45,4 +45,32 @@ export const SITE_ADAPTERS = [
     segmentSelector: '.vjs-text-track-cue',
     mountSelector: '.vjs-text-track-display',
   },
+  {
+    name: 'google-meet',
+    hostIncludes: ['meet.google.com'],
+    containerSelector: '[jsname="dsyhDe"], [role="region"][aria-label*="caption" i]',
+    segmentSelector: '.ygicle.VbkSUe, .iTTPOb',
+    mountSelector: '[jsname="dsyhDe"], [role="region"][aria-label*="caption" i]',
+  },
+  {
+    name: 'teams',
+    hostIncludes: ['teams.microsoft.com', 'teams.live.com'],
+    containerSelector: "[data-tid='closed-caption-v2-window-wrapper'], [data-tid='closed-captions-renderer'], [data-tid*='closed-caption']",
+    segmentSelector: '[data-tid="closed-caption-text"]',
+    mountSelector: "[data-tid='closed-caption-v2-window-wrapper'], [data-tid='closed-captions-renderer'], [data-tid*='closed-caption']",
+  },
+  {
+    name: 'zoom',
+    hostIncludes: ['zoom.us'],
+    containerSelector: '#live-transcription-subtitle, [class*="live-transcription-subtitle"], [class*="live-transcription"]',
+    segmentSelector: '.live-transcription-subtitle__item, li, p, span',
+    mountSelector: '#live-transcription-subtitle, [class*="live-transcription-subtitle"], [class*="live-transcription"]',
+    parseText(raw) {
+      // "张三: 今天的进度..." → 去掉发言人前缀，只翻译发言内容。
+      // 冒号出现在前 30 个字符内才当作发言人前缀处理，避免把正文里偶然出现的
+      // 冒号（比如引用的时间 "3:00"）误判成前缀分隔符。
+      const idx = raw.indexOf(': ');
+      return idx > -1 && idx < 30 ? raw.slice(idx + 2) : raw;
+    },
+  },
 ];
