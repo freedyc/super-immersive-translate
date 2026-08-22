@@ -23,6 +23,18 @@ import { SITE_ADAPTERS } from './subtitle-adapters.js';
     ? adapter.segmentSelector.split(',').map(s => `${s.trim()}:not(.${TRANS_CLASS})`).join(', ')
     : null;
 
+  // querySelectorAll 只匹配调用它的元素的后代，不包括元素自身——多数适配器里
+  // containerSelector 和 segmentSelector 是不同的选择器，这不是问题；但像 Udemy
+  // 那样容器本身就是唯一的字幕文本节点（containerSelector === segmentSelector
+  // === mountSelector）时，纯 querySelectorAll 永远查不到任何东西，字幕翻译会
+  // 悄无声息地失效。这里额外判断容器自身是否也命中同一个选择器，命中就把容器
+  // 本身补进结果里（放最前面，保持文档顺序语义）。
+  function queryScoped(container, selector) {
+    const found = Array.from(container.querySelectorAll(selector));
+    if (container.matches(selector)) found.unshift(container);
+    return found;
+  }
+
   let cueUnsubscribers = [];
   let observer = null;
   let navObserver = null;
@@ -121,7 +133,7 @@ import { SITE_ADAPTERS } from './subtitle-adapters.js';
 
     // 只在被观察的容器内查询，不查整个 document——否则 mountSelector 命中多个
     // 同类容器时可能翻错地方，且选择器写得稍泛就会把整页文本都抓进来送翻译引擎。
-    const segments = activeContainer.querySelectorAll(SEGMENT_QUERY);
+    const segments = queryScoped(activeContainer, SEGMENT_QUERY);
     if (segments.length === 0) {
       activeContainer.querySelectorAll('.' + TRANS_CLASS).forEach(el => el.remove());
       lastCaptionText = '';
