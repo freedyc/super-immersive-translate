@@ -34,7 +34,7 @@ daisyUI conventions). Each page's CSS does `@import "tailwindcss"; @import "../s
 where `styles/theme.css` is the single place daisyUI themes are enabled (add a theme there
 **and** in `utils/theme.js`'s `AVAILABLE_THEMES`). Use daisyUI 5 color variables
 (`var(--color-primary)`, `--color-success`, etc.) — not the daisyUI 4 short names
-(`var(--p)`). The injected `content/*.css` (full-page/selection/youtube) is deliberately
+(`var(--p)`). The injected `content/*.css` (full-page/selection/subtitle) is deliberately
 hand-written, not Tailwind, to avoid polluting host pages.
 
 Theming is global and unified via `utils/theme.js`: pages call `applyTheme()` (sets
@@ -74,7 +74,11 @@ engines in parallel and aggregate their results in the panel.
    MutationObserver, site blacklist/whitelist, and abortable in-progress translation
    (`translateAbortId`).
 4. `content/input-translate.js` — live bilingual translation inside editable inputs.
-5. `content/youtube.js` — YouTube subtitle detection + bilingual captions.
+5. `content/subtitle.js` — Multi-site live-caption bilingual translation (config-driven
+   adapter registry in `content/subtitle-adapters.js`, one small config per site — see
+   `docs/superpowers/specs/2026-06-03-multi-site-subtitles-design.md`). Falls back to a
+   generic `<video>` textTrack cue watcher when no site adapter matches. Toggle via the
+   `subtitleTranslate` setting.
 
 ### Background: `background/background.js`
 Minimal MV3 service worker. Registers context menus and the `Alt+T` / `Alt+S` commands
