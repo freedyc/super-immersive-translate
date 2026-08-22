@@ -23,12 +23,19 @@
     "@crxjs/vite-plugin": "^2.0.0-beta.33",
     "@mlc-ai/web-llm": "^0.2.84",
     "@tailwindcss/vite": "^4.3.0",
+    "@vitejs/plugin-react": "^6.1.0",
     "daisyui": "^5.5.20",
     "lucide": "^1.17.0",
     "tailwindcss": "^4.3.0",
     "vite": "^8.0.14"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^9.3.1",
+    "lucide-react": "^1.33.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tesseract.js": "^7.0.0",
     "ts-fsrs": "5.4.1"
   }
