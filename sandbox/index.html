@@ -99,7 +99,7 @@
         </div>
 
         <!-- 1. Text Translation Tab Content -->
-        <div id="content-text" class="flex flex-col md:flex-row min-h-[250px]">
+        <div id="content-text" class="flex flex-col md:flex-row md:flex-wrap min-h-[250px]">
           <!-- Source Area -->
           <div class="flex-1 p-6 flex flex-col border-b md:border-b-0 md:border-r border-base-200 relative group">
             <textarea id="sourceText" class="w-full flex-1 resize-none bg-transparent outline-none text-xl placeholder:text-base-content/30" placeholder="输入要翻译的内容..."></textarea>
@@ -125,6 +125,7 @@
             <div class="flex justify-between items-center mt-4 text-base-content/60">
               <div class="flex gap-2">
                 <button id="readTargetBtn" class="btn btn-circle btn-ghost btn-sm" title="朗读译文"><i data-lucide="volume-2" class="w-5 h-5"></i></button>
+                <button id="analyzeBtn" class="btn btn-circle btn-ghost btn-sm" title="语法分析"><i data-lucide="sparkles" class="w-5 h-5"></i></button>
               </div>
               <div class="flex gap-2">
                 <button id="copyBtn" class="btn btn-circle btn-ghost btn-sm" title="复制译文"><i data-lucide="copy" class="w-5 h-5"></i></button>
@@ -132,6 +133,16 @@
                 <button class="btn btn-circle btn-ghost btn-sm"><i data-lucide="share-2" class="w-5 h-5"></i></button>
               </div>
             </div>
+          </div>
+
+          <!-- Grammar Analysis Panel -->
+          <div id="analysisPanel" class="hidden w-full basis-full border-t border-base-200 p-6">
+            <h3 class="text-sm font-bold uppercase tracking-wide text-base-content/40 mb-3 flex items-center gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+              语法分析
+            </h3>
+            <div id="analysisTokens" class="mb-4"></div>
+            <div id="analysisSimilar" class="flex flex-col gap-3"></div>
           </div>
         </div>
 

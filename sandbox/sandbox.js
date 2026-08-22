@@ -4,6 +4,20 @@ import { createWorker } from 'tesseract.js';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { DEFAULTS } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
+import { enrichWordWithAi, analyzeSentence } from '../utils/example-sentence.js';
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+const POS_BADGE_CLASS = {
+  '名词': 'badge-primary', '代词': 'badge-neutral', '动词': 'badge-secondary',
+  '形容词': 'badge-accent', '副词': 'badge-info', '介词': 'badge-neutral',
+  '连词': 'badge-neutral', '感叹词': 'badge-warning', '冠词': 'badge-neutral',
+  '限定词': 'badge-neutral',
+};
 
 // Initialize Lucide icons
 createIcons({ icons });
@@ -21,6 +35,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const loading = document.getElementById('loading');
   const readSourceBtn = document.getElementById('readSourceBtn');
   const readTargetBtn = document.getElementById('readTargetBtn');
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  const analysisPanel = document.getElementById('analysisPanel');
+  const analysisTokens = document.getElementById('analysisTokens');
+  const analysisSimilar = document.getElementById('analysisSimilar');
   const swapLangBtn = document.getElementById('swapLangBtn');
   const copyBtn = document.getElementById('copyBtn');
   const saveWordBtn = document.getElementById('saveWordBtn');
@@ -145,6 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveIcon.classList.remove('text-warning');
     saveIcon.removeAttribute('fill');
     currentSaveData = null;
+    if (analysisPanel) analysisPanel.classList.add('hidden'); // 换了原文，之前的语法分析结果不再对应，先隐藏
     
     try {
       // Dynamically configure engine and languages
@@ -217,6 +236,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
   if (translateBtn) translateBtn.addEventListener('click', doTranslate);
+
+  // 语法分析——只分析当前译文对应的原文，不是重新翻译一遍；复用单词本那套 pos/role 生成逻辑，
+  // 但走的是"分析给定句子"而不是"给单词生成例句"的 prompt
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', async () => {
+      const text = sourceText.value.trim();
+      if (!text) return;
+      analyzeBtn.disabled = true;
+      analyzeBtn.classList.add('animate-spin');
+      try {
+        const result = await analyzeSentence(text, window.translator);
+        if (!result) {
+          analysisPanel.classList.remove('hidden');
+          analysisTokens.innerHTML = '<p class="text-sm text-base-content/50">分析失败，请检查是否已配置 AI 引擎（OpenAI/Gemini/Claude）或本地 Ollama。</p>';
+          analysisSimilar.innerHTML = '';
+          return;
+        }
+        renderAnalysis(result);
+      } finally {
+        analyzeBtn.disabled = false;
+        analyzeBtn.classList.remove('animate-spin');
+      }
+    });
+  }
+
+  function renderAnalysis(result) {
+    analysisPanel.classList.remove('hidden');
+
+    analysisTokens.innerHTML = result.tokens.length > 0
+      ? `<div class="flex flex-wrap gap-1.5">${result.tokens.map(tok =>
+          `<span class="badge ${POS_BADGE_CLASS[tok.pos] || 'badge-neutral'} badge-sm" title="${escapeHtml(tok.role || '')}">${escapeHtml(tok.text)}</span>`
+        ).join('')}</div>`
+      : '';
+
+    analysisSimilar.innerHTML = result.similar.length > 0
+      ? `<h4 class="text-xs font-bold uppercase tracking-wide text-base-content/40 mb-1">相似句型</h4>` +
+        result.similar.map(s => `
+          <div class="p-3 rounded-lg bg-base-200/50 text-sm">
+            <div class="text-base-content/80">${escapeHtml(s.sentence)}</div>
+            ${s.translation ? `<div class="text-base-content/50 mt-1">${escapeHtml(s.translation)}</div>` : ''}
+          </div>
+        `).join('')
+      : '';
+
+    createIcons({ icons });
+  }
   testSourceLang.addEventListener('change', doTranslate);
   testLang.addEventListener('change', doTranslate);
   
@@ -271,6 +336,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       await chrome.storage.local.set({ wordbook });
       chrome.runtime.sendMessage({ action: 'wordbookChanged' }).catch(() => {});
+      // sandbox 收藏抓不到页面上下文，异步用 AI 补一个例句 + 词类标签（不阻塞保存本身）
+      enrichWordWithAi(currentSaveData.source, false);
     }
     saveIcon.classList.add('text-warning');
     saveIcon.setAttribute('fill', 'currentColor');
