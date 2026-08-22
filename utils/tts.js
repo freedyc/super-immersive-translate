@@ -62,11 +62,31 @@ class TTSManager {
     if (this.currentEngine === 'openai' && this.openaiKey) {
       await this._speakOpenAI(text);
     } else {
-      this._speakBrowser(text, lang);
+      await this._speakBrowser(text, lang);
     }
   }
 
-  _speakBrowser(text, lang) {
+  // speechSynthesis.getVoices() 在页面里第一次调用时经常还是空数组——真正的语音列表
+  // 是异步加载的，加载完会触发一次 voiceschanged。不等它加载完就直接 find()，第一次
+  // 永远找不到配置的音色，会静默退回浏览器默认音色（跟设置里选的不是同一个声音）。
+  _getVoices() {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) return Promise.resolve(voices);
+    return new Promise((resolve) => {
+      const onVoicesChanged = () => {
+        window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+        resolve(window.speechSynthesis.getVoices());
+      };
+      window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+      // 少数环境永远不触发 voiceschanged，兜底超时避免卡住不发声
+      setTimeout(() => {
+        window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+        resolve(window.speechSynthesis.getVoices());
+      }, 300);
+    });
+  }
+
+  async _speakBrowser(text, lang) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = this.browserRate;
     utterance.pitch = this.browserPitch;
@@ -76,7 +96,7 @@ class TTSManager {
     }
 
     if (this.browserVoiceURI) {
-      const voices = window.speechSynthesis.getVoices();
+      const voices = await this._getVoices();
       const voice = voices.find(v => v.voiceURI === this.browserVoiceURI);
       if (voice) {
         utterance.voice = voice;

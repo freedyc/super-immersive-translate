@@ -2,6 +2,7 @@ import './selection.css';
 import { Translator } from '../utils/translator.js';
 import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
+import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sentence.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -49,6 +50,7 @@ import { saveHistoryEntry } from '../utils/history.js';
       selectionMode = 'icon';
       selectionEngines = DEFAULT_SELECTION_ENGINES;
     }
+    window.ttsManager.init();
   }
 
   loadSettings();
@@ -152,6 +154,52 @@ import { saveHistoryEntry } from '../utils/history.js';
     return d.innerHTML;
   }
 
+  async function checkAlreadySaved(text, btn) {
+    if (!btn) return;
+    const { wordbook = [] } = await chrome.storage.local.get('wordbook');
+    const exists = wordbook.some(w => w.text.toLowerCase() === text.toLowerCase());
+    if (exists) {
+      btn.textContent = '✅';
+      btn.title = '已收藏';
+    }
+  }
+
+  // 只有形如一个英文单词的选中内容才查词典信息，短语/句子没有 IPA/词性这回事
+  function isSingleWord(text) {
+    return /^[A-Za-z](?:[A-Za-z'-]*[A-Za-z])?$/.test(text);
+  }
+
+  function renderDictionaryInfo(els, ipa, pos, sentence, translation) {
+    if (ipa && els.ipaEl) { els.ipaEl.textContent = ipa; els.ipaEl.style.display = ''; }
+    if (pos && els.posEl) { els.posEl.textContent = pos; els.posEl.style.display = ''; }
+    if (sentence && els.exampleWrap) {
+      if (els.enTextEl) els.enTextEl.textContent = sentence;
+      if (els.zhTextEl) els.zhTextEl.textContent = translation || '';
+      els.exampleWrap.style.display = '';
+    }
+  }
+
+  // 单词已经收藏过就直接用现成的 ipa/pos/例句，不重复调用 AI；
+  // 没收藏过才生成一次（不写回存储 —— 真正收藏时 enrichWordWithAi 会单独再生成一次，
+  // 两次调用不共享缓存，属于已知的可接受浪费，不为此增加复杂度）
+  async function loadDictionaryInfo(sourceText, els) {
+    if (!isSingleWord(sourceText)) return;
+
+    const { wordbook = [] } = await chrome.storage.local.get('wordbook');
+    const existing = wordbook.find(w => w.text.toLowerCase() === sourceText.toLowerCase());
+    if (existing) {
+      const ctx = existing.contexts?.length ? existing.contexts[existing.contexts.length - 1] : null;
+      renderDictionaryInfo(els, existing.ipa, existing.pos, ctx?.sentence, ctx?.translation);
+      return;
+    }
+
+    const t = new Translator();
+    await t.init();
+    const generated = await generateExampleSentence(sourceText, t);
+    if (!generated) return;
+    renderDictionaryInfo(els, generated.ipa, generated.pos, generated.sentence, generated.translation);
+  }
+
   function renderPanel(sourceText, engineResults) {
     const p = createPanel();
 
@@ -170,6 +218,18 @@ import { saveHistoryEntry } from '../utils/history.js';
       </div>
       <div class="sit-source-wrap">
         <div class="sit-source">${escapeHtml(sourceText)}</div>
+        <span class="sit-ipa" style="display:none"></span>
+        <span class="sit-pos-badge" style="display:none"></span>
+      </div>
+      <div class="sit-example" style="display:none">
+        <div class="sit-example-row">
+          <span class="sit-example-text sit-example-en"></span>
+          <span class="sit-example-speak" data-lang="en-US" title="朗读例句">🔊</span>
+        </div>
+        <div class="sit-example-row">
+          <span class="sit-example-text sit-example-zh"></span>
+          <span class="sit-example-speak" data-lang="zh-CN" title="朗读译文">🔊</span>
+        </div>
       </div>
       <div class="sit-input-wrap">
         <input type="text" class="sit-input" placeholder="输入新单词或句子..." value="">
@@ -196,6 +256,27 @@ import { saveHistoryEntry } from '../utils/history.js';
 
     html += '</div>';
     p.innerHTML = html;
+
+    // 面板刚打开时就查一下这个词是否已经收藏过，是的话把星标直接换成已收藏状态，
+    // 不用等用户点一次才知道。捕获的是这次渲染出来的具体元素，即使后续又选了新词、
+    // innerHTML 被整体替换，更新一个已经被替换掉的旧节点也不会影响当前画面。
+    checkAlreadySaved(sourceText, p.querySelector('.sit-save'));
+
+    // 单个单词才查词典信息（音标/词性/双语例句），短语/句子不查，避免每次划句子都触发 AI 调用
+    loadDictionaryInfo(sourceText, {
+      ipaEl: p.querySelector('.sit-ipa'),
+      posEl: p.querySelector('.sit-pos-badge'),
+      exampleWrap: p.querySelector('.sit-example'),
+      enTextEl: p.querySelector('.sit-example-en'),
+      zhTextEl: p.querySelector('.sit-example-zh')
+    });
+    p.querySelectorAll('.sit-example-speak').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const row = btn.closest('.sit-example-row');
+        const text = row?.querySelector('.sit-example-text')?.textContent?.trim();
+        if (text) window.ttsManager.speak(text, btn.dataset.lang);
+      });
+    });
 
     // Bind events
     p.querySelector('.sit-close').addEventListener('click', forceRemovePanel);
@@ -237,20 +318,26 @@ import { saveHistoryEntry } from '../utils/history.js';
       const { wordbook = [] } = await chrome.storage.local.get('wordbook');
       // Avoid duplicates
       const exists = wordbook.findIndex(w => w.text.toLowerCase() === sourceText.toLowerCase());
+      let finalContexts;
       if (exists >= 0) {
         word.id = wordbook[exists].id || word.id; // 更新已有条目时保留原 id，避免不必要地重新生成
         const existingContexts = wordbook[exists].contexts || [];
-        wordbook[exists] = { ...wordbook[exists], ...word, contexts: [...existingContexts, ...newContext] };
+        finalContexts = [...existingContexts, ...newContext];
+        wordbook[exists] = { ...wordbook[exists], ...word, contexts: finalContexts };
       } else {
-        word.contexts = newContext;
+        finalContexts = newContext;
+        word.contexts = finalContexts;
         wordbook.unshift(word);
       }
       await chrome.storage.local.set({ wordbook });
       chrome.runtime.sendMessage({ action: 'wordbookChanged' }).catch(() => {});
 
+      // 没有真实例句就用 AI 补一个；有真实例句就只在缺词类标签时轻量识别一次
+      enrichWordWithAi(sourceText, finalContexts.length > 0);
+
+      // 已经真的存进单词本了，保持"已收藏"状态，不再像临时提示那样几秒后跳回去
       btn.textContent = '✅';
       btn.title = '已收藏';
-      setTimeout(() => { btn.textContent = '⭐'; btn.title = '收藏单词'; }, 1500);
     });
 
     // Copy buttons
@@ -266,31 +353,12 @@ import { saveHistoryEntry } from '../utils/history.js';
       });
     });
 
-    // Speak button (TTS)
+    // Speak button (TTS) —— 走共享的 ttsManager，尊重设置里配置的音色/OpenAI TTS
     p.querySelector('.sit-speak').addEventListener('click', (e) => {
-      const btn = e.target;
-      // Cancel any ongoing speech
-      speechSynthesis.cancel();
-
       const sourceEl = p.querySelector('.sit-source');
       const text = sourceEl?.textContent?.trim();
       if (!text) return;
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-
-      // Try to find an English voice
-      const voices = speechSynthesis.getVoices();
-      const enVoice = voices.find(v => v.lang.startsWith('en') && v.name.includes('Google'))
-        || voices.find(v => v.lang.startsWith('en'));
-      if (enVoice) utterance.voice = enVoice;
-
-      btn.textContent = '🔉';
-      utterance.onend = () => { btn.textContent = '🔊'; };
-      utterance.onerror = () => { btn.textContent = '🔊'; };
-      speechSynthesis.speak(utterance);
+      window.ttsManager.speak(text, 'en-US');
     });
 
     // Input box: translate new word/sentence

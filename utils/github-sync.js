@@ -251,6 +251,8 @@ export function mergeWordbook(local, remote) {
       timestamp: minTs === Infinity ? Date.now() : minTs,
       url: entry.url || prior.url,
       title: entry.title || prior.title,
+      pos: entry.pos || prior.pos,
+      ipa: entry.ipa || prior.ipa,
       contexts: mergeContexts(prior.contexts, entry.contexts),
       srs: mergeSrs(prior.srs, entry.srs),
     });
