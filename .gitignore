@@ -3,3 +3,4 @@ dist/
 .agents/
 skills-lock.json
 .superpowers/
+.DS_Store

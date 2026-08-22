@@ -23,16 +23,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Tab navigation ──────────────────────
   const navItems = document.querySelectorAll('.nav-item');
   const tabs = document.querySelectorAll('.tab');
+  const mobileNavSelect = document.getElementById('mobileNavSelect');
+
+  function switchTab(tabName) {
+    navItems.forEach(n => n.classList.toggle('active', n.dataset.tab === tabName));
+    tabs.forEach(t => t.classList.toggle('active', t.id === `tab-${tabName}`));
+    if (mobileNavSelect) mobileNavSelect.value = tabName;
+  }
 
   navItems.forEach(item => {
     item.addEventListener('click', (e) => {
       e.preventDefault();
-      navItems.forEach(n => n.classList.remove('active'));
-      tabs.forEach(t => t.classList.remove('active'));
-      item.classList.add('active');
-      document.getElementById(`tab-${item.dataset.tab}`).classList.add('active');
+      switchTab(item.dataset.tab);
     });
   });
+
+  if (mobileNavSelect) {
+    mobileNavSelect.addEventListener('change', (e) => switchTab(e.target.value));
+  }
 
   // ── Load settings ───────────────────────
   const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);

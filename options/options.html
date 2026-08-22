@@ -10,8 +10,22 @@
 
   <div class="flex min-h-screen">
 
-    <!-- ── Sidebar ───────────────────────────────────────────────── -->
-    <aside class="w-52 bg-base-100 border-r border-base-300 flex flex-col fixed top-0 left-0 bottom-0 z-10">
+    <!-- ── Mobile top bar（窄屏下替代侧边栏，< lg 显示） ──────────── -->
+    <div class="lg:hidden sticky top-0 z-20 bg-base-100 border-b border-base-300 px-4 py-3 flex items-center gap-3">
+      <i data-lucide="languages" class="w-5 h-5 text-primary shrink-0"></i>
+      <span class="font-bold text-base shrink-0">超级翻译</span>
+      <select id="mobileNavSelect" class="select select-bordered select-sm flex-1">
+        <option value="general">常规设置</option>
+        <option value="style">翻译样式</option>
+        <option value="shortcuts">快捷键</option>
+        <option value="sites">站点规则</option>
+        <option value="tts">朗读设置</option>
+        <option value="data">数据管理</option>
+      </select>
+    </div>
+
+    <!-- ── Sidebar（≥ lg 显示） ──────────────────────────────────── -->
+    <aside class="hidden lg:flex w-52 bg-base-100 border-r border-base-300 flex-col fixed top-0 left-0 bottom-0 z-10">
       <div class="px-5 py-4 border-b border-base-200 flex items-center gap-2">
         <i data-lucide="languages" class="w-5 h-5 text-primary"></i>
         <span class="font-bold text-base">超级翻译</span>
@@ -45,7 +59,7 @@
     </aside>
 
     <!-- ── Main content ───────────────────────────────────────────── -->
-    <main class="flex-1 ml-52 px-9 py-7 max-w-3xl">
+    <main class="flex-1 lg:ml-52 px-5 lg:px-9 py-5 lg:py-7 max-w-3xl">
 
       <!-- ═══════════════════ 常规 ═══════════════════ -->
       <section class="tab active" id="tab-general">
@@ -502,22 +516,29 @@
               <span class="label-text text-sm">启用 GitHub 同步</span>
             </label>
 
-            <div id="githubSyncSettings" class="flex flex-col gap-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-sm text-base-content/70" for="githubToken">Personal Access Token</label>
-                <input type="password" id="githubToken" placeholder="ghp_..." class="input input-bordered input-sm w-full max-w-sm" />
-                <a href="https://github.com/settings/tokens/new?scopes=gist&description=Super%20Immersive%20Translate" target="_blank" rel="noopener" class="text-xs link link-primary w-fit">
-                  去 GitHub 创建 Token（需要 gist 权限）
-                </a>
+            <div id="githubSyncSettings" class="flex flex-col gap-4">
+              <div class="flex flex-col gap-2">
+                <div class="text-xs font-semibold text-base-content/50">认证</div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-sm text-base-content/70" for="githubToken">Personal Access Token</label>
+                  <input type="password" id="githubToken" placeholder="ghp_..." class="input input-bordered input-sm w-full max-w-sm" />
+                  <a href="https://github.com/settings/tokens/new?scopes=gist&description=Super%20Immersive%20Translate" target="_blank" rel="noopener" class="text-xs link link-primary w-fit">
+                    去 GitHub 创建 Token（需要 gist 权限）
+                  </a>
+                </div>
               </div>
 
-              <label class="label cursor-pointer justify-start gap-3 px-0">
-                <input type="checkbox" id="githubSyncWordbook" class="checkbox checkbox-primary checkbox-sm" />
-                <span class="label-text text-sm">同步单词本</span>
-              </label>
+              <div class="flex flex-col gap-2">
+                <div class="text-xs font-semibold text-base-content/50">同步内容</div>
+                <label class="label cursor-pointer justify-start gap-3 px-0">
+                  <input type="checkbox" id="githubSyncWordbook" class="checkbox checkbox-primary checkbox-sm" />
+                  <span class="label-text text-sm">同步单词本</span>
+                </label>
+                <p class="text-xs text-base-content/40 -mt-1">翻译历史始终跟随总开关同步，单词本可单独关闭</p>
+              </div>
 
-              <div class="flex flex-col gap-1">
-                <label class="text-sm text-base-content/70">同步载体</label>
+              <div class="flex flex-col gap-2">
+                <div class="text-xs font-semibold text-base-content/50">同步载体</div>
                 <div class="flex items-center gap-4">
                   <label class="label cursor-pointer gap-2 px-0">
                     <input type="radio" name="githubSyncTargetType" id="githubSyncTargetGist" value="gist" class="radio radio-sm" />
@@ -528,22 +549,22 @@
                     <span class="label-text text-sm">指定仓库</span>
                   </label>
                 </div>
-              </div>
 
-              <div id="githubRepoFields" class="flex flex-col gap-2">
-                <div class="flex gap-2 flex-wrap">
-                  <input type="text" id="githubRepoOwner" placeholder="owner" class="input input-bordered input-sm w-32" />
-                  <input type="text" id="githubRepoName" placeholder="repo" class="input input-bordered input-sm w-32" />
-                  <input type="text" id="githubRepoBranch" placeholder="main" class="input input-bordered input-sm w-24" />
+                <div id="githubRepoFields" class="flex flex-col gap-2 mt-1">
+                  <div class="flex gap-2 flex-wrap">
+                    <input type="text" id="githubRepoOwner" placeholder="owner" class="input input-bordered input-sm w-32" />
+                    <input type="text" id="githubRepoName" placeholder="repo" class="input input-bordered input-sm w-32" />
+                    <input type="text" id="githubRepoBranch" placeholder="main" class="input input-bordered input-sm w-24" />
+                  </div>
+                  <input type="text" id="githubRepoPath" placeholder="translation-history.json" class="input input-bordered input-sm w-full max-w-sm" />
+                  <a href="https://github.com/settings/tokens/new?scopes=repo&description=Super%20Immersive%20Translate" target="_blank" rel="noopener" class="text-xs link link-primary w-fit">
+                    用仓库同步需要 repo 权限的 Token（Gist 只需要 gist 权限）
+                  </a>
                 </div>
-                <input type="text" id="githubRepoPath" placeholder="translation-history.json" class="input input-bordered input-sm w-full max-w-sm" />
-                <a href="https://github.com/settings/tokens/new?scopes=repo&description=Super%20Immersive%20Translate" target="_blank" rel="noopener" class="text-xs link link-primary w-fit">
-                  用仓库同步需要 repo 权限的 Token（Gist 只需要 gist 权限）
-                </a>
               </div>
 
-              <div class="flex flex-col gap-1">
-                <label class="text-sm text-base-content/70">同步方式</label>
+              <div class="flex flex-col gap-2">
+                <div class="text-xs font-semibold text-base-content/50">同步方式</div>
                 <div class="flex items-center gap-4 flex-wrap">
                   <label class="label cursor-pointer gap-2 px-0">
                     <input type="radio" name="githubSyncMode" id="githubSyncModeAuto" value="auto" class="radio radio-sm" />
@@ -557,6 +578,8 @@
                   </label>
                 </div>
               </div>
+
+              <div class="divider my-0"></div>
 
               <div class="flex items-center gap-3">
                 <button class="btn btn-outline btn-sm" id="githubSyncNowBtn">
@@ -609,7 +632,7 @@
           <div class="card-body p-5 gap-4">
             <h3 class="font-semibold text-sm">重置</h3>
             <p class="text-xs text-base-content/40 -mt-2">恢复所有设置为默认值（不影响单词本和翻译历史）</p>
-            <button class="btn btn-error btn-sm w-fit" id="resetBtn">
+            <button class="btn btn-error btn-outline btn-sm w-fit" id="resetBtn">
               <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
               恢复默认设置
             </button>
