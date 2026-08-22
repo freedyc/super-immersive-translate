@@ -14,7 +14,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["utils/translator.js", "content/selection.js", "content/content.js", "content/input-translate.js", "content/youtube.js"],
+      "js": ["utils/translator.js", "utils/tts.js", "content/selection.js", "content/content.js", "content/input-translate.js", "content/subtitle.js"],
       "run_at": "document_idle"
     }
   ],

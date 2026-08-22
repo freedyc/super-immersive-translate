@@ -1,14 +1,17 @@
-import './youtube.css';
+import './subtitle.css';
 import { translator } from '../utils/translator.js';
+import { SITE_ADAPTERS } from './subtitle-adapters.js';
 
 /**
- * YouTube Subtitle Translation - Super Immersive Translate
- * Detects YouTube captions and adds bilingual subtitles.
+ * Multi-site Subtitle Translation - Super Immersive Translate
+ * Detects live captions on the current site (via a matching adapter) and
+ * injects a bilingual translation line.
  */
 (function () {
   'use strict';
 
-  if (!location.hostname.includes('youtube.com')) return;
+  const adapter = SITE_ADAPTERS.find(a => a.hostIncludes.some(h => location.hostname.includes(h)));
+  if (!adapter) return; // 本任务范围内只有 youtube 一个适配器，等价于原来 youtube.js 的域名判断
 
   const TRANS_CLASS = 'sit-subtitle-translation';
   let observer = null;
@@ -22,7 +25,7 @@ import { translator } from '../utils/translator.js';
 
   function waitForCaptions() {
     const check = () => {
-      const container = document.querySelector('.ytp-caption-window-container');
+      const container = document.querySelector(adapter.containerSelector);
       if (container) {
         setupObserver(container);
         return;
@@ -70,7 +73,7 @@ import { translator } from '../utils/translator.js';
   }
 
   function processCaption() {
-    const segments = document.querySelectorAll('.ytp-caption-segment');
+    const segments = document.querySelectorAll(adapter.segmentSelector);
     if (segments.length === 0) {
       document.querySelectorAll('.' + TRANS_CLASS).forEach(el => el.remove());
       lastCaptionText = '';
@@ -81,10 +84,11 @@ import { translator } from '../utils/translator.js';
     segments.forEach(s => { text += s.textContent; });
     text = text.trim();
 
-    if (!text || text === lastCaptionText) return;
-    lastCaptionText = text;
+    const parsed = adapter.parseText ? adapter.parseText(text) : text;
+    if (!parsed || parsed === lastCaptionText) return;
+    lastCaptionText = parsed;
 
-    translateCaption(text);
+    translateCaption(parsed);
   }
 
   async function translateCaption(text) {
@@ -94,14 +98,12 @@ import { translator } from '../utils/translator.js';
         showTranslation(result);
       }
     } catch (e) {
-      console.error('[SIT] YouTube subtitle error:', e);
+      console.error('[SIT] Subtitle translation error:', e);
     }
   }
 
   function showTranslation(text) {
-    const captionWindow = document.querySelector(
-      '.ytp-caption-window-bottom, .ytp-caption-window-top, [class*="caption-window"]'
-    );
+    const captionWindow = document.querySelector(adapter.mountSelector);
     if (!captionWindow) return;
 
     let el = captionWindow.querySelector('.' + TRANS_CLASS);
