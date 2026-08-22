@@ -1,26 +1,26 @@
 import './subtitle.css';
 import { translator } from '../utils/translator.js';
+import { pick } from '../utils/defaults.js';
 import { SITE_ADAPTERS } from './subtitle-adapters.js';
 
-/**
- * Multi-site Subtitle Translation - Super Immersive Translate
- * Detects live captions on the current site (via a matching adapter) and
- * injects a bilingual translation line.
- */
 (function () {
   'use strict';
 
   const adapter = SITE_ADAPTERS.find(a => a.hostIncludes.some(h => location.hostname.includes(h)));
-  if (!adapter) return; // 本任务范围内只有 youtube 一个适配器，等价于原来 youtube.js 的域名判断
 
   const TRANS_CLASS = 'sit-subtitle-translation';
   let observer = null;
   let lastCaptionText = '';
   let translateTimer = null;
 
-  function init() {
+  function start() {
+    if (!adapter) return; // Task 4 会在这里加通用 cue 兜底分支
     waitForCaptions();
     listenForNavigation();
+  }
+
+  function stop() {
+    cleanup();
   }
 
   function waitForCaptions() {
@@ -115,9 +115,19 @@ import { SITE_ADAPTERS } from './subtitle-adapters.js';
     el.textContent = text;
   }
 
+  async function boot() {
+    const { subtitleTranslate } = await chrome.storage.sync.get(pick('subtitleTranslate'));
+    if (subtitleTranslate) start();
+
+    chrome.storage.onChanged.addListener((changes) => {
+      if (!changes.subtitleTranslate) return;
+      if (changes.subtitleTranslate.newValue) start(); else stop();
+    });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', boot);
   } else {
-    init();
+    boot();
   }
 })();

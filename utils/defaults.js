@@ -38,6 +38,9 @@ export const DEFAULTS = {
   selectionMode: 'icon',
   selectionEngines: ['google', 'lingva', 'libre'],
 
+  // subtitle translation
+  subtitleTranslate: true,
+
   // full-page behavior / style
   translationColor: '#9b59b6',
   hoverTranslate: false,

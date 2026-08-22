@@ -53,6 +53,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   $('translateConcurrency').value = settings.translateConcurrency;
   $('hoverTranslate').checked = settings.hoverTranslate;
   $('inputTranslate').checked = settings.inputTranslate;
+  $('subtitleTranslate').checked = settings.subtitleTranslate;
   $('selectionMode').value = settings.selectionMode;
   $('deeplKey').value = settings.deeplKey;
   $('customApiUrl').value = settings.customApiUrl;
@@ -196,7 +197,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const saveFields = [
     'engine', 'targetLang', 'displayMode', 'translateConcurrency', 'selectionMode',
-    'hoverTranslate', 'inputTranslate',
+    'hoverTranslate', 'inputTranslate', 'subtitleTranslate',
     'translationBold', 'translationShowBorder', 'siteMode', 'historyMaxItems'
   ];
   saveFields.forEach(id => {
@@ -465,6 +466,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       translationColor: getActiveColor(),
       hoverTranslate: $('hoverTranslate').checked,
       inputTranslate: $('inputTranslate').checked,
+      subtitleTranslate: $('subtitleTranslate').checked,
       selectionMode: $('selectionMode').value,
       selectionEngines: selEngines.length > 0 ? selEngines : ['google'],
       deeplKey: $('deeplKey').value,
