@@ -28,33 +28,38 @@ async function loadOrMigrate(): Promise<Omit<LearningState, 'loaded' | 'error'>>
     STORAGE_KEYS.words,
     STORAGE_KEYS.records,
     STORAGE_KEYS.legacyWordbook,
+    STORAGE_KEYS.migratedAt,
   ]);
 
   const words = (stored[STORAGE_KEYS.words] as Word[]) ?? [];
   const records = (stored[STORAGE_KEYS.records] as LearningRecord[]) ?? [];
   const legacy = (stored[STORAGE_KEYS.legacyWordbook] as WordEntry[]) ?? [];
+  const done = new Map(records.map((r) => [r.wordId, r]));
 
-  // 已经有新数据就直接用。只有「新数据为空但旧数据有内容」才迁移，
-  // 避免迁移把用户在新版本里的进度覆盖回去
-  if (words.length > 0 || records.length > 0) {
-    return { words, records: new Map(records.map((r) => [r.wordId, r])), migratedCount: 0 };
-  }
-
-  if (legacy.length === 0) {
-    return { words: [], records: new Map(), migratedCount: 0 };
+  // 判断迁移跑没跑过要看标记，不能看「words 是否为空」：划词面板现在直接写 words，
+  // 用户完全可能先在网页上收藏一个词、再第一次打开单词本页，
+  // 那时 words 非空但旧数据一条都还没迁过来，按旧判断会被永久跳过
+  if (stored[STORAGE_KEYS.migratedAt] || legacy.length === 0) {
+    return { words, records: done, migratedCount: 0 };
   }
 
   const result = migrateWordbook(legacy, records);
+  // 新表里已经有的词不被旧数据覆盖——那些是迁移之前新收藏的，内容更新
+  const have = new Set(words.map((w) => w.word.toLowerCase()));
+  const added = result.words.filter((w) => !have.has(w.word.toLowerCase()));
+  const addedRecords = result.records.filter((r) => !done.has(r.wordId));
+
   await chrome.storage.local.set({
-    [STORAGE_KEYS.words]: result.words,
-    [STORAGE_KEYS.records]: result.records,
+    [STORAGE_KEYS.words]: [...words, ...added],
+    [STORAGE_KEYS.records]: [...records, ...addedRecords],
+    [STORAGE_KEYS.migratedAt]: Date.now(),
     // 旧的 wordbook 键刻意保留不动，作为回滚退路
   });
 
   return {
-    words: result.words,
-    records: new Map(result.records.map((r) => [r.wordId, r])),
-    migratedCount: result.words.length,
+    words: [...words, ...added],
+    records: new Map([...records, ...addedRecords].map((r) => [r.wordId, r])),
+    migratedCount: added.length,
   };
 }
 

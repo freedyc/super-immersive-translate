@@ -4,6 +4,8 @@
  * 这里是单条生成，走独立的 fetch 请求，但复用同样的 key/模型设置。
  */
 import { Translator } from './translator.js';
+import { getWord, patchWord } from './learning/collect.ts';
+import { pickPhonetic, pickPos } from './learning/wordMeta.ts';
 
 const AI_ENGINES = ['openai', 'gemini', 'claude', 'ollama'];
 
@@ -262,7 +264,7 @@ export async function detectWordMeta(word, t) {
 
 /**
  * 单词收藏后的一次性异步收尾：按需补一条 AI 例句、按需补词类标签，
- * 直接读写 chrome.storage.local 里的 wordbook，不阻塞收藏本身。
+ * 直接读写统一的 words 表，不阻塞收藏本身。
  * @param {string} wordText
  * @param {boolean} hasRealContext - 这次保存后单词是否已经有真实例句上下文
  *   （有真实例句就不再额外生成 AI 例句，只在缺词类标签时单独轻量请求一次）
@@ -275,38 +277,42 @@ export async function enrichWordWithAi(wordText, hasRealContext) {
     const example = await generateExampleSentence(wordText, t);
     if (!example) return;
     await patchWord(wordText, (word) => {
-      word.contexts = [...(word.contexts || []), {
+      word.examples = [...word.examples, {
         sentence: example.sentence,
         translation: example.translation,
         tokens: example.tokens,
-        url: null,
-        title: 'AI 生成',
-        timestamp: Date.now(),
-        source: 'ai'
+        origin: 'ai',
+        timestamp: Date.now()
       }];
-      if (example.pos && !word.pos) word.pos = example.pos;
-      if (example.ipa && !word.ipa) word.ipa = example.ipa;
+      applyMeta(word, example);
     });
     return;
   }
 
-  const { wordbook = [] } = await chrome.storage.local.get('wordbook');
-  const existing = wordbook.find(w => w.text.toLowerCase() === wordText.toLowerCase());
-  if (!existing || (existing.pos && existing.ipa)) return;
+  const existing = await getWord(wordText);
+  if (!existing) return;
+  // 音标和词性都齐了就不用再调 AI
+  if (pickPhonetic(existing) && pickPos(existing)) return;
 
   const meta = await detectWordMeta(wordText, t);
   if (!meta) return;
-  await patchWord(wordText, (word) => {
-    if (meta.pos && !word.pos) word.pos = meta.pos;
-    if (meta.ipa && !word.ipa) word.ipa = meta.ipa;
-  });
+  await patchWord(wordText, (word) => applyMeta(word, meta));
 }
 
-async function patchWord(wordText, mutate) {
-  const { wordbook = [] } = await chrome.storage.local.get('wordbook');
-  const idx = wordbook.findIndex(w => w.text.toLowerCase() === wordText.toLowerCase());
-  if (idx < 0) return;
-  mutate(wordbook[idx]);
-  await chrome.storage.local.set({ wordbook });
-  chrome.runtime.sendMessage({ action: 'wordbookChanged' }).catch(() => {});
+/**
+ * 把 AI 给的音标/词性写进 Word。
+ *
+ * 音标进 phonetic 而不是 phoneticUS —— AI 没说自己给的是英音还是美音，
+ * 硬塞进美音字段是替数据做了它没有的断言（见 types/models.ts 的注释）。
+ * 词性挂到第一条释义上；一条释义都没有时不新建空释义，那会在词库里
+ * 显示成一个没有内容的词性徽章。
+ */
+function applyMeta(word, meta) {
+  if (meta.ipa && !pickPhonetic(word)) word.phonetic = meta.ipa;
+  if (meta.pos && !pickPos(word) && word.meanings.length > 0) {
+    word.meanings = [
+      { ...word.meanings[0], partOfSpeech: meta.pos },
+      ...word.meanings.slice(1)
+    ];
+  }
 }

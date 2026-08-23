@@ -4,10 +4,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Mic, Volume2, Sparkles, Copy, Star, X } from 'lucide-react';
 import { saveHistoryEntry } from '../../utils/history.js';
+import { collectWord, getWord } from '../../utils/learning/collect.ts';
 import { enrichWordWithAi, analyzeSentence } from '../../utils/example-sentence.js';
 import { POS_BADGE_CLASS } from '../../wordbook/lib/mastery.ts';
 import type { TabPropsWithNotify, SentenceAnalysis, SaveCandidate } from '../lib/types.ts';
-import type { WordEntry } from '../../types/models.ts';
 
 export function TextTab({ engine, sourceLang, targetLang, notify }: TabPropsWithNotify) {
   const [source, setSource] = useState('');
@@ -62,21 +62,14 @@ export function TextTab({ engine, sourceLang, targetLang, notify }: TabPropsWith
   const handleSaveWord = async () => {
     const data = lastSaveDataRef.current;
     if (!data) return;
-    const { wordbook = [] } = await chrome.storage.local.get('wordbook') as { wordbook?: WordEntry[] };
-    if (!wordbook.some((w) => w.text.toLowerCase() === data.source.toLowerCase())) {
-      await chrome.storage.local.set({
-        wordbook: [{
-          id: crypto.randomUUID(),
-          text: data.source,
-          translations: { [data.engine]: data.target },
-          known: false,
-          timestamp: Date.now(),
-        }, ...wordbook],
-      });
-      chrome.runtime.sendMessage({ action: 'wordbookChanged' }).catch(() => {});
-      // 这里收藏抓不到页面上下文，异步补一条 AI 例句 + 词性/音标
-      enrichWordWithAi(data.source, false);
-    }
+    const existing = await getWord(data.source);
+    await collectWord({
+      text: data.source,
+      translations: { [data.engine]: data.target },
+    });
+    // 这里收藏抓不到页面上下文，异步补一条 AI 例句 + 词性/音标。
+    // 已经收藏过的不重复补，否则每点一次都会多生成一条例句
+    if (!existing) enrichWordWithAi(data.source, false);
     setSaved(true);
   };
 

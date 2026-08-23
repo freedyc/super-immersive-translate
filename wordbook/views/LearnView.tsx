@@ -13,6 +13,7 @@ import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Familiarity, LearningRecord, Word } from '../../types/models.ts';
 import { SpeakButton } from '../components/SpeakButton.tsx';
 import { TaggedSentence } from '../components/TaggedSentence.tsx';
+import { formatPhonetic, pickPhonetic } from '../../utils/learning/wordMeta.ts';
 
 /** 四档熟悉度。顺序即从生疏到熟练，对应键盘 1–4 */
 const LEVELS: { grade: Familiarity; label: string; cls: string }[] = [
@@ -97,7 +98,7 @@ export function LearnView({
 
   const primary = word.meanings[0];
   const example = word.examples[0];
-  const phonetic = word.phonetic || word.phoneticUS || word.phoneticUK;
+  const phonetic = formatPhonetic(pickPhonetic(word));
   const hasDetail = word.meanings.length > 1 || word.examples.length > 1;
 
   return (

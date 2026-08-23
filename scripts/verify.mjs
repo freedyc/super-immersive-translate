@@ -21,6 +21,7 @@ import {
 } from '../utils/learning/srsService.ts';
 import { buildTodayQueue, canRender, estimateMinutes, DEFAULT_STUDY_CONFIG } from '../utils/learning/queue.ts';
 import { isResumable } from '../utils/learning/session.ts';
+import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 
 let pass = 0;
 let fail = 0;
@@ -303,6 +304,60 @@ section('今日队列');
     dailyNewLimit: 10, dailyReviewLimit: 0, enabledExercises: ['en2zh'],
   });
   check('暂停的词不进队列', queue.items.length === 0);
+}
+
+// ── 单一存储 ────────────────────────────────────────────────────────────────
+// 「我的词库没有音标」的根因：划词面板写旧的 wordbook 表，词库页读新的 words 表，
+// 事后补的音标补进了旧表。写入路径必须只有一条。
+section('存储：不能再有第二条写入路径');
+{
+  const { readFileSync } = await import('node:fs');
+  // 允许读旧表的只有两处：迁移，和 github-sync 里未迁移设备的兼容路径
+  const ALLOWED = ['utils/github-sync.js', 'wordbook/lib/useLearning.ts', 'utils/learning/repository.ts'];
+  const SUSPECTS = [
+    'content/selection.js', 'utils/example-sentence.js',
+    'sandbox/tabs/TextTab.tsx', 'popup/App.tsx',
+  ];
+  for (const f of SUSPECTS) {
+    const src = readFileSync(f, 'utf8');
+    check(`${f} 不再读写旧的 wordbook 表`,
+      !/storage\.local\.(get|set)\([^)]*['"`]wordbook['"`]/.test(src)
+      && !/\{\s*wordbook\s*[=:]/.test(src));
+  }
+  check('允许名单里的文件确实存在', ALLOWED.every((f) => {
+    try { readFileSync(f, 'utf8'); return true; } catch { return false; }
+  }));
+}
+
+// ── 单词展示口径 ────────────────────────────────────────────────────────────
+section('音标/词性：六处渲染必须同一个口径');
+{
+  const w = (extra) => ({ id: 'x', word: 'test', meanings: [], examples: [], source: 'ai', addedAt: 0, ...extra });
+
+  check('英美标注过的音标优先于未标注的',
+    pickPhonetic(w({ phonetic: '/a/', phoneticUS: '/b/' })) === '/b/');
+  check('没有英美标注时用中性的 phonetic',
+    pickPhonetic(w({ phonetic: '/a/' })) === '/a/');
+  check('一条都没有时返回空串（不是 undefined，渲染要能直接判真假）',
+    pickPhonetic(w({})) === '');
+
+  check('裸音标补上斜杠', formatPhonetic('tɛst') === '/tɛst/');
+  check('已经有斜杠的不重复包', formatPhonetic('/tɛst/') === '/tɛst/');
+  check('方括号形式原样保留', formatPhonetic('[tɛst]') === '[tɛst]');
+  check('空串仍是空串', formatPhonetic('   ') === '');
+
+  check('词性取第一条有标注的',
+    pickPos(w({ meanings: [{ partOfSpeech: '', definitions: ['x'] },
+                           { partOfSpeech: '名词', definitions: ['y'] }] })) === '名词');
+  check('没有词性时返回空串，不编一个', pickPos(w({})) === '');
+
+  const ctx = { sentence: 'real', origin: 'context', timestamp: 2 };
+  const ai = { sentence: 'made up', origin: 'ai', timestamp: 3 };
+  check('真实语境例句优先于 AI 生成（这是本产品的差异点）',
+    pickExample(w({ examples: [ai, ctx] })).sentence === 'real');
+  check('只有 AI 例句时取最新一条',
+    pickExample(w({ examples: [{ ...ai, sentence: 'old' }, ai] })).sentence === 'made up');
+  check('没有例句时返回 null', pickExample(w({})) === null);
 }
 
 // ── daisyUI 版本卫生 ────────────────────────────────────────────────────────

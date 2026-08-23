@@ -44,6 +44,10 @@ export const STORAGE_KEYS = {
   records: 'learningRecords',
   /** 2.1 之前的单词本，迁移后保留不动作为回滚退路 */
   legacyWordbook: 'wordbook',
+  /** 迁移完成的时间戳。有它才说明迁移跑过——不能用「words 非空」代替：
+   *  用户可能先在网页上收藏了一个词（划词面板直接写 words），
+   *  再第一次打开单词本页，那时 words 非空但旧数据一条都没迁过来 */
+  migratedAt: 'wordbookMigratedAt',
 } as const;
 
 /** 从 chrome.storage.local 读一个数组键，任何异常都退化成空数组而不是让页面崩掉 */

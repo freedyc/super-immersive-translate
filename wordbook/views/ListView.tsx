@@ -10,6 +10,7 @@ import { Translator } from '../../utils/translator.js';
 import { generateExampleSentence } from '../../utils/example-sentence.js';
 import { deriveStatus, masteryPercent, STATUS_LABEL } from '../../utils/learning/srsService.ts';
 import { SpeakButton } from '../components/SpeakButton.tsx';
+import { WordMeta } from '../../components/WordMeta.tsx';
 import { WordDetailDrawer } from '../components/WordDetailDrawer.tsx';
 import type { LearningRecord, LearningStatus, Word } from '../../types/models.ts';
 
@@ -35,7 +36,6 @@ function WordCard({
     : (status === 'difficult' ? 'progress-error' : 'progress-primary');
 
   const example = word.examples[0];
-  const phonetic = word.phonetic || word.phoneticUS || word.phoneticUK;
 
   const handleRegenerate = async () => {
     setBusy(true);
@@ -51,18 +51,8 @@ function WordCard({
       <div className="card-body gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
           {/* 点词头打开详情抽屉。整卡可点会跟卡内的发音/删除按钮抢事件 */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              className="font-bold text-lg text-base-content link link-hover text-left"
-              title="查看详情"
-              onClick={() => onOpen(word)}
-            >
-              {word.word}
-            </button>
-            {phonetic && <span className="text-xs text-base-content/40 font-mono">{phonetic}</span>}
-          </div>
+          <WordMeta word={word} onWordClick={() => onOpen(word)} />
           <div className="flex gap-1 shrink-0">
-            <SpeakButton text={word.word} lang="en-US" title="发音" />
             <button
               className="btn btn-ghost btn-xs btn-circle"
               title="AI 生成新例句 / 补全音标词性"

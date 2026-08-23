@@ -11,6 +11,7 @@ import { Check, SkipForward, ArrowRight, Volume2, VolumeX, Loader2, PenLine } fr
 import { shuffled } from '../lib/mastery.ts';
 import { EmptyState } from '../components/EmptyState.tsx';
 import type { Word } from '../../types/models.ts';
+import { formatPhonetic, pickPhonetic } from '../../utils/learning/wordMeta.ts';
 
 export function QuizView({ words, onGoToLibrary }: {
   words: Word[];
@@ -74,7 +75,7 @@ export function QuizView({ words, onGoToLibrary }: {
   };
 
   const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
-  const phonetic = current?.phonetic || current?.phoneticUS || current?.phoneticUK;
+  const phonetic = current ? formatPhonetic(pickPhonetic(current)) : '';
 
   if (words.length === 0) {
     return (

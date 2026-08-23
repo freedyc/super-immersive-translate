@@ -7,6 +7,7 @@ import { TaggedSentence } from '../components/TaggedSentence.tsx';
 import { EmptyState } from '../components/EmptyState.tsx';
 import { SpeakButton } from '../components/SpeakButton.tsx';
 import type { Word } from '../../types/models.ts';
+import { formatPhonetic, pickPhonetic } from '../../utils/learning/wordMeta.ts';
 
 export function CardsView({ words, onGoToLibrary }: {
   words: Word[];
@@ -37,7 +38,7 @@ export function CardsView({ words, onGoToLibrary }: {
   const word = words[index];
   const primary = word?.meanings[0];
   const example = word?.examples[0];
-  const phonetic = word?.phonetic || word?.phoneticUS || word?.phoneticUK;
+  const phonetic = word ? formatPhonetic(pickPhonetic(word)) : '';
 
   if (words.length === 0) {
     return (

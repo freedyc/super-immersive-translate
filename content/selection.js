@@ -3,6 +3,8 @@ import { Translator } from '../utils/translator.js';
 import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
 import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sentence.js';
+import { collectWord, getWord } from '../utils/learning/collect.ts';
+import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -156,9 +158,7 @@ import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sent
 
   async function checkAlreadySaved(text, btn) {
     if (!btn) return;
-    const { wordbook = [] } = await chrome.storage.local.get('wordbook');
-    const exists = wordbook.some(w => w.text.toLowerCase() === text.toLowerCase());
-    if (exists) {
+    if (await getWord(text)) {
       btn.textContent = '✅';
       btn.title = '已收藏';
     }
@@ -170,7 +170,8 @@ import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sent
   }
 
   function renderDictionaryInfo(els, ipa, pos, sentence, translation) {
-    if (ipa && els.ipaEl) { els.ipaEl.textContent = ipa; els.ipaEl.style.display = ''; }
+    // 音标带不带方括号在数据里不统一，显示时统一补齐（与各 React 页面同一套规则）
+    if (ipa && els.ipaEl) { els.ipaEl.textContent = formatPhonetic(ipa); els.ipaEl.style.display = ''; }
     if (pos && els.posEl) { els.posEl.textContent = pos; els.posEl.style.display = ''; }
     if (sentence && els.exampleWrap) {
       if (els.enTextEl) els.enTextEl.textContent = sentence;
@@ -185,12 +186,14 @@ import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sent
   async function loadDictionaryInfo(sourceText, els) {
     if (!isSingleWord(sourceText)) return;
 
-    const { wordbook = [] } = await chrome.storage.local.get('wordbook');
-    const existing = wordbook.find(w => w.text.toLowerCase() === sourceText.toLowerCase());
+    const existing = await getWord(sourceText);
     if (existing) {
-      const ctx = existing.contexts?.length ? existing.contexts[existing.contexts.length - 1] : null;
-      renderDictionaryInfo(els, existing.ipa, existing.pos, ctx?.sentence, ctx?.translation);
-      return;
+      const ex = pickExample(existing);
+      renderDictionaryInfo(
+        els, pickPhonetic(existing), pickPos(existing), ex?.sentence, ex?.translation,
+      );
+      // 已收藏但还缺音标/词性（AI 当时没配好或调用失败），趁这次打开补一次
+      if (pickPhonetic(existing) && pickPos(existing)) return;
     }
 
     const t = new Translator();
@@ -198,6 +201,10 @@ import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sent
     const generated = await generateExampleSentence(sourceText, t);
     if (!generated) return;
     renderDictionaryInfo(els, generated.ipa, generated.pos, generated.sentence, generated.translation);
+    // 已收藏的词顺手把补到的音标/词性写回去，否则下次打开还是空的
+    if (existing) {
+      await enrichWordWithAi(sourceText, true);
+    }
   }
 
   function renderPanel(sourceText, engineResults) {
@@ -301,39 +308,18 @@ import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sent
         }
       });
 
-      const word = {
-        id: crypto.randomUUID(),
+      // 写进统一的 words 表（collectWord 负责去重、追加语境、保留已有释义）。
+      // 旧的 wordbook 键不再写——两张表各写各的，正是「词库里没有音标」的成因
+      const saved = await collectWord({
         text: sourceText,
         translations,
+        sentence: currentSentence || undefined,
         url: window.location.href,
         title: document.title,
-        timestamp: Date.now()
-      };
+      });
 
-      const newContext = currentSentence
-        ? [{ sentence: currentSentence, url: window.location.href, title: document.title, timestamp: Date.now() }]
-        : [];
-
-      // Save to storage
-      const { wordbook = [] } = await chrome.storage.local.get('wordbook');
-      // Avoid duplicates
-      const exists = wordbook.findIndex(w => w.text.toLowerCase() === sourceText.toLowerCase());
-      let finalContexts;
-      if (exists >= 0) {
-        word.id = wordbook[exists].id || word.id; // 更新已有条目时保留原 id，避免不必要地重新生成
-        const existingContexts = wordbook[exists].contexts || [];
-        finalContexts = [...existingContexts, ...newContext];
-        wordbook[exists] = { ...wordbook[exists], ...word, contexts: finalContexts };
-      } else {
-        finalContexts = newContext;
-        word.contexts = finalContexts;
-        wordbook.unshift(word);
-      }
-      await chrome.storage.local.set({ wordbook });
-      chrome.runtime.sendMessage({ action: 'wordbookChanged' }).catch(() => {});
-
-      // 没有真实例句就用 AI 补一个；有真实例句就只在缺词类标签时轻量识别一次
-      enrichWordWithAi(sourceText, finalContexts.length > 0);
+      // 没有真实例句就用 AI 补一个；有真实例句就只在缺音标/词性时轻量识别一次
+      enrichWordWithAi(sourceText, saved.examples.some(e => e.origin === 'context'));
 
       // 已经真的存进单词本了，保持"已收藏"状态，不再像临时提示那样几秒后跳回去
       btn.textContent = '✅';

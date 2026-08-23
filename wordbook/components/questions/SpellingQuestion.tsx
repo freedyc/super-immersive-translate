@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Familiarity, Word } from '../../../types/models.ts';
 import { EXERCISE_LABEL, definitionsOf } from '../../lib/questions.ts';
 import { AnswerFeedback } from '../AnswerFeedback.tsx';
+import { formatPhonetic, pickPhonetic } from '../../../utils/learning/wordMeta.ts';
 
 interface Props {
   word: Word;
@@ -36,7 +37,7 @@ export function SpellingQuestion({ word, onGrade, onReveal }: Props) {
   };
 
   const meanings = definitionsOf(word);
-  const phonetic = word.phonetic || word.phoneticUS || word.phoneticUK;
+  const phonetic = formatPhonetic(pickPhonetic(word));
 
   return (
     <div className="card bg-base-100 shadow-sm rounded-xl mb-4">

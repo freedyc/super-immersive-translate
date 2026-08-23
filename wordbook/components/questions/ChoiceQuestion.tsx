@@ -11,6 +11,7 @@ import type { Familiarity, Word } from '../../../types/models.ts';
 import { buildChoices, EXERCISE_LABEL, primaryDefinition } from '../../lib/questions.ts';
 import { AnswerFeedback } from '../AnswerFeedback.tsx';
 import { SpeakButton } from '../SpeakButton.tsx';
+import { formatPhonetic, pickPhonetic } from '../../../utils/learning/wordMeta.ts';
 
 interface Props {
   word: Word;
@@ -64,7 +65,7 @@ export function ChoiceQuestion({ word, pool, mode, onGrade }: Props) {
   });
 
   const prompt = mode === 'en2zh' ? word.word : primaryDefinition(word);
-  const phonetic = word.phonetic || word.phoneticUS || word.phoneticUK;
+  const phonetic = formatPhonetic(pickPhonetic(word));
 
   return (
     <div className="card bg-base-100 shadow-sm rounded-xl mb-4">

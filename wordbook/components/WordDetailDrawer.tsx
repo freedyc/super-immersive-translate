@@ -15,6 +15,8 @@ import {
 } from '../../utils/learning/srsService.ts';
 import { EXERCISE_LABEL } from '../lib/questions.ts';
 import { SpeakButton } from './SpeakButton.tsx';
+import { WordMeta } from '../../components/WordMeta.tsx';
+import { formatPhonetic } from '../../utils/learning/wordMeta.ts';
 import { TaggedSentence } from './TaggedSentence.tsx';
 
 const EXERCISES: ExerciseType[] = ['en2zh', 'zh2en', 'listening', 'spelling'];
@@ -68,18 +70,15 @@ export function WordDetailDrawer({ word, record, onClose }: {
         {word && (
           <div className="flex flex-col gap-5 p-5">
             <div className="flex items-start justify-between gap-2">
+              {/* 英美双标都有时单独列一行，只有一条时 WordMeta 已经显示过了 */}
               <div className="flex flex-col gap-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-2xl font-bold break-words">{word.word}</h2>
-                  <SpeakButton text={word.word} lang="en-US" title="发音" size="sm" />
-                </div>
-                <div className="flex gap-3 text-xs font-mono text-base-content/50 flex-wrap">
-                  {word.phoneticUK && <span>英 {word.phoneticUK}</span>}
-                  {word.phoneticUS && <span>美 {word.phoneticUS}</span>}
-                  {!word.phoneticUK && !word.phoneticUS && word.phonetic && (
-                    <span>{word.phonetic}</span>
-                  )}
-                </div>
+                <WordMeta word={word} size="lg" showMissingHint />
+                {word.phoneticUK && word.phoneticUS && (
+                  <div className="flex gap-3 text-xs font-mono text-base-content/50 flex-wrap">
+                    <span>英 {formatPhonetic(word.phoneticUK)}</span>
+                    <span>美 {formatPhonetic(word.phoneticUS)}</span>
+                  </div>
+                )}
               </div>
               <button className="btn btn-ghost btn-sm btn-circle shrink-0" onClick={onClose}>
                 <X className="w-4 h-4" />

@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { DEFAULTS } from '../utils/defaults.js';
-import { isDue, deserializeCard } from '../utils/srs.js';
-import type { WordEntry, ReviewMode } from '../types/models.ts';
+import { countDueWords } from '../utils/learning/queue.ts';
+import type { LearningRecord, Word } from '../types/models.ts';
 // 起别名避开跟 lucide-react 的 Settings 图标组件重名
 import type { Settings as SettingsShape } from '../options/lib/types.ts';
 
@@ -75,19 +75,15 @@ export function App() {
     })();
   }, []);
 
-  // 待复习徽章：只数"学过且到期"的，跟单词本默认队列口径一致
+  // 待复习徽章：只数"学过且到期"的**单词**（跨题型去重），跟单词本首页同一个口径。
+  // 读的是 2.1 的 words + learningRecords，不再是旧的 wordbook 表
   useEffect(() => {
-    chrome.storage.local.get('wordbook').then(({ wordbook = [] }) => {
-      const now = new Date();
-      let count = 0;
-      (wordbook as WordEntry[]).forEach((w) => {
-        (['recall', 'recognition'] as ReviewMode[]).forEach((mode) => {
-          const raw = w.srs?.[mode];
-          if (!raw) return;
-          if (isDue(deserializeCard(raw), now)) count++;
-        });
-      });
-      setDueCount(count);
+    chrome.storage.local.get(['words', 'learningRecords']).then((stored) => {
+      const words = (stored.words as Word[]) ?? [];
+      const records = new Map(
+        ((stored.learningRecords as LearningRecord[]) ?? []).map((r) => [r.wordId, r]),
+      );
+      setDueCount(countDueWords(words, records));
     });
   }, []);
 
