@@ -6,6 +6,8 @@ class TTSManager {
     this.audioElement = new Audio();
     /** 原始设置；引擎和音色按语种在 speak() 时解析 */
     this.settings = null;
+    /** init() 的 in-flight Promise。speak() 等它，调用方不必记得先 init() */
+    this.ready = null;
     
     // Browser settings
     this.browserVoiceURI = '';
@@ -24,7 +26,18 @@ class TTSManager {
     this.playToken = 0;
   }
 
-  async init() {
+  /**
+   * 读取设置。可以反复调用——设置变更时会重新读一次。
+   *
+   * 返回同一个 in-flight Promise，避免页面刚打开时几个发音按钮
+   * 各触发一次 storage 读取。
+   */
+  init() {
+    this.ready = this._loadSettings();
+    return this.ready;
+  }
+
+  async _loadSettings() {
     const settings = await chrome.storage.sync.get(pick(
       'ttsEngine', 'ttsBrowserVoiceURI', 'ttsEngineEn', 'ttsEngineZh',
       'ttsBrowserVoiceEn', 'ttsBrowserVoiceZh', 'ttsBrowserRate', 'ttsBrowserPitch',
@@ -75,6 +88,11 @@ class TTSManager {
    */
   async speak(text, lang, override = {}) {
     if (!text) return;
+    // 懒初始化。此前单词本页只 import 了本文件、从不调用 init()，
+    // 于是那一页的发音永远用构造函数默认值——改设置完全不生效。
+    // 让 speak() 自己保证就绪，比要求每个调用方都记得 init() 可靠
+    if (!this.ready) this.init();
+    await this.ready;
     this.stop();
     const token = this.playToken;
 
@@ -185,4 +203,19 @@ class TTSManager {
 
 }
 
-window.ttsManager = new TTSManager();
+const manager = new TTSManager();
+window.ttsManager = manager;
+
+// 设置改了就重读。没有这个监听，已经打开的页面会一直用旧配置——
+// 用户在选项页改完引擎，回到单词本点喇叭还是老声音，且没有任何迹象说明为什么。
+// 项目里其他跨页面状态（主题、单词本、历史）都是这么同步的。
+// 监听里认准 manager 这个实例，不走 window.ttsManager——后者可能被替换掉
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'sync') return;
+  const touchesTts = Object.keys(changes).some(
+    (k) => k.startsWith('tts') || k === 'openaiKey' || k === 'openaiUrl',
+  );
+  if (touchesTts) manager.init();
+});
+
+export { TTSManager };

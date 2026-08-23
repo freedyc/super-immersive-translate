@@ -75,6 +75,12 @@ good Chinese and English), `youdao` (free, keyless, human recordings, **English 
 Chinese requests return 500), `openai` (needs a key). `speak()` downgrades to `browser`
 when the chosen engine cannot handle the language or has no key, rather than failing.
 
+`speak()` initialises itself and `utils/tts.js` re-reads settings on
+`chrome.storage.onChanged`. Both matter: the wordbook page only ever imported the module
+and called `speak()` directly, so without lazy init it silently used constructor defaults
+and no TTS setting ever applied there; and without the listener an already-open page keeps
+the settings it started with, so changing the engine in options appears to do nothing.
+
 Network audio is fetched **in the service worker** (`ttsFetch`) and returned as a data URL.
 A content script's own cross-origin fetch is bound by the host page's CORS — extension
 `host_permissions` do not apply there — and a blob URL made in the worker is dead in any

@@ -502,6 +502,69 @@ section('朗读引擎：能力声明与分段');
   check('空文本得到空数组', chunkText('   ', 180).length === 0);
 }
 
+section('朗读：设置改了要立刻生效');
+{
+  // 真跑一遍 TTSManager，只把 chrome / window 的相关部分换成假的。
+  // 这个 bug（单词本页从不 init()，喇叭永远用默认设置）静态检查看不出来
+  const listeners = [];
+  const store = {
+    ttsEngineEn: 'google', ttsEngineZh: 'google',
+    ttsBrowserRate: '1.0', ttsBrowserPitch: '1.0',
+  };
+  const spoken = [];
+
+  globalThis.chrome = {
+    storage: {
+      sync: { get: async (defaults) => ({ ...defaults, ...store }) },
+      onChanged: { addListener: (fn) => listeners.push(fn) },
+    },
+    runtime: {
+      getURL: (u) => u,
+      // 网络引擎：不真发请求，只记下用的是哪个引擎
+      sendMessage: async (msg) => {
+        spoken.push(msg.engine);
+        return { dataUrl: 'data:audio/mpeg;base64,AAAA' };
+      },
+    },
+  };
+  globalThis.window = {
+    speechSynthesis: {
+      cancel() {}, speaking: false, getVoices: () => [],
+      // 退回浏览器语音时也要记一笔，否则「设置没生效」表现成 shim 崩溃，
+      // 断言根本跑不到
+      speak(u) { spoken.push('browser'); queueMicrotask(() => u.onend?.()); },
+    },
+  };
+  globalThis.Audio = class {
+    constructor() { this.paused = true; this.currentTime = 0; }
+    play() { queueMicrotask(() => this.onended?.()); return Promise.resolve(); }
+  };
+  globalThis.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; } };
+
+  await import('../utils/tts.js');
+  // 用模块建好的那个单例——设置变更监听绑的就是它
+  const tts = globalThis.window.ttsManager;
+
+  // 从不调用 init()，直接 speak()——这正是单词本页的用法
+  await tts.speak('hello', 'en-US');
+  check('speak() 自己保证设置已就绪（调用方不必先 init）',
+    spoken[0] === 'google', `实际用了 ${spoken[0]}`);
+
+  // 用户在选项页改了引擎
+  store.ttsEngineEn = 'youdao';
+  check('注册了设置变更监听', listeners.length > 0);
+  listeners.forEach((fn) => fn({ ttsEngineEn: { newValue: 'youdao' } }, 'sync'));
+  await tts.ready;
+  await tts.speak('hello', 'en-US');
+  check('改完设置后立刻用新引擎，不是旧的',
+    spoken[1] === 'youdao', `实际用了 ${spoken[1]}`);
+
+  // 与朗读无关的设置变更不该白读一次存储
+  const before = listeners.length;
+  listeners.forEach((fn) => fn({ targetLang: { newValue: 'ja' } }, 'sync'));
+  check('无关设置变更被忽略', before === listeners.length);
+}
+
 section('朗读：中英文分开配置');
 {
   const { resolveTts } = await import('../utils/tts-engines.js');
