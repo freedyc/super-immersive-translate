@@ -4,3 +4,4 @@ dist/
 skills-lock.json
 .superpowers/
 .DS_Store
+release/
