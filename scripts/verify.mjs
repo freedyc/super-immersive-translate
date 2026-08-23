@@ -306,6 +306,48 @@ section('今日队列');
   check('暂停的词不进队列', queue.items.length === 0);
 }
 
+// ── 浮层隔离 ────────────────────────────────────────────────────────────────
+// 浮层（划词面板、进度条、输入气泡、字幕兜底）活在 Shadow DOM 里，宿主页 CSS
+// 影响不到；双语译文和字幕译文必须跟宿主内容一起排版，只能留在宿主 DOM。
+// 这条边界一旦模糊，浮层就会在带激进 CSS 重置的站点上散架。
+section('内容脚本：浮层进影子树，随文内容留宿主 DOM');
+{
+  const { readFileSync } = await import('node:fs');
+
+  // 只有这些类可以出现在注入宿主页面的样式表里——它们都必须跟正文一起流动
+  const HOST_DOM_ONLY = new Set([
+    'sit-translation', 'sit-original', 'sit-wrapper',
+    'sit-hover-highlight', 'sit-subtitle-translation',
+  ]);
+  for (const f of ['content/content.css', 'content/subtitle.css']) {
+    const classes = [...new Set(
+      [...readFileSync(f, 'utf8').matchAll(/\.(sit-[a-z-]+)/g)].map((m) => m[1]),
+    )];
+    const stray = classes.filter((c) => !HOST_DOM_ONLY.has(c));
+    check(`${f} 只含必须留在宿主 DOM 的类`, stray.length === 0,
+      stray.length ? `浮层样式应移到 overlay.css：${stray.join(', ')}` : '');
+  }
+
+  // 副作用导入会被 crxjs 注入到宿主页面，浮层样式必须走 ?inline 进影子树
+  for (const f of ['content/selection.js', 'content/content.js',
+                   'content/input-translate.js', 'content/subtitle.js']) {
+    const src = readFileSync(f, 'utf8');
+    const sideEffect = [...src.matchAll(/^import\s+['"]\.\/([a-z-]+\.css)['"]/gm)]
+      .map((m) => m[1])
+      .filter((name) => name !== 'content.css' && name !== 'subtitle.css');
+    check(`${f} 没有把浮层样式副作用导入（会漏进宿主页）`, sideEffect.length === 0,
+      sideEffect.join(', '));
+  }
+
+  // 事件穿出影子树时 target 会重定向成 host，closest 找不到面板，
+  // 「点面板内部」会被判成「点了外面」——面板每点一下就关
+  const sel = readFileSync('content/selection.js', 'utf8');
+  check('划词面板的外部点击判断用 composedPath，不用 target.closest',
+    !/target\.closest\(\s*['"]\.['"]\s*\+\s*(PANEL|ICON)_CLASS/.test(sel));
+  check('划词浮层挂在影子根上，不挂 document.body',
+    !/document\.body\.appendChild/.test(sel));
+}
+
 // ── 单一存储 ────────────────────────────────────────────────────────────────
 // 「我的词库没有音标」的根因：划词面板写旧的 wordbook 表，词库页读新的 words 表，
 // 事后补的音标补进了旧表。写入路径必须只有一条。

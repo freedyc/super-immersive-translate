@@ -40,8 +40,32 @@ each a thin `*.html` shell mounting `main.tsx` → `App.tsx`. They keep using
 single place daisyUI themes and the global font stack are set (add a theme there **and**
 in `utils/theme.js`'s `AVAILABLE_THEMES`). Use daisyUI 5 color variables
 (`var(--color-primary)`, `--color-success`, etc.) — not the daisyUI 4 short names
-(`var(--p)`). The injected `content/*.css` (full-page/selection/subtitle) is deliberately
-hand-written, not Tailwind, to avoid polluting host pages.
+(`var(--p)`). Injected content-script CSS is hand-written, not Tailwind — see below.
+
+**Content-script UI is split by whether it must flow with host content.** This split is
+the rule; hand-written CSS is a consequence of it, not the point.
+
+- **Overlays** — selection panel and trigger icon, the full-page progress bar, the input
+  tooltip, the subtitle fallback caption — live in a **Shadow DOM** root
+  (`content/shadow-ui.js`, one shared root, `all: initial` on the host). Their styles are
+  in `content/selection.css` and `content/overlay.css`, imported with **`?inline`** so the
+  text lands inside the shadow tree. Never import them for side effects: `@crxjs` would
+  inject them into the host page and the isolation is gone. Two consequences to remember:
+  document-level handlers must test `isInsideUi(event)` (`composedPath()`), because an
+  event leaving a shadow tree retargets to the host and `e.target.closest('.sit-panel')`
+  silently becomes null — the panel then closes on every click inside itself; and
+  `document.querySelector` cannot see overlay elements, so hold references instead.
+- **In-flow markup** — `.sit-translation` / `.sit-original` / `.sit-wrapper` /
+  `.sit-hover-highlight` / `.sit-subtitle-translation` — must sit in the host DOM to lay
+  out next to the text it translates, so it cannot be shadow-rooted. It stays in
+  `content/content.css` + `content/subtitle.css` (page-injected), keeps the `sit-` prefix,
+  and accepts that host CSS can reach it. `npm run verify` asserts these two files contain
+  only those five classes; anything else belongs in `overlay.css`.
+
+React is **not** used in content scripts. The reason is payload, not isolation: the
+bundle is injected into every page visited (`selection.js` is ~6 kB gzip today, and
+react+react-dom would add ~45 kB). Shadow DOM would make it safe — it is still not worth
+it.
 
 **MUI is used sparingly and on purpose.** `utils/mui-theme.tsx` bridges MUI's palette to
 daisyUI's CSS variables and follows `data-theme`, and it deliberately does **not** render

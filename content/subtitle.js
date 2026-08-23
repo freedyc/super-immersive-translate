@@ -2,6 +2,8 @@ import './subtitle.css';
 import { translator } from '../utils/translator.js';
 import { pick } from '../utils/defaults.js';
 import { SITE_ADAPTERS } from './subtitle-adapters.js';
+import overlayCss from './overlay.css?inline';
+import { getUiRoot } from './shadow-ui.js';
 
 (function () {
   'use strict';
@@ -235,18 +237,21 @@ import { SITE_ADAPTERS } from './subtitle-adapters.js';
     }
   }
 
+  // 浮层在影子树里，document.querySelector 找不到它，用模块级引用持有
+  let cueOverlay = null;
+
   function showCueOverlay(text) {
-    let el = document.querySelector('.' + OVERLAY_CLASS);
-    if (!el) {
-      el = document.createElement('div');
-      el.className = OVERLAY_CLASS;
-      document.body.appendChild(el);
+    if (!cueOverlay) {
+      cueOverlay = document.createElement('div');
+      cueOverlay.className = OVERLAY_CLASS;
+      getUiRoot(overlayCss).appendChild(cueOverlay);
     }
-    el.textContent = text;
+    cueOverlay.textContent = text;
   }
 
   function removeCueOverlay() {
-    document.querySelectorAll('.' + OVERLAY_CLASS).forEach(el => el.remove());
+    cueOverlay?.remove();
+    cueOverlay = null;
   }
 
   async function boot() {

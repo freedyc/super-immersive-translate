@@ -1,4 +1,6 @@
 import './content.css';
+import overlayCss from './overlay.css?inline';
+import { getUiRoot } from './shadow-ui.js';
 import { translator } from '../utils/translator.js';
 import { DEFAULTS, pick } from '../utils/defaults.js';
 
@@ -265,8 +267,10 @@ import { DEFAULTS, pick } from '../utils/defaults.js';
       progressBar.appendChild(progressFill);
       progressLabel = document.createElement('div');
       progressLabel.className = 'sit-progress-text';
-      document.body.appendChild(progressBar);
-      document.body.appendChild(progressLabel);
+      // 进度条是覆盖在页面之上的浮层，进影子树；双语译文留在宿主 DOM
+      const ui = getUiRoot(overlayCss);
+      ui.appendChild(progressBar);
+      ui.appendChild(progressLabel);
     }
     const pct = Math.round((done / total) * 100);
     progressFill.style.width = pct + '%';

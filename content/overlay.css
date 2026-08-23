@@ -1,0 +1,105 @@
+/*
+ * 浮层样式 —— 注入 Shadow DOM，不进宿主页面的样式表。
+ *
+ * 这里的元素都是覆盖在页面之上、自成一体的：进度条、输入框译文气泡。
+ * 它们不需要跟宿主内容一起排版，所以可以整体搬进影子树，
+ * 换来宿主页 CSS 再也影响不到它们。
+ *
+ * 双语译文（.sit-translation / .sit-original）和字幕译文留在 content.css /
+ * subtitle.css，那些必须插在宿主 DOM 里跟正文一起流动，进不了影子树。
+ */
+
+/* ── Progress bar ───────────────────────────────────── */
+
+.sit-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  z-index: 2147483647;
+  background: rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+.sit-progress-bar.sit-hidden {
+  opacity: 0;
+}
+
+.sit-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--sit-translation-color, #9b59b6), #6c5ce7);
+  border-radius: 0 2px 2px 0;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.sit-progress-text {
+  position: fixed;
+  top: 8px;
+  right: 14px;
+  z-index: 2147483647;
+  font-size: 11px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 3px 10px;
+  border-radius: 10px;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: opacity 0.5s ease;
+  backdrop-filter: blur(4px);
+}
+
+.sit-progress-text.sit-hidden {
+  opacity: 0;
+}
+
+/* ── Input translation tooltip ─────────────────────── */
+
+.sit-input-tooltip {
+  position: absolute;
+  z-index: 2147483646;
+  display: none;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sit-translation-color, #9b59b6);
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  word-break: break-word;
+  pointer-events: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sit-input-tooltip {
+    background: #2a2a2e;
+    border-color: #444;
+  }
+}
+
+/* ── 字幕兜底浮层 ────────────────────────────────────
+   没有站点适配器时的 <video> textTrack 兜底显示。
+   贴在视口底部，不跟播放器 DOM 有关系，所以进影子树；
+   有适配器时插进播放器字幕容器的 .sit-subtitle-translation 留在 subtitle.css */
+
+.sit-subtitle-overlay {
+  position: fixed;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483000;
+  max-width: 80vw;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--sit-translation-color, #9b59b6);
+  font-size: 16px;
+  text-align: center;
+  border-radius: 4px;
+  pointer-events: none;
+  line-height: 1.4;
+  word-break: break-word;
+}

@@ -1,4 +1,6 @@
 import { translator } from '../utils/translator.js';
+import overlayCss from './overlay.css?inline';
+import { getUiRoot } from './shadow-ui.js';
 
 /**
  * Input Translation Module - Super Immersive Translate
@@ -89,7 +91,7 @@ import { translator } from '../utils/translator.js';
     if (!tooltip) {
       tooltip = document.createElement('div');
       tooltip.className = 'sit-input-tooltip';
-      document.body.appendChild(tooltip);
+      getUiRoot(overlayCss).appendChild(tooltip);
     }
 
     tooltip.textContent = text;

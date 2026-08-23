@@ -1,10 +1,11 @@
-import './selection.css';
+import selectionCss from './selection.css?inline';
 import { Translator } from '../utils/translator.js';
 import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
 import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sentence.js';
 import { collectWord, getWord } from '../utils/learning/collect.ts';
 import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
+import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -115,7 +116,7 @@ import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/lea
     const left = rect.right + window.scrollX + 4;
     icon.style.top = top + 'px';
     icon.style.left = left + 'px';
-    document.body.appendChild(icon);
+    getUiRoot(selectionCss).appendChild(icon);
 
     icon.addEventListener('mousedown', (e) => {
       e.preventDefault();
@@ -134,7 +135,7 @@ import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/lea
     if (panel) return panel;
     panel = document.createElement('div');
     panel.className = PANEL_CLASS;
-    document.body.appendChild(panel);
+    getUiRoot(selectionCss).appendChild(panel);
     return panel;
   }
 
@@ -544,8 +545,7 @@ import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/lea
   // Mouse up → selection detection
   document.addEventListener('mouseup', (e) => {
     if (selectionMode === 'off') return;
-    if (e.target.closest('.' + PANEL_CLASS)) return;
-    if (e.target.closest('.' + ICON_CLASS)) return;
+    if (isInsideUi(e)) return;
 
     setTimeout(() => {
       const sel = window.getSelection();
@@ -556,8 +556,8 @@ import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/lea
         return;
       }
 
-      const anchor = sel.anchorNode?.parentElement;
-      if (anchor?.closest('.' + PANEL_CLASS)) return;
+      // 在面板里选中文字不该再触发一次划词
+      if (isNodeInsideUi(sel.anchorNode)) return;
 
       if (!sel || sel.rangeCount === 0) return;
       const range = sel.getRangeAt(0);
@@ -590,7 +590,7 @@ import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/lea
   // Double click → dblclick mode
   document.addEventListener('dblclick', (e) => {
     if (selectionMode !== 'dblclick') return;
-    if (e.target.closest('.' + PANEL_CLASS)) return;
+    if (isInsideUi(e)) return;
 
     setTimeout(() => {
       const sel = window.getSelection();
@@ -607,16 +607,14 @@ import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/lea
 
   // Click elsewhere → dismiss
   document.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.' + PANEL_CLASS)) return;
-    if (e.target.closest('.' + ICON_CLASS)) return;
+    if (isInsideUi(e)) return;
     // Only remove icon on mousedown, panel dismissal handled after mouseup
     removeIcon();
   });
 
   // Click on empty area (no selection) → dismiss panel
   document.addEventListener('click', (e) => {
-    if (e.target.closest('.' + PANEL_CLASS)) return;
-    if (e.target.closest('.' + ICON_CLASS)) return;
+    if (isInsideUi(e)) return;
 
     // If there's no active selection, dismiss panel
     setTimeout(() => {
