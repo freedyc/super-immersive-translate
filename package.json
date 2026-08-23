@@ -8,7 +8,8 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify.mjs",
-    "package": "npm run build && node scripts/package.mjs"
+    "package": "npm run build && node scripts/package.mjs",
+    "store-assets": "node scripts/make-store-assets.mjs"
   },
   "type": "module",
   "repository": {

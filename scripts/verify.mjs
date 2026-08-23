@@ -1057,6 +1057,22 @@ section('商店发布必备项');
   check('有隐私政策', existsSync('docs/PRIVACY.md'));
   check('有提交材料清单', existsSync('docs/STORE-SUBMISSION.md'));
 
+  // 商店对尺寸是严格的，差一个像素就传不上去
+  const pngSizeOf = (f) => {
+    const buf = readFileSync(f);
+    return `${buf.readUInt32BE(16)}x${buf.readUInt32BE(20)}`;
+  };
+  const ASSETS = [
+    ['store-assets/store-icon-128.png', '128x128'],
+    ['store-assets/promo-small-440x280.png', '440x280'],
+  ];
+  for (const [file, size] of ASSETS) {
+    check(`${file} 存在`, existsSync(file));
+    if (existsSync(file)) {
+      check(`${file} 正好是 ${size}`, pngSizeOf(file) === size, `实际 ${pngSizeOf(file)}`);
+    }
+  }
+
   // 隐私政策必须覆盖所有实际会联网的目的地，否则审核对不上就是打回重来
   const privacy = readFileSync('docs/PRIVACY.md', 'utf8');
   const DESTINATIONS = [
