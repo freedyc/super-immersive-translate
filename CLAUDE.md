@@ -119,8 +119,11 @@ it.
 **MUI is used sparingly and on purpose.** `utils/mui-theme.tsx` bridges MUI's palette to
 daisyUI's CSS variables and follows `data-theme`, and it deliberately does **not** render
 `<CssBaseline />` — global reset stays with Tailwind/daisyUI, otherwise the two reset
-layers fight. Only reach for MUI where daisyUI's pure-CSS components genuinely can't go:
-`Autocomplete`, `Dialog`, `Snackbar`, `Tooltip`. Buttons/cards/badges stay daisyUI.
+layers fight. Reach for MUI where daisyUI's pure-CSS components genuinely can't go
+(`Autocomplete`, `Dialog`, `Snackbar`, `Tooltip`) and for dense settings surfaces where its
+spacing/typography scale carries several layers of information per tile — the per-engine
+concurrency cards in `options/components/ConcurrencyGrid.tsx` are the reference case.
+Everything else — ordinary buttons, list cards, badges — stays daisyUI.
 `popup/` imports no MUI at all — it opens on every toolbar click, so its bundle stays lean.
 
 **TypeScript is partial by design.** `tsconfig.json` runs `strict` with `allowJs: true` and

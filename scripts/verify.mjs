@@ -883,6 +883,50 @@ section('剪贴板同步：端到端加密');
     !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
 }
 
+section('翻译并发：每引擎可配');
+{
+  const { resolveEngineConcurrency, ENGINE_CONCURRENCY, MAX_CONCURRENCY } =
+    await import('../utils/translation-options.ts');
+
+  check('没配过的引擎用建议值',
+    resolveEngineConcurrency('google', {}) === ENGINE_CONCURRENCY.google.recommended);
+  check('配过的引擎用自定义值', resolveEngineConcurrency('google', { google: 12 }) === 12);
+  check('别的引擎不受影响',
+    resolveEngineConcurrency('openai', { google: 12 }) === ENGINE_CONCURRENCY.openai.recommended);
+
+  // 本机引擎不该被为公共免费接口设计的数字压着——限流是 API 服务方的事，
+  // Ollama 的上限由显存和 OLLAMA_NUM_PARALLEL 决定
+  check('Ollama 可以调到远高于建议值', resolveEngineConcurrency('ollama', { ollama: 24 }) === 24);
+  check('Ollama 没有硬顶', ENGINE_CONCURRENCY.ollama.hardMax === undefined);
+
+  // WebLLM 是浏览器里的单个模型实例，第二路只会排队——这是技术事实，不是礼貌限制
+  check('WebLLM 恒为 1，调多少都一样', resolveEngineConcurrency('webllm', { webllm: 16 }) === 1);
+
+  check('0 或负数回落到建议值',
+    resolveEngineConcurrency('google', { google: 0 }) === ENGINE_CONCURRENCY.google.recommended
+    && resolveEngineConcurrency('google', { google: -3 }) === ENGINE_CONCURRENCY.google.recommended);
+  check('小数向下取整', resolveEngineConcurrency('google', { google: 7.9 }) === 7);
+  check('手滑输入超大值被天花板挡住',
+    resolveEngineConcurrency('google', { google: 99999 }) === MAX_CONCURRENCY);
+  check('未知引擎也能得到一个可用值', resolveEngineConcurrency('nope', {}) >= 1);
+  check('overrides 为 undefined 不炸', resolveEngineConcurrency('google', undefined) >= 1);
+
+  check('每个引擎都写了建议理由',
+    Object.values(ENGINE_CONCURRENCY).every((p) => p.note && p.recommended >= 1));
+
+  // 解析逻辑必须只有一份：content script 和设置页各算一遍，
+  // 迟早会在某次改动后分叉
+  const { readFileSync } = await import('node:fs');
+  const content = readFileSync('content/content.js', 'utf8');
+  check('内容脚本复用共享的解析函数，不自己算',
+    content.includes('resolveEngineConcurrency')
+    && !content.includes('CONCURRENCY_LEVELS'));
+
+  check('全页翻译可单独指定引擎', /fullPageEngine/.test(content));
+  check('站点专属引擎优先级高于全页专用引擎',
+    content.indexOf('stored.fullPageEngine') < content.indexOf('const siteEngine'));
+}
+
 section('剪贴板图片');
 {
   const { readFileSync } = await import('node:fs');

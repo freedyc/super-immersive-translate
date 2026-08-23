@@ -3,6 +3,7 @@ import overlayCss from './overlay.css?inline';
 import { getUiRoot } from './shadow-ui.js';
 import { translator } from '../utils/translator.js';
 import { DEFAULTS, pick } from '../utils/defaults.js';
+import { resolveEngineConcurrency } from '../utils/translation-options.ts';
 
 /**
  * Content script - Super Immersive Translate
@@ -39,12 +40,6 @@ import { DEFAULTS, pick } from '../utils/defaults.js';
   const TRANSLATION_CLASS = 'sit-translation';
   const ORIGINAL_CLASS = 'sit-original';
   const FULLPAGE_BATCH = 20;
-  const CONCURRENCY_LEVELS = { low: 2, medium: 5, high: 10 };
-  // Per-engine concurrency ceilings — rate-limited / fan-out-heavy engines must not
-  // be hit with the full pool (MyMemory is sequential+throttled; Libre already fires
-  // one request per text per batch; Lingva is a shared public instance; WebLLM is a
-  // single in-browser engine). Engines not listed use the user's chosen level.
-  const ENGINE_MAX_CONCURRENCY = { webllm: 1, mymemory: 1, libre: 2, lingva: 3 };
 
   let isTranslating = false;
   let isEnabled = false;
@@ -54,7 +49,8 @@ import { DEFAULTS, pick } from '../utils/defaults.js';
   let translateAbortId = 0;
 
   let siteBlocked = false;
-  let concurrencySetting = 'medium';
+  /** 每引擎并发覆盖值；没配过的引擎用 translation-options 里的建议值 */
+  let engineConcurrency = {};
 
   // ── Settings ─────────────────────────────────────────
 
@@ -90,7 +86,7 @@ import { DEFAULTS, pick } from '../utils/defaults.js';
   applyTranslationStyles(stored);
   hoverTranslateEnabled = stored.hoverTranslate;
   siteBlocked = checkSiteBlocked(stored.siteRules);
-  concurrencySetting = stored.translateConcurrency;
+  engineConcurrency = stored.engineConcurrency || {};
 
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.translationColor) {
@@ -112,16 +108,28 @@ import { DEFAULTS, pick } from '../utils/defaults.js';
     if (changes.siteRules) {
       siteBlocked = checkSiteBlocked(changes.siteRules.newValue);
     }
-    if (changes.translateConcurrency) {
-      concurrencySetting = changes.translateConcurrency.newValue;
+    if (changes.engineConcurrency) {
+      engineConcurrency = changes.engineConcurrency.newValue || {};
     }
   });
 
   await translator.init();
 
-  // Per-site engine override
+  // 引擎优先级：站点专属 > 全页翻译专用 > 全局默认。
+  // 「全页翻译专用」的用处是划词和整页用不同引擎——划词要即时响应，
+  // 整页更在意不限量/不花钱，两者的最优选择往往不是同一个
+  if (stored.fullPageEngine) translator.engine = stored.fullPageEngine;
   const siteEngine = stored.siteEngines[location.hostname];
   if (siteEngine) translator.engine = siteEngine;
+
+  // 引擎变了并发也要跟着变，否则整页翻译还在用旧引擎的并发数
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.fullPageEngine) {
+      translator.engine = changes.fullPageEngine.newValue
+        || stored.siteEngines[location.hostname]
+        || translator.engine;
+    }
+  });
 
   // ── Messages ─────────────────────────────────────────
 
@@ -308,9 +316,9 @@ import { DEFAULTS, pick } from '../utils/defaults.js';
   }
 
   function resolveConcurrency() {
-    const base = CONCURRENCY_LEVELS[concurrencySetting] || CONCURRENCY_LEVELS.medium;
-    const cap = ENGINE_MAX_CONCURRENCY[translator.engine];
-    return cap ? Math.min(base, cap) : base;
+    // 解析逻辑放在 translation-options 里，设置页和这里共用——
+    // 两边各算一遍，必然会在某次改动后分叉
+    return resolveEngineConcurrency(translator.engine, engineConcurrency);
   }
 
   async function translatePage() {

@@ -13,7 +13,14 @@ export const DEFAULTS = {
   sourceLang: 'auto',
   targetLang: 'zh-CN',
   displayMode: 'bilingual',
-  translateConcurrency: 'medium',
+  // 全页翻译单独用哪个引擎。留空 = 跟随上面的 engine。
+  // 场景：划词用快的在线引擎图即时，整页用本地 Ollama 图不限量不花钱
+  fullPageEngine: '',
+
+  // 每引擎并发覆盖值 { engineId: number }。没配过的引擎用
+  // utils/translation-options.ts 里的建议值。旧的 translateConcurrency
+  // 三档预设已移除——它和硬编码的引擎上限取较小值，用户既看不到也改不了
+  engineConcurrency: {},
   theme: 'system',
 
   // history

@@ -1,9 +1,10 @@
 import { Card, SelectField, CheckField, EngineFields } from '../components/Field.tsx';
 import {
-  ENGINES, LANGS, DISPLAY_MODES, CONCURRENCY, SELECTION_MODES,
+  ENGINES, LANGS, DISPLAY_MODES, SELECTION_MODES,
   SELECTION_ENGINE_OPTIONS, ENGINE_FIELDS, AI_ENGINES,
 } from '../../utils/translation-options.ts';
 import type { TabProps } from '../lib/types.ts';
+import { ConcurrencyGrid } from '../components/ConcurrencyGrid.tsx';
 
 export function GeneralTab({ settings, update }: Pick<TabProps, 'settings' | 'update'>) {
   const selEngines = settings.selectionEngines || [];
@@ -42,11 +43,16 @@ export function GeneralTab({ settings, update }: Pick<TabProps, 'settings' | 'up
         </div>
 
         <SelectField
-          label="全页翻译并发"
-          hint="并发越高翻译越快，但 Google 等免费接口可能因请求过多被限流 (429)。本地 WebLLM 始终单路。"
-          value={settings.translateConcurrency}
-          options={CONCURRENCY}
-          onChange={(v) => update({ translateConcurrency: v })}
+          label="全页翻译引擎"
+          hint="留空 = 跟随上面的默认引擎。划词要即时响应、整页更在意不限量不花钱，两者的最优选择常常不是同一个。站点专属引擎优先级更高。"
+          value={settings.fullPageEngine || ''}
+          options={[['', '跟随默认引擎'], ...ENGINES]}
+          onChange={(v) => update({ fullPageEngine: v })}
+        />
+
+        <ConcurrencyGrid
+          value={(settings.engineConcurrency as Record<string, number>) || {}}
+          onChange={(v) => update({ engineConcurrency: v })}
         />
 
         <div className="flex gap-6 flex-wrap">
