@@ -64,29 +64,45 @@ async function loadOrMigrate(): Promise<Omit<LearningState, 'loaded' | 'error'>>
   };
 }
 
+/** 早期迁移写进数据里的词性占位符。它们是真值，会永久卡住真实词性的补全 */
+const FAKE_POS = new Set(['未知', '未知词性', 'unknown', 'n/a', '-']);
+
 /**
- * 给缺音标的词补上本地词典里的读音。
+ * 修补历史数据：补本地词典里的音标，清掉伪造的词性占位符。
  *
- * 只写回真正查到的那些；一个都没查到就不碰存储，避免每次打开页面
- * 都白写一次 storage（还会触发一轮同步）。
+ * 两件事合在一次写入里做——分开写会连着触发两轮 storage 变更和 GitHub 同步。
+ * 只在真有东西可改时才写；没有就完全不碰存储，否则每次打开页面都白写一轮。
  */
-async function backfillPhonetics(words: Word[]): Promise<void> {
-  const missing = words.filter((w) => !w.phonetic && !w.phoneticUS && !w.phoneticUK);
-  if (missing.length === 0) return;
+async function repairWords(words: Word[]): Promise<void> {
+  const phonetics = new Map<string, string>();
+  await Promise.all(
+    words
+      .filter((w) => !w.phonetic && !w.phoneticUS && !w.phoneticUK)
+      .map(async (w) => {
+        const ipa = await lookupPhonetic(w.word);
+        if (ipa) phonetics.set(w.id, ipa);
+      }),
+  );
 
-  const found = new Map<string, string>();
-  await Promise.all(missing.map(async (w) => {
-    const ipa = await lookupPhonetic(w.word);
-    if (ipa) found.set(w.id, ipa);
-  }));
-  if (found.size === 0) return;
+  const fakePos = new Set(
+    words.filter((w) => w.meanings.some((m) => FAKE_POS.has(m.partOfSpeech))).map((w) => w.id),
+  );
+  if (phonetics.size === 0 && fakePos.size === 0) return;
 
-  // 重新读一次再写：补音标是后台行为，期间用户可能已经删词或收藏了新词
+  // 重新读一次再写：这是后台行为，期间用户可能已经删词或收藏了新词
   const stored = await chrome.storage.local.get(STORAGE_KEYS.words);
   const current = (stored[STORAGE_KEYS.words] as Word[]) ?? [];
   await chrome.storage.local.set({
-    [STORAGE_KEYS.words]: current.map((w) =>
-      (found.has(w.id) ? { ...w, phoneticUS: found.get(w.id) } : w)),
+    [STORAGE_KEYS.words]: current.map((w) => {
+      if (!phonetics.has(w.id) && !fakePos.has(w.id)) return w;
+      const next = { ...w };
+      if (phonetics.has(w.id)) next.phoneticUS = phonetics.get(w.id);
+      if (fakePos.has(w.id)) {
+        next.meanings = w.meanings.map((m) =>
+          (FAKE_POS.has(m.partOfSpeech) ? { ...m, partOfSpeech: '' } : m));
+      }
+      return next;
+    }),
   });
 }
 
@@ -108,9 +124,9 @@ export function useLearning() {
       (next) => {
         if (!alive) return;
         setState({ ...next, loaded: true, error: null });
-        // 音标此前只能由 AI 生成，没配 AI 的用户攒下的词全是空的。
-        // 本地词典不依赖 AI，进页面补一次，之后就一直有了
-        backfillPhonetics(next.words);
+        // 修补历史数据：音标此前只能由 AI 生成，没配 AI 的用户攒下的词全是空的；
+        // 早期迁移还往词性里写过「未知」占位符，它会卡住真实词性的补全
+        repairWords(next.words);
       },
       (err: unknown) => {
         console.error('[wordbook] 读取学习数据失败', err);

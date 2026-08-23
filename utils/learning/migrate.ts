@@ -48,7 +48,10 @@ function toMeanings(entry: WordEntry): Meaning[] {
   // translations 是「引擎 → 译文」，多个引擎经常给出一模一样的结果，先去重
   const definitions = [...new Set(Object.values(entry.translations || {}).filter(Boolean))];
   if (definitions.length === 0) return [];
-  return [{ partOfSpeech: entry.pos || '未知', definitions }];
+  // 没有词性就留空，不要填「未知」这类占位符。占位符是真值，会让
+  // applyMeta 的 `!pickPos(word)` 和划词面板的补全判断恒假，
+  // 真实词性从此再也写不进来——显示难看只是表象，卡住补全才是要命的
+  return [{ partOfSpeech: entry.pos || '', definitions }];
 }
 
 function toExamples(entry: WordEntry): Example[] {

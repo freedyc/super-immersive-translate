@@ -61,6 +61,25 @@ const word = (over = {}) => ({
 });
 
 // ────────────────────────────────────────────────────────────────────────────
+// 占位符是真值，会让 applyMeta 的 `!pickPos(word)` 和划词面板的补全判断恒假，
+// 真实词性从此再也写不进来。显示成「未知」只是表象，卡死补全才是要命的。
+section('迁移：不能往数据里写伪造的占位符');
+{
+  const base = { id: 'p1', text: 'placeholder', translations: { google: '占位' }, timestamp: 0 };
+
+  const { word: noPos } = convertEntry(base);
+  check('旧数据没有词性时留空，不填「未知」',
+    noPos.meanings[0].partOfSpeech === '',
+    `得到「${noPos.meanings[0].partOfSpeech}」`);
+
+  const { word: withPos } = convertEntry({ ...base, pos: '名词' });
+  check('旧数据有词性时照常保留', withPos.meanings[0].partOfSpeech === '名词');
+
+  // pickPos 对空词性必须返回空串——补全逻辑全靠这个判断决定要不要去查
+  check('空词性在 pickPos 下是假值，补全判断才能成立', pickPos(noPos) === '');
+  check('有词性时 pickPos 如实返回', pickPos(withPos) === '名词');
+}
+
 section('迁移：语境例句是产品核心资产，一条都不能丢');
 
 {
