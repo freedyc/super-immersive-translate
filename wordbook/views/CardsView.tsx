@@ -37,67 +37,96 @@ export function CardsView({ words }: { words: WordEntry[] }) {
 
   return (
     <div className="max-w-lg mx-auto mt-8 text-center">
+      {/* 高度比原来的 h-72 高一档：背面要放主译文+其他译文+例句+例句翻译，
+          288px 减去内边距后放不下，之前会被裁掉 */}
       <div
-        className={`flashcard w-full h-72 mb-6 ${flipped ? 'flipped' : ''}`}
+        className={`flashcard w-full h-80 mb-6 ${flipped ? 'flipped' : ''}`}
         onClick={() => setFlipped((f) => !f)}
       >
         <div className="flashcard-inner">
+          {/* 正面：单词 → 音标 → 词性/发音，三段各自成行居中，不再把大字和小控件挤在一行 */}
           <div className="flashcard-front bg-gradient-to-br from-primary to-secondary text-primary-content shadow-xl">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="text-4xl font-bold">{word ? word.text : '没有单词'}</div>
-              {word?.pos && (
-                <span className="badge badge-outline border-primary-content/40 text-primary-content/80 badge-sm">
-                  {word.pos}
-                </span>
+            <div className="flashcard-scroll gap-2 text-center">
+              <div className="text-4xl font-bold leading-tight break-words">
+                {word ? word.text : '没有单词'}
+              </div>
+
+              {word?.ipa && (
+                <div className="text-sm font-mono opacity-75">{word.ipa}</div>
               )}
+
               {word && (
-                <button
-                  className="btn btn-ghost btn-circle btn-sm text-primary-content"
-                  title="发音"
-                  onClick={(e) => { e.stopPropagation(); window.ttsManager.speak(word.text, 'auto'); }}
-                >
-                  <Volume2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-2 mt-1">
+                  {word.pos && (
+                    <span className="badge badge-sm bg-primary-content/15 border-primary-content/30 text-primary-content">
+                      {word.pos}
+                    </span>
+                  )}
+                  <button
+                    className="btn btn-ghost btn-circle btn-sm text-primary-content hover:bg-primary-content/15"
+                    title="发音"
+                    onClick={(e) => { e.stopPropagation(); window.ttsManager.speak(word.text, 'auto'); }}
+                  >
+                    <Volume2 className="w-4 h-4" />
+                  </button>
+                </div>
               )}
             </div>
-            {word?.ipa && <div className="text-sm opacity-70 font-mono mb-2">{word.ipa}</div>}
-            <div className="text-sm opacity-70 flex items-center gap-1">
+
+            <div className="flashcard-hint">
               <RotateCw className="w-3.5 h-3.5" />
               点击翻转
             </div>
           </div>
 
+          {/* 背面：主译文 → 其他译文 → 例句，内容长了在卡片内滚动 */}
           <div className="flashcard-back bg-base-100 border-2 border-base-300 shadow-xl">
-            <div className="text-2xl font-semibold text-base-content mb-3">{trans[0] || '无翻译'}</div>
-            <div className="text-sm text-base-content/50">
-              {trans.length > 1 ? trans.slice(1).join(' / ') : (word?.title || '')}
-            </div>
-            {ctx?.sentence && (
-              <div className="text-sm text-base-content/60 mt-3 px-4 leading-relaxed">
-                <TaggedSentence sentence={ctx.sentence} tokens={ctx.tokens} />
-                {ctx.translation && (
-                  <div className="text-xs text-base-content/40 mt-1">{ctx.translation}</div>
-                )}
+            <div className="flashcard-scroll gap-3 text-center">
+              <div className="text-2xl font-semibold text-base-content leading-snug break-words">
+                {trans[0] || '无翻译'}
               </div>
-            )}
+
+              {trans.length > 1 && (
+                <div className="text-sm text-base-content/50 break-words">
+                  {trans.slice(1).join(' / ')}
+                </div>
+              )}
+
+              {ctx?.sentence && (
+                <div className="w-full pt-3 border-t border-base-300 flex flex-col gap-1">
+                  <div className="text-sm text-base-content/70 leading-relaxed">
+                    <TaggedSentence sentence={ctx.sentence} tokens={ctx.tokens} />
+                  </div>
+                  {ctx.translation && (
+                    <div className="text-xs text-base-content/40">{ctx.translation}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flashcard-hint">
+              <RotateCw className="w-3.5 h-3.5" />
+              点击翻回
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-6 mb-5">
+      {/* 三栏等宽：计数器居中且宽度固定，位数变化时两侧按钮不会左右跳动 */}
+      <div className="flex items-center justify-between gap-3 mb-5">
         <button
-          className="btn btn-outline btn-sm gap-1"
+          className="btn btn-outline btn-sm gap-1 flex-1 justify-center"
           disabled={index === 0}
           onClick={() => setIndex((i) => Math.max(0, i - 1))}
         >
           <ArrowLeft className="w-4 h-4" />
           上一个
         </button>
-        <span className="text-sm text-base-content/60 font-medium">
+        <span className="text-sm text-base-content/60 font-medium tabular-nums whitespace-nowrap shrink-0 w-20 text-center">
           {words.length === 0 ? '0 / 0' : `${index + 1} / ${words.length}`}
         </span>
         <button
-          className="btn btn-outline btn-sm gap-1"
+          className="btn btn-outline btn-sm gap-1 flex-1 justify-center"
           disabled={index >= words.length - 1}
           onClick={() => setIndex((i) => Math.min(words.length - 1, i + 1))}
         >

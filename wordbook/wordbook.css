@@ -50,7 +50,38 @@
   align-items: center;
   justify-content: center;
   border-radius: 1rem;
-  padding: 2rem;
+  /* 底部留出「点击翻转」提示的位置：提示是绝对定位的，不参与内容居中，
+     否则正文会被它挤得偏上 */
+  padding: 2rem 2rem 3rem;
+  overflow: hidden;
+}
+
+/* 内容比卡片高时在卡片内部滚动，而不是溢出到卡片外面被裁掉 */
+.flashcard-scroll {
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* 滚动条不占位导致内容左右不对称，用稳定槽位避开 */
+  scrollbar-width: thin;
+  scrollbar-gutter: stable both-edges;
+}
+
+/* 固定在卡片底部的翻转提示 */
+.flashcard-hint {
+  position: absolute;
+  bottom: 1rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .flashcard-back {
