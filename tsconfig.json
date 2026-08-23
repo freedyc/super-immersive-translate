@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["chrome"],
+
+    // Vite 只负责擦类型、不做类型检查，真正的检查靠 `npm run typecheck`（tsc --noEmit）。
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+
+    // 渐进迁移：老的 .js 仍然参与解析（React 层能 import 它们），
+    // 但暂时不对 .js 做类型检查——content/ 那批脚本先留在 JS，等 React 层稳定再说。
+    "allowJs": true,
+    "checkJs": false,
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["types", "utils", "wordbook", "history", "pdf", "popup", "options", "sandbox"],
+  "exclude": ["node_modules", "dist"]
+}
