@@ -1,8 +1,12 @@
 /**
- * 拼写测验视图：看翻译拼单词，自由练习模式，不写回 FSRS 调度。
+ * 拼写测验视图：看中文释义拼出英文单词。自由练习模式，不写回 FSRS 调度。
+ *
+ * 关于发音按钮：答题前点它等于把答案念出来，这时候练的其实是"听写"而不是
+ * "由词义回忆拼写"。两种练法都成立，所以按钮一直可用，但答题前标成「提示」，
+ * 让用户自己知道这一下是拿了提示。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, SkipForward, ArrowRight } from 'lucide-react';
+import { Check, SkipForward, ArrowRight, Volume2 } from 'lucide-react';
 import { shuffled } from '../lib/mastery.ts';
 import type { WordEntry } from '../../types/models.ts';
 
@@ -13,6 +17,7 @@ export function QuizView({ words }: { words: WordEntry[] }) {
   const [answer, setAnswer] = useState('');
   const [result, setResult] = useState<'correct' | 'wrong' | null>(null);
   const [stats, setStats] = useState({ correct: 0, total: 0 });
+  const [hintUsed, setHintUsed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // 单词本从空变成有内容（首次加载完成）时补一次队列
@@ -25,10 +30,18 @@ export function QuizView({ words }: { words: WordEntry[] }) {
   }, [index, result]);
 
   const current = queue.length > 0 ? queue[index % queue.length] : null;
-  const prompt = useMemo(() => {
-    if (!current) return '没有单词可以测验';
-    return Object.values(current.translations || {})[0] || '???';
+
+  // 释义按引擎去重后展示：多个引擎经常给出一模一样的译文，全列出来只是噪音
+  const meanings = useMemo(() => {
+    if (!current) return [];
+    return [...new Set(Object.values(current.translations || {}).filter(Boolean))];
   }, [current]);
+
+  const speak = () => {
+    if (!current) return;
+    if (!result) setHintUsed(true); // 答题前听 = 用了提示
+    window.ttsManager.speak(current.text, 'en-US');
+  };
 
   const check = () => {
     if (!current || result) return;
@@ -41,30 +54,72 @@ export function QuizView({ words }: { words: WordEntry[] }) {
     setIndex((i) => i + 1);
     setAnswer('');
     setResult(null);
+    setHintUsed(false);
   };
 
+  const accuracy = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+
   return (
-    <div className="max-w-md mx-auto mt-12 text-center">
+    <div className="max-w-md mx-auto mt-12">
       <div className="card bg-base-100 shadow-sm rounded-xl mb-6">
         <div className="card-body gap-4">
-          <div className="text-xl text-base-content/70 leading-relaxed">{prompt}</div>
-          {current && (
+          {!current ? (
+            <div className="text-center text-base-content/50 py-6">没有单词可以测验</div>
+          ) : (
             <>
+              {/* 题面：中文释义 */}
+              <div className="flex flex-col items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-base-content/40">
+                  中文释义
+                </span>
+                <div className="text-xl text-base-content/80 leading-relaxed text-center break-words">
+                  {meanings[0] || '???'}
+                </div>
+                {meanings.length > 1 && (
+                  <div className="text-sm text-base-content/45 text-center break-words">
+                    {meanings.slice(1).join(' / ')}
+                  </div>
+                )}
+              </div>
+
+              {/* 发音：答题前是提示，答题后是跟读 */}
+              <div className="flex justify-center">
+                <button
+                  className="btn btn-ghost btn-sm gap-1.5"
+                  onClick={speak}
+                  title={result ? '朗读单词' : '朗读单词（会念出答案）'}
+                >
+                  <Volume2 className="w-4 h-4" />
+                  {result ? '朗读单词' : '听发音（提示）'}
+                </button>
+              </div>
+
               <input
                 ref={inputRef}
                 type="text"
                 className="input input-bordered text-center text-lg"
-                placeholder="输入单词..."
+                placeholder="输入英文单词..."
                 autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
                 value={answer}
                 disabled={!!result}
                 onChange={(e) => setAnswer(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
               />
-              <div className={`quiz-feedback text-base font-semibold min-h-6 ${result || ''}`}>
-                {result === 'correct' && '✅ 正确！'}
+
+              <div className={`quiz-feedback text-base font-semibold min-h-6 text-center ${result || ''}`}>
+                {result === 'correct' && (hintUsed ? '✅ 正确（用了提示）' : '✅ 正确！')}
                 {result === 'wrong' && `❌ 正确答案: ${current.text}`}
               </div>
+
+              {/* 答完再露出音标，避免答题前从音标反推拼写 */}
+              {result && current.ipa && (
+                <div className="text-center text-sm font-mono text-base-content/50">
+                  {current.ipa}
+                </div>
+              )}
             </>
           )}
         </div>
@@ -92,10 +147,13 @@ export function QuizView({ words }: { words: WordEntry[] }) {
         </div>
       )}
 
-      <div className="badge badge-ghost badge-lg gap-2 p-3">
-        正确: <span className="font-bold">{stats.correct}</span>
-        <span className="opacity-40">/</span>
-        总计: <span className="font-bold">{stats.total}</span>
+      <div className="flex justify-center">
+        <div className="badge badge-ghost badge-lg gap-2 p-3 tabular-nums">
+          正确 <span className="font-bold">{stats.correct}</span>
+          <span className="opacity-40">/</span>
+          <span className="font-bold">{stats.total}</span>
+          {stats.total > 0 && <span className="opacity-60">（{accuracy}%）</span>}
+        </div>
       </div>
     </div>
   );
