@@ -1,6 +1,6 @@
 {
   "name": "super-immersive-translate",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "⚡ 一款功能强大的 Chrome 沉浸式双语翻译插件，对标沙拉翻译 + 沉浸式翻译，多引擎并行翻译，完全免费。",
   "main": "index.js",
   "scripts": {

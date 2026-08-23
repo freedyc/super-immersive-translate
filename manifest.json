@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Super Immersive Translate - 超级翻译",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "超级沉浸式双语翻译插件，多引擎并行划词翻译 + 全页双语对照",
   "permissions": ["storage", "unlimitedStorage", "activeTab", "contextMenus", "sidePanel", "alarms"],
   "host_permissions": ["<all_urls>"],
