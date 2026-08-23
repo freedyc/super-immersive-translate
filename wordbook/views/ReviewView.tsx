@@ -1,65 +1,47 @@
 /**
- * 今日复习视图（FSRS 调度）。
+ * 复习流程（沉浸式），由「今日学习」启动。
  *
- * 两条重要约束，改动时不要破坏：
- * 1. 默认队列只包含"已经学过且到期"的词——从没学过的新词不会自动涌进来，
- *    只能通过「提前学新词」主动拉取。这同时天然形成了每日新词节奏，不需要额外的上限设置。
- * 2. 拼写方向（recall）的例句和语法拆解都要等判分之后才显示——它们都包含要默写的
- *    那个词本身，提前显示等于直接给答案。
+ * 两条不能破坏的约束：
+ * 1. 拼写题的例句和语法拆解都要等判分之后才显示——它们都包含要默写的那个词，
+ *    提前显示等于直接给答案。
+ * 2. 答错不用红色警告，用温和措辞。学习产品里把错误做成惩罚只会让人不想继续。
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Volume2, CheckCircle, Plus } from 'lucide-react';
-import { createCard, scheduleNext, isDue, serializeCard, deserializeCard } from '../../utils/srs.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Volume2, X, CheckCircle2 } from 'lucide-react';
 import { TaggedSentence } from '../components/TaggedSentence.tsx';
-import { shuffled, latestContext, ROLE_ORDER } from '../lib/mastery.ts';
-import type { WordEntry, ReviewMode } from '../../types/models.ts';
-import type { WordMutator } from '../lib/useWordbook.ts';
+import { ROLE_ORDER, shuffled } from '../lib/mastery.ts';
+import { createRecord, isExerciseDue, recordAnswer } from '../../utils/learning/srsService.ts';
+import type {
+  ExerciseType, Familiarity, LearningRecord, Word,
+} from '../../types/models.ts';
 
-const MODES: ReviewMode[] = ['recall', 'recognition'];
+/** 本批实现的两种题型；另外两种（zh2en / listening）在下一批加入 */
+const REVIEW_EXERCISES: ExerciseType[] = ['en2zh', 'spelling'];
 
-/** 复习队列里的一项：某个词的某个方向 */
 interface QueueItem {
-  key: string;
-  mode: ReviewMode;
+  word: Word;
+  exercise: ExerciseType;
 }
 
-type Grade = 'again' | 'hard' | 'good' | 'easy';
-
-function hasTranslation(word: WordEntry): boolean {
-  return Object.values(word.translations || {}).some(Boolean);
+interface Props {
+  words: Word[];
+  allWords: Word[];
+  records: Map<string, LearningRecord>;
+  updateRecord: (
+    wordId: string,
+    mutate: (prev: LearningRecord | undefined) => LearningRecord,
+  ) => Promise<void>;
+  onExit: () => void;
+  onFinish: () => void;
 }
 
-// 只收"学过且到期"的 (词, 方向) 组合
-function buildDueQueue(wordbook: WordEntry[], now = new Date()): QueueItem[] {
-  const queue: QueueItem[] = [];
-  wordbook.forEach((w) => {
-    const translated = hasTranslation(w);
-    MODES.forEach((mode) => {
-      if (mode === 'recognition' && !translated) return; // 没有翻译的词出不了选择题
-      const raw = w.srs?.[mode];
-      if (!raw) return; // 没学过 → 归「学新词」管
-      if (isDue(deserializeCard(raw), now)) queue.push({ key: w.text.toLowerCase(), mode });
-    });
-  });
-  return shuffled(queue);
+function definitionsOf(word: Word): string[] {
+  return [...new Set(word.meanings.flatMap((m) => m.definitions).filter(Boolean))];
 }
 
-// 只收"从没学过"的 (词, 方向) 组合
-function buildNewQueue(wordbook: WordEntry[]): QueueItem[] {
-  const queue: QueueItem[] = [];
-  wordbook.forEach((w) => {
-    const translated = hasTranslation(w);
-    MODES.forEach((mode) => {
-      if (mode === 'recognition' && !translated) return;
-      if (!w.srs?.[mode]) queue.push({ key: w.text.toLowerCase(), mode });
-    });
-  });
-  return shuffled(queue);
-}
-
-function GrammarSidebar({ word }: { word: WordEntry }) {
-  const ctx = latestContext(word);
-  const tokens = ctx?.tokens;
+function GrammarSidebar({ word }: { word: Word }) {
+  const example = word.examples[0];
+  const tokens = example?.tokens;
   if (!tokens?.some((t) => t.role)) return null;
 
   const groups: Record<string, string[]> = {};
@@ -85,25 +67,28 @@ function GrammarSidebar({ word }: { word: WordEntry }) {
   );
 }
 
-function ExampleBlock({ word }: { word: WordEntry }) {
-  const ctx = latestContext(word);
-  if (!ctx?.sentence) return null;
+function ExampleBlock({ word }: { word: Word }) {
+  const example = word.examples[0];
+  if (!example?.sentence) return null;
   return (
     <div>
       <div className="text-sm mt-2">
-        <TaggedSentence sentence={ctx.sentence} tokens={ctx.tokens} />
+        <TaggedSentence sentence={example.sentence} tokens={example.tokens} />
       </div>
-      {ctx.translation && <div className="text-xs text-base-content/40 mt-1">{ctx.translation}</div>}
+      {example.translation && (
+        <div className="text-xs text-base-content/40 mt-1">{example.translation}</div>
+      )}
     </div>
   );
 }
 
-function RecallQuestion({
-  word, onGrade, onRevealChange,
+/** 拼写题：看释义写单词 */
+function SpellingQuestion({
+  word, onGrade, onReveal,
 }: {
-  word: WordEntry;
-  onGrade: (grade: Grade) => void;
-  onRevealChange: (revealed: boolean) => void;
+  word: Word;
+  onGrade: (grade: Familiarity) => void;
+  onReveal: (revealed: boolean) => void;
 }) {
   const [answer, setAnswer] = useState('');
   const [state, setState] = useState<'correct' | 'wrong' | null>(null);
@@ -113,105 +98,114 @@ function RecallQuestion({
   useEffect(() => {
     setAnswer('');
     setState(null);
-    onRevealChange(false);
+    onReveal(false);
     inputRef.current?.focus();
     return () => clearTimeout(timerRef.current);
-  }, [word.text, onRevealChange]);
+  }, [word.id, onReveal]);
 
   const check = () => {
     if (state) return;
-    const ok = answer.trim().toLowerCase() === word.text.toLowerCase();
+    const ok = answer.trim().toLowerCase() === word.word.toLowerCase();
     setState(ok ? 'correct' : 'wrong');
-    onRevealChange(true); // 判完分才允许露出例句/语法拆解
-    if (!ok) {
-      timerRef.current = setTimeout(() => onGrade('again'), 900);
-    }
+    onReveal(true); // 判完分才允许露出例句/语法拆解
+    if (!ok) timerRef.current = setTimeout(() => onGrade('again'), 1200);
   };
-
-  const trans = Object.values(word.translations || {});
 
   return (
     <div className="card bg-base-100 shadow-sm rounded-xl mb-4">
       <div className="card-body gap-4">
-        <div className="text-xl text-base-content/70 leading-relaxed">{trans[0] || '???'}</div>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-base-content/40 text-center">
+          根据释义拼写
+        </span>
+        <div className="text-xl text-base-content/80 leading-relaxed text-center">
+          {definitionsOf(word)[0] || '???'}
+        </div>
         <input
           ref={inputRef}
           type="text"
           className="input input-bordered text-center text-lg"
-          placeholder="输入单词..."
+          placeholder="输入英文单词..."
           autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
           value={answer}
           disabled={!!state}
           onChange={(e) => setAnswer(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') check(); }}
         />
-        <div className={`quiz-feedback text-base font-semibold min-h-6 ${state || ''}`}>
+
+        <div className={`quiz-feedback text-base font-semibold min-h-6 text-center ${state || ''}`}>
           {state === 'correct' && '✅ 正确！选一个难易度：'}
-          {state === 'wrong' && `❌ 正确答案: ${word.text}`}
+          {state === 'wrong' && `再看一眼：${word.word}`}
         </div>
+
         {state === 'correct' && (
           <div className="flex justify-center gap-2">
-            {([['hard', '困难'], ['good', '记得'], ['easy', '简单']] as const).map(([grade, label]) => (
-              <button key={grade} className="btn btn-sm btn-outline" onClick={() => onGrade(grade)}>
+            {([['hard', '困难'], ['good', '记得'], ['easy', '简单']] as const).map(([g, label]) => (
+              <button key={g} className="btn btn-sm btn-outline" onClick={() => onGrade(g)}>
                 {label}
               </button>
             ))}
           </div>
         )}
+
         {state && <ExampleBlock word={word} />}
       </div>
     </div>
   );
 }
 
+/** 识别题：看单词选中文释义 */
 function RecognitionQuestion({
   word, pool, onGrade,
 }: {
-  word: WordEntry;
-  pool: WordEntry[];
-  onGrade: (grade: Grade) => void;
+  word: Word;
+  pool: Word[];
+  onGrade: (grade: Familiarity) => void;
 }) {
   const [picked, setPicked] = useState<number | null>(null);
   const startedAt = useRef(Date.now());
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const { options, correctIndex } = useMemo(() => {
-    const correct = Object.values(word.translations || {})[0] || '';
+    const correct = definitionsOf(word)[0] || '';
     const distractors = shuffled(
       pool
-        .filter((w) => w.text.toLowerCase() !== word.text.toLowerCase())
-        .map((w) => Object.values(w.translations || {})[0])
+        .filter((w) => w.id !== word.id)
+        .map((w) => definitionsOf(w)[0])
         .filter(Boolean),
     ).slice(0, 3);
     const opts = shuffled([correct, ...distractors].filter(Boolean));
     return { options: opts, correctIndex: opts.indexOf(correct) };
-  }, [word.text, pool]);
+  }, [word.id, pool]);
 
   useEffect(() => {
     setPicked(null);
     startedAt.current = Date.now();
     return () => clearTimeout(timerRef.current);
-  }, [word.text]);
+  }, [word.id]);
 
   const choose = (i: number) => {
     if (picked !== null) return;
     setPicked(i);
     const elapsed = Date.now() - startedAt.current;
     const correct = i === correctIndex;
-    // 答对的话按反应快慢推导难易度：越快说明记得越牢
-    const grade: Grade = !correct ? 'again' : elapsed < 2000 ? 'easy' : elapsed < 5000 ? 'good' : 'hard';
-    timerRef.current = setTimeout(() => onGrade(grade), 700);
+    // 答对时按反应快慢推导难易度：越快说明记得越牢
+    const grade: Familiarity = !correct
+      ? 'again' : elapsed < 2000 ? 'easy' : elapsed < 5000 ? 'good' : 'hard';
+    timerRef.current = setTimeout(() => onGrade(grade), correct ? 700 : 1200);
   };
 
   return (
     <div className="card bg-base-100 shadow-sm rounded-xl mb-4">
       <div className="card-body gap-4">
         <div className="flex items-center justify-center gap-2">
-          <div className="text-3xl font-bold">{word.text}</div>
+          <div className="text-3xl font-bold">{word.word}</div>
           <button
             className="btn btn-ghost btn-sm btn-circle"
             title="发音"
-            onClick={() => window.ttsManager.speak(word.text, 'auto')}
+            onClick={() => window.ttsManager.speak(word.word, 'en-US')}
           >
             <Volume2 className="w-4 h-4" />
           </button>
@@ -221,7 +215,7 @@ function RecognitionQuestion({
             let cls = 'btn btn-outline justify-start';
             if (picked !== null) {
               if (i === correctIndex) cls += ' btn-success';
-              else if (i === picked) cls += ' btn-error';
+              else if (i === picked) cls += ' btn-warning'; // 温和提示，不用 error 红
             }
             return (
               <button key={`${opt}-${i}`} className={cls} disabled={picked !== null} onClick={() => choose(i)}>
@@ -230,113 +224,91 @@ function RecognitionQuestion({
             );
           })}
         </div>
-        <ExampleBlock word={word} />
+        {picked !== null && <ExampleBlock word={word} />}
       </div>
     </div>
   );
 }
 
 export function ReviewView({
-  wordbook, loaded, updateWord,
-}: {
-  wordbook: WordEntry[];
-  loaded: boolean;
-  updateWord: (text: string, mutate: WordMutator) => Promise<void>;
-}) {
-  const [queue, setQueue] = useState<QueueItem[] | null>(null); // null = 还没初始化
+  words, allWords, records, updateRecord, onExit, onFinish,
+}: Props) {
+  // 进入时定一次队列：每答一题都会写回记录，跟着 records 重建会让队列在答题中途被打乱
+  const [queue] = useState<QueueItem[]>(() => {
+    const items: QueueItem[] = [];
+    for (const word of words) {
+      const record = records.get(word.id);
+      for (const exercise of REVIEW_EXERCISES) {
+        // 没有释义的词出不了这两种题，跳过而不是渲染一道答不了的题
+        if (definitionsOf(word).length === 0) continue;
+        if (isExerciseDue(record, exercise)) items.push({ word, exercise });
+      }
+    }
+    return shuffled(items);
+  });
+
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
 
-  // 必须等存储真的读完再建队列：加载完成前 wordbook 是空数组，
-  // 这时候建出来的空队列会让页面直接显示"本轮复习完成"，即使其实有待复习的词。
-  // 之后也不跟着 wordbook 变化重建——每答一题都会写回 srs，重建会打乱正在进行的队列。
-  useEffect(() => {
-    if (loaded && queue === null) {
-      setQueue(buildDueQueue(wordbook));
-      setIndex(0);
-    }
-  }, [loaded, wordbook, queue]);
+  const done = index >= queue.length;
+  const current = done ? null : queue[index];
 
-  const current = queue && index < queue.length ? queue[index] : null;
-  const word = current ? wordbook.find((w) => w.text.toLowerCase() === current.key) : null;
+  useEffect(() => { setRevealed(false); }, [index]);
 
-  // 队列生成之后、答到这题之前词被删了：跳过
-  useEffect(() => {
-    if (current && !word) setIndex((i) => i + 1);
-  }, [current, word]);
-
-  const recordResult = useCallback(async (grade: Grade) => {
-    if (!current || !word) return;
-    const now = new Date();
-    const raw = word.srs?.[current.mode];
-    const card = raw ? deserializeCard(raw) : createCard(now);
-    const next = scheduleNext(card, grade, now);
-    await updateWord(word.text, (w) => {
-      w.srs = { ...(w.srs || {}), [current.mode]: serializeCard(next) };
-    });
+  const grade = useCallback(async (g: Familiarity) => {
+    if (!current) return;
+    const { word, exercise } = current;
+    await updateRecord(word.id, (prev) =>
+      recordAnswer(prev ?? createRecord(word.id), exercise, g));
     setIndex((i) => i + 1);
-    setRevealed(false);
-  }, [current, word, updateWord]);
+  }, [current, updateRecord]);
 
-  const total = queue?.length ?? 0;
-  const remaining = Math.max(0, total - index);
-  const percent = total === 0 ? 0 : Math.round((Math.min(index, total) / total) * 100);
-  const done = queue !== null && index >= total;
+  if (done) {
+    return (
+      <div className="fixed inset-0 z-30 bg-base-200 flex flex-col items-center justify-center gap-4 px-6">
+        <CheckCircle2 className="w-16 h-16 text-success/60" />
+        <h2 className="text-xl font-semibold">复习完成</h2>
+        <p className="text-sm text-base-content/60">共复习 {queue.length} 题</p>
+        <button className="btn btn-primary" onClick={onFinish}>继续</button>
+      </div>
+    );
+  }
 
-  // 拼写题判分前不显示语法拆解（会剧透答案）；识别题单词本来就明摆着，随时可显示
-  const showSidebar = word && (current?.mode === 'recognition' || revealed);
+  const showSidebar = current && (current.exercise === 'en2zh' || revealed);
 
   return (
-    <div className="max-w-4xl mx-auto mt-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">今日复习</h2>
-        <div
-          className="radial-progress text-primary"
-          // daisyUI 的 radial-progress 靠 CSS 自定义属性驱动，
-          // React 的 CSSProperties 类型不认这些自定义属性，需要断言
-          style={{
-            '--value': done ? 100 : percent,
-            '--size': '3.25rem',
-            '--thickness': '4px',
-          } as CSSProperties}
-          role="progressbar"
-        >
-          <span className="text-xs font-bold">{done ? 0 : remaining}</span>
-        </div>
+    <div className="fixed inset-0 z-30 bg-base-200 flex flex-col">
+      <div className="flex items-center gap-3 px-4 py-3 bg-base-100 border-b border-base-200 shrink-0">
+        <button className="btn btn-ghost btn-sm btn-circle" title="退出复习" onClick={onExit}>
+          <X className="w-4 h-4" />
+        </button>
+        <progress className="progress progress-warning flex-1 h-2" value={index} max={queue.length} />
+        <span className="text-sm text-base-content/60 tabular-nums whitespace-nowrap">
+          {index + 1} / {queue.length}
+        </span>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          {done ? (
-            <div className="flex flex-col items-center justify-center py-16 text-base-content/50">
-              <CheckCircle className="w-16 h-16 mb-4 text-success/60" />
-              <h3 className="text-lg font-semibold mb-1 text-base-content/60">本轮复习完成 🎉</h3>
-              <button
-                className="btn btn-primary btn-sm mt-4 gap-1"
-                onClick={() => { setQueue(buildNewQueue(wordbook)); setIndex(0); setRevealed(false); }}
-              >
-                <Plus className="w-4 h-4" />
-                提前学新词
-              </button>
-            </div>
-          ) : word && current?.mode === 'recall' ? (
-            <RecallQuestion
-              key={`${word.text}-recall-${index}`}
-              word={word}
-              onGrade={recordResult}
-              onRevealChange={setRevealed}
-            />
-          ) : word ? (
-            <RecognitionQuestion
-              key={`${word.text}-recognition-${index}`}
-              word={word}
-              pool={wordbook}
-              onGrade={recordResult}
-            />
-          ) : null}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            {current!.exercise === 'spelling' ? (
+              <SpellingQuestion
+                key={`${current!.word.id}-spelling-${index}`}
+                word={current!.word}
+                onGrade={grade}
+                onReveal={setRevealed}
+              />
+            ) : (
+              <RecognitionQuestion
+                key={`${current!.word.id}-en2zh-${index}`}
+                word={current!.word}
+                pool={allWords}
+                onGrade={grade}
+              />
+            )}
+          </div>
+          <aside>{showSidebar && <GrammarSidebar word={current!.word} />}</aside>
         </div>
-
-        <aside>{showSidebar && <GrammarSidebar word={word} />}</aside>
       </div>
     </div>
   );

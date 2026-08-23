@@ -1,14 +1,16 @@
 /**
- * 单词本外壳：侧边导航、顶栏搜索、导入导出、清空确认，以及五个视图的路由。
+ * 单词本外壳：侧边导航、顶栏搜索、导入导出，以及各视图的路由。
  *
- * MUI 的使用范围（刻意克制，不铺开）：只用在 daisyUI 纯 CSS 覆盖不到的交互上——
- * Autocomplete（键盘导航 + 候选过滤）、Dialog（焦点陷阱 + Esc 关闭）、
- * Snackbar（统一的操作反馈，替代原来的 alert()）、Tooltip（在 TaggedSentence 里）。
- * 普通按钮/卡片/徽章继续用 daisyUI 的 className，不引入 MUI 的对应组件。
+ * 2.1 起整页统一读写 Word + LearningRecord（见 useLearning）。旧的 wordbook 键
+ * 由 useLearning 在首次加载时迁移过来，之后不再读写它——新旧两套并存各写各的
+ * 必然分叉，那种 bug 事后没法修。
+ *
+ * MUI 的使用范围（刻意克制）：只用在 daisyUI 纯 CSS 覆盖不到的交互上——
+ * Autocomplete、Dialog、Snackbar、Tooltip。按钮/卡片/徽章继续用 daisyUI。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
-  BookOpen, RotateCw, List, Layers, PenLine, BarChart2, Upload, Download, Trash2,
+  BookOpen, Home, List, Layers, PenLine, BarChart2, Upload, Download, Trash2,
 } from 'lucide-react';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
@@ -21,19 +23,23 @@ import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 
 import { applyTheme, initThemeControl } from '../utils/theme.js';
-import { useWordbook } from './lib/useWordbook.ts';
+import { useLearning } from './lib/useLearning.ts';
+import { TodayView } from './views/TodayView.tsx';
+import { LearnView } from './views/LearnView.tsx';
 import { ReviewView } from './views/ReviewView.tsx';
 import { ListView, regenerateExample } from './views/ListView.tsx';
 import { CardsView } from './views/CardsView.tsx';
 import { QuizView } from './views/QuizView.tsx';
 import { StatsView } from './views/StatsView.tsx';
-import type { WordEntry, Toast } from '../types/models.ts';
+import { buildTodayQueue, DEFAULT_STUDY_CONFIG } from '../utils/learning/queue.ts';
+import { createRecord, recordAnswer } from '../utils/learning/srsService.ts';
+import type { Familiarity, LearningRecord, Toast, Word } from '../types/models.ts';
 
 const NAV = [
-  { view: 'review', label: '今日复习', Icon: RotateCw },
-  { view: 'list', label: '单词列表', Icon: List },
-  { view: 'cards', label: '卡片学习', Icon: Layers },
-  { view: 'quiz', label: '拼写测验', Icon: PenLine },
+  { view: 'today', label: '今日学习', Icon: Home },
+  { view: 'list', label: '我的词库', Icon: List },
+  { view: 'cards', label: '卡片浏览', Icon: Layers },
+  { view: 'quiz', label: '拼写练习', Icon: PenLine },
   { view: 'stats', label: '学习统计', Icon: BarChart2 },
 ] as const;
 
@@ -41,12 +47,20 @@ type ViewId = (typeof NAV)[number]['view'];
 
 const VALID_VIEWS: readonly ViewId[] = NAV.map((n) => n.view);
 
+/** 沉浸式学习会话：先清掉到期复习，再学新词 */
+type Session = null | 'review' | 'learn';
+
 export function App() {
-  const { wordbook, loaded, persist, updateWord } = useWordbook();
+  const {
+    words, records, loaded, migratedCount,
+    updateRecord, updateWord, removeWord, replaceAll,
+  } = useLearning();
+
   const [view, setView] = useState<ViewId>(() => {
     const requested = new URLSearchParams(location.search).get('view');
-    return VALID_VIEWS.includes(requested as ViewId) ? (requested as ViewId) : 'review';
+    return VALID_VIEWS.includes(requested as ViewId) ? (requested as ViewId) : 'today';
   });
+  const [session, setSession] = useState<Session>(null);
   const [search, setSearch] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -55,13 +69,19 @@ export function App() {
 
   useEffect(() => { applyTheme(); }, []);
 
-  // 主题下拉仍然是旧的命令式实现（utils/theme.js，六个页面共用），
-  // 这里给它留一个挂载点，不为了 React 化单独重写一套。
+  // 主题下拉仍是命令式实现（utils/theme.js，六个页面共用），留个挂载点，
+  // 不为了 React 化单独重写一套
   useEffect(() => {
     if (themeSlotRef.current) initThemeControl(themeSlotRef.current);
   }, []);
 
-  // 切页签同步 URL，刷新后能停在原来的页签
+  // 从旧版本迁移过数据时告知用户一声，否则「词突然多了」会让人疑惑
+  useEffect(() => {
+    if (migratedCount > 0) {
+      setToast({ severity: 'info', message: `已从旧版本导入 ${migratedCount} 个单词` });
+    }
+  }, [migratedCount]);
+
   const switchView = useCallback((next: ViewId) => {
     setView(next);
     const url = new URL(location.href);
@@ -69,28 +89,55 @@ export function App() {
     history.replaceState(null, '', url);
   }, []);
 
+  const queue = useMemo(
+    () => buildTodayQueue(words, records, DEFAULT_STUDY_CONFIG),
+    [words, records],
+  );
+
+  /** 今日要学的新词（去重后的词，不是题目） */
+  const newWords = useMemo(() => {
+    const ids = new Set(queue.items.filter((i) => i.kind === 'new').map((i) => i.wordId));
+    return words.filter((w) => ids.has(w.id));
+  }, [queue, words]);
+
+  const reviewWords = useMemo(() => {
+    const ids = new Set(queue.items.filter((i) => i.kind === 'review').map((i) => i.wordId));
+    return words.filter((w) => ids.has(w.id));
+  }, [queue, words]);
+
+  const startSession = useCallback(() => {
+    setSession(reviewWords.length > 0 ? 'review' : 'learn');
+  }, [reviewWords.length]);
+
+  /** 学新词时的熟悉度评估。只种下 en2zh 方向——这次测的就是「看词能否想起意思」 */
+  const handleFamiliarity = useCallback(async (wordId: string, grade: Familiarity) => {
+    await updateRecord(wordId, (prev) =>
+      recordAnswer(prev ?? createRecord(wordId), 'en2zh', grade));
+  }, [updateRecord]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return wordbook;
-    return wordbook.filter((w) =>
-      w.text.toLowerCase().includes(q) ||
-      Object.values(w.translations || {}).some((t) => t.toLowerCase().includes(q)),
-    );
-  }, [wordbook, search]);
+    if (!q) return words;
+    return words.filter((w) =>
+      w.word.toLowerCase().includes(q)
+      || w.meanings.some((m) => m.definitions.some((d) => d.toLowerCase().includes(q))));
+  }, [words, search]);
 
-  const handleDelete = useCallback(async (word: WordEntry) => {
-    await persist(wordbook.filter((w) => w !== word));
-  }, [wordbook, persist]);
-
-  const handleRegenerate = useCallback(async (word: WordEntry) => {
+  const handleRegenerate = useCallback(async (word: Word) => {
     const ok = await regenerateExample(word, updateWord);
     setToast(ok
-      ? { message: `已为「${word.text}」生成新例句`, severity: 'success' }
+      ? { message: `已为「${word.word}」生成新例句`, severity: 'success' }
       : { message: '生成失败，请检查是否已配置 AI 引擎或本地 Ollama', severity: 'warning' });
   }, [updateWord]);
 
   const handleExport = () => {
-    const blob = new Blob([JSON.stringify(wordbook, null, 2)], { type: 'application/json' });
+    const payload = {
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      words,
+      records: [...records.values()],
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -101,22 +148,61 @@ export function App() {
 
   const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     try {
-      const imported = JSON.parse(await file.text());
-      if (!Array.isArray(imported)) throw new Error('文件格式不对，应该是一个数组');
+      const parsed = JSON.parse(await file.text());
+      // 兼容两种格式：2.1 的 {version:2, words, records} 和更早导出的纯数组
+      const incoming: Word[] = Array.isArray(parsed)
+        ? []
+        : (parsed.words as Word[] ?? []);
+      if (!Array.isArray(parsed) && !Array.isArray(parsed.words)) {
+        throw new Error('文件格式不对');
+      }
+      if (Array.isArray(parsed)) {
+        throw new Error('这是旧版本导出的文件，请先在旧版本里导入后再升级');
+      }
 
-      const existing = new Set(wordbook.map((w) => w.text.toLowerCase()));
-      const added = (imported as WordEntry[]).filter(
-        (w) => w.text && !existing.has(w.text.toLowerCase()),
-      );
-      if (added.length > 0) await persist([...added, ...wordbook]);
+      const existing = new Set(words.map((w) => w.word.toLowerCase()));
+      const added = incoming.filter((w) => w.word && !existing.has(w.word.toLowerCase()));
+      const incomingRecords: LearningRecord[] = (parsed.records as LearningRecord[]) ?? [];
+      const knownIds = new Set([...records.keys()]);
+      const addedRecords = incomingRecords.filter((r) => !knownIds.has(r.wordId));
+
+      if (added.length > 0 || addedRecords.length > 0) {
+        await replaceAll([...added, ...words], [...addedRecords, ...records.values()]);
+      }
       setToast({ message: `导入成功，新增 ${added.length} 个单词`, severity: 'success' });
     } catch (err) {
       setToast({ message: `导入失败：${(err as Error).message}`, severity: 'error' });
     }
-    e.target.value = '';
   };
+
+  // 沉浸式流程接管整个视口，不渲染侧边导航
+  if (session === 'review' && reviewWords.length > 0) {
+    return (
+      <ReviewView
+        words={reviewWords}
+        allWords={words}
+        records={records}
+        updateRecord={updateRecord}
+        onExit={() => setSession(null)}
+        onFinish={() => setSession(newWords.length > 0 ? 'learn' : null)}
+      />
+    );
+  }
+
+  if (session === 'learn' && newWords.length > 0) {
+    return (
+      <LearnView
+        words={newWords}
+        records={records}
+        onGrade={handleFamiliarity}
+        onExit={() => setSession(null)}
+        onFinish={() => setSession(null)}
+      />
+    );
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -161,21 +247,23 @@ export function App() {
       <div className="flex-1 flex flex-col min-h-screen">
         <header className="navbar bg-base-100 shadow px-4 gap-3 sticky top-0 z-10">
           <div className="navbar-start flex-1">
-            <Autocomplete
-              freeSolo
-              size="small"
-              sx={{ width: 320 }}
-              options={wordbook.map((w) => w.text)}
-              inputValue={search}
-              onInputChange={(_, v) => setSearch(v)}
-              renderInput={(params) => <TextField {...params} placeholder="搜索单词..." />}
-            />
+            {view === 'list' && (
+              <Autocomplete
+                freeSolo
+                size="small"
+                sx={{ width: 320 }}
+                options={words.map((w) => w.word)}
+                inputValue={search}
+                onInputChange={(_, v) => setSearch(v)}
+                renderInput={(params) => <TextField {...params} placeholder="搜索单词..." />}
+              />
+            )}
           </div>
           <div className="navbar-end flex items-center gap-2">
-            <span className="badge badge-ghost">{wordbook.length} 个单词</span>
+            <span className="badge badge-ghost">{words.length} 个单词</span>
             <button
               className="btn btn-error btn-sm btn-outline gap-1"
-              disabled={wordbook.length === 0}
+              disabled={words.length === 0}
               onClick={() => setConfirmClear(true)}
             >
               <Trash2 className="w-4 h-4" />
@@ -185,23 +273,37 @@ export function App() {
           </div>
         </header>
 
-        <p className="text-xs text-base-content/40 text-center py-1">
-          提示：开启 GitHub 同步后，删除的单词可能会在下次同步时从其他设备恢复
-        </p>
-
         <main className="flex-1 p-6">
-          {view === 'review' && <ReviewView wordbook={wordbook} loaded={loaded} updateWord={updateWord} />}
-          {view === 'list' && (
-            <ListView
-              words={filtered}
-              totalCount={wordbook.length}
-              onDelete={handleDelete}
-              onRegenerate={handleRegenerate}
-            />
+          {!loaded ? (
+            <div className="flex justify-center py-20">
+              <span className="loading loading-spinner loading-lg text-primary" />
+            </div>
+          ) : (
+            <>
+              {view === 'today' && (
+                <TodayView
+                  words={words}
+                  records={records}
+                  config={DEFAULT_STUDY_CONFIG}
+                  hasUnfinished={false}
+                  onStart={startSession}
+                  onGoToLibrary={() => switchView('list')}
+                />
+              )}
+              {view === 'list' && (
+                <ListView
+                  words={filtered}
+                  records={records}
+                  totalCount={words.length}
+                  onDelete={removeWord}
+                  onRegenerate={handleRegenerate}
+                />
+              )}
+              {view === 'cards' && <CardsView words={words} />}
+              {view === 'quiz' && <QuizView words={words} />}
+              {view === 'stats' && <StatsView words={words} records={records} />}
+            </>
           )}
-          {view === 'cards' && <CardsView words={wordbook} />}
-          {view === 'quiz' && <QuizView words={wordbook} />}
-          {view === 'stats' && <StatsView words={wordbook} />}
         </main>
       </div>
 
@@ -209,7 +311,7 @@ export function App() {
         <DialogTitle>清空单词本？</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            将删除全部 {wordbook.length} 个单词及其复习记录，此操作不可撤销。
+            将删除全部 {words.length} 个单词及其学习进度，此操作不可撤销。
             如果开启了 GitHub 同步，删除的记录可能会在下次同步时从其他设备恢复。
           </DialogContentText>
         </DialogContent>
@@ -218,7 +320,7 @@ export function App() {
           <button
             className="btn btn-error btn-sm"
             onClick={async () => {
-              await persist([]);
+              await replaceAll([], []);
               setConfirmClear(false);
               setToast({ message: '单词本已清空', severity: 'info' });
             }}

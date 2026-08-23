@@ -1,44 +1,44 @@
 /**
- * 单词列表视图：搜索结果、掌握度、音标/词性、例句双语朗读、AI 重新生成例句、删除。
+ * 我的词库：搜索结果、掌握度、音标/词性、例句双语朗读、AI 重新生成例句、删除。
  */
 import { useState } from 'react';
 import { Volume2, RotateCw, Trash2 } from 'lucide-react';
 import { Translator } from '../../utils/translator.js';
 import { generateExampleSentence } from '../../utils/example-sentence.js';
-import {
-  ENGINE_NAMES, getMasteryBadge, getMasteryPercent, latestContext,
-} from '../lib/mastery.ts';
-import type { WordEntry } from '../../types/models.ts';
-import type { WordMutator } from '../lib/useWordbook.ts';
+import { deriveStatus, masteryPercent, STATUS_LABEL } from '../../utils/learning/srsService.ts';
+import type { LearningRecord, Word } from '../../types/models.ts';
+
+interface WordActions {
+  onDelete: (wordId: string) => void;
+  onRegenerate: (word: Word) => Promise<void>;
+}
 
 function SpeakButton({ text, lang, title }: { text: string; lang: string; title: string }) {
   return (
     <button
       className="btn btn-ghost btn-xs btn-circle shrink-0"
       title={title}
-      onClick={(e) => {
-        e.stopPropagation();
-        window.ttsManager.speak(text, lang);
-      }}
+      onClick={(e) => { e.stopPropagation(); window.ttsManager.speak(text, lang); }}
     >
       <Volume2 className="w-3 h-3" />
     </button>
   );
 }
 
-interface WordActions {
-  onDelete: (word: WordEntry) => void;
-  onRegenerate: (word: WordEntry) => Promise<void>;
-}
-
-function WordCard({ word, onDelete, onRegenerate }: { word: WordEntry } & WordActions) {
+function WordCard({
+  word, record, onDelete, onRegenerate,
+}: { word: Word; record: LearningRecord | undefined } & WordActions) {
   const [busy, setBusy] = useState(false);
-  const badge = getMasteryBadge(word);
-  const percent = getMasteryPercent(word);
+
+  const status = deriveStatus(record);
+  const label = STATUS_LABEL[status];
+  const percent = masteryPercent(record);
   const progressCls = percent >= 100
     ? 'progress-success'
-    : (badge.cls === 'badge-warning' ? 'progress-warning' : 'progress-primary');
-  const ctx = latestContext(word);
+    : (status === 'difficult' ? 'progress-error' : 'progress-primary');
+
+  const example = word.examples[0];
+  const phonetic = word.phonetic || word.phoneticUS || word.phoneticUK;
 
   const handleRegenerate = async () => {
     setBusy(true);
@@ -54,15 +54,14 @@ function WordCard({ word, onDelete, onRegenerate }: { word: WordEntry } & WordAc
       <div className="card-body gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="font-bold text-lg text-base-content">{word.text}</div>
-            {word.ipa && <span className="text-xs text-base-content/40 font-mono">{word.ipa}</span>}
-            {word.pos && <span className="badge badge-outline badge-sm">{word.pos}</span>}
+            <div className="font-bold text-lg text-base-content">{word.word}</div>
+            {phonetic && <span className="text-xs text-base-content/40 font-mono">{phonetic}</span>}
           </div>
           <div className="flex gap-1 shrink-0">
             <button
               className="btn btn-ghost btn-xs btn-circle"
               title="发音"
-              onClick={() => window.ttsManager.speak(word.text, 'auto')}
+              onClick={() => window.ttsManager.speak(word.word, 'en-US')}
             >
               <Volume2 className="w-4 h-4" />
             </button>
@@ -74,50 +73,53 @@ function WordCard({ word, onDelete, onRegenerate }: { word: WordEntry } & WordAc
             >
               <RotateCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />
             </button>
-            <button className="btn btn-ghost btn-xs" title="删除" onClick={() => onDelete(word)}>
+            <button className="btn btn-ghost btn-xs" title="删除" onClick={() => onDelete(word.id)}>
               <Trash2 className="w-4 h-4 text-error/60" />
             </button>
           </div>
         </div>
 
         <div className="flex flex-col gap-1">
-          {Object.entries(word.translations || {}).map(([engine, text]) => (
-            <div key={engine} className="flex gap-2 items-baseline text-sm">
-              <span className="badge badge-ghost badge-sm shrink-0">{ENGINE_NAMES[engine] || engine}</span>
-              <span className="text-base-content/80">{text}</span>
+          {word.meanings.map((m, i) => (
+            <div key={i} className="flex gap-2 items-baseline text-sm">
+              <span className="badge badge-ghost badge-sm shrink-0">{m.partOfSpeech}</span>
+              <span className="text-base-content/80">{m.definitions.join('；')}</span>
             </div>
           ))}
+          {word.meanings.length === 0 && (
+            <span className="text-sm text-base-content/40">还没有释义</span>
+          )}
         </div>
 
-        {ctx?.sentence && (
+        {example?.sentence && (
           <div className="flex flex-col gap-1 mt-1 p-2 rounded-lg bg-base-200/50 text-xs">
             <div className="flex items-start gap-1.5">
-              <span className="italic text-base-content/70 flex-1">{ctx.sentence}</span>
-              <SpeakButton text={ctx.sentence} lang="en-US" title="朗读例句" />
+              <span className="italic text-base-content/70 flex-1">{example.sentence}</span>
+              <SpeakButton text={example.sentence} lang="en-US" title="朗读例句" />
             </div>
-            {ctx.translation && (
+            {example.translation && (
               <div className="flex items-start gap-1.5">
-                <span className="text-base-content/50 flex-1">{ctx.translation}</span>
-                <SpeakButton text={ctx.translation} lang="zh-CN" title="朗读译文" />
+                <span className="text-base-content/50 flex-1">{example.translation}</span>
+                <SpeakButton text={example.translation} lang="zh-CN" title="朗读译文" />
               </div>
             )}
           </div>
         )}
 
-        <div className="flex items-center gap-2 mt-1">
-          <span className={`badge ${badge.cls} badge-sm`}>{badge.text}</span>
+        <div className="flex items-center gap-2 mt-1 flex-wrap">
+          <span className={`badge ${label.cls} badge-sm`}>{label.text}</span>
           <span className="text-xs text-base-content/40">
-            {new Date(word.timestamp).toLocaleDateString('zh-CN')}
+            {new Date(word.addedAt).toLocaleDateString('zh-CN')}
           </span>
-          {word.url && (
+          {word.sourceUrl && (
             <a
-              href={word.url}
+              href={word.sourceUrl}
               target="_blank"
               rel="noreferrer"
               className="link link-hover text-xs text-base-content/50"
-              title={word.title || word.url}
+              title={word.sourceTitle || word.sourceUrl}
             >
-              {word.title || '来源页面'}
+              {word.sourceTitle || '来源页面'}
             </a>
           )}
         </div>
@@ -134,8 +136,12 @@ function WordCard({ word, onDelete, onRegenerate }: { word: WordEntry } & WordAc
 }
 
 export function ListView({
-  words, totalCount, onDelete, onRegenerate,
-}: { words: WordEntry[]; totalCount: number } & WordActions) {
+  words, records, totalCount, onDelete, onRegenerate,
+}: {
+  words: Word[];
+  records: Map<string, LearningRecord>;
+  totalCount: number;
+} & WordActions) {
   if (totalCount === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-base-content/50">
@@ -153,8 +159,9 @@ export function ListView({
     <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
       {words.map((w) => (
         <WordCard
-          key={w.id || w.text}
+          key={w.id}
           word={w}
+          record={records.get(w.id)}
           onDelete={onDelete}
           onRegenerate={onRegenerate}
         />
@@ -163,28 +170,36 @@ export function ListView({
   );
 }
 
-// AI 重新生成例句：追加一条新的 context（不覆盖旧的），顺带补齐缺失的词性/音标。
-// 已有的词性/音标不覆盖，避免同一个词的标注来回跳变。
+/**
+ * AI 重新生成例句：追加一条新例句（不覆盖旧的），顺带补齐缺失的词性/音标。
+ * 已有的词性/音标不覆盖，避免同一个词的标注来回跳变。
+ */
 export async function regenerateExample(
-  word: WordEntry,
-  updateWord: (text: string, mutate: WordMutator) => Promise<void>,
+  word: Word,
+  updateWord: (wordId: string, mutate: (w: Word) => Word) => Promise<void>,
 ): Promise<boolean> {
   const t = new Translator();
   await t.init();
-  const generated = await generateExampleSentence(word.text, t);
+  const generated = await generateExampleSentence(word.word, t);
   if (!generated) return false;
-  await updateWord(word.text, (w) => {
-    w.contexts = [...(w.contexts || []), {
-      sentence: generated.sentence,
-      translation: generated.translation,
-      tokens: generated.tokens,
-      url: null,
-      title: 'AI 生成',
-      timestamp: Date.now(),
-      source: 'ai',
-    }];
-    if (generated.pos && !w.pos) w.pos = generated.pos;
-    if (generated.ipa && !w.ipa) w.ipa = generated.ipa;
+
+  await updateWord(word.id, (w) => {
+    const next: Word = {
+      ...w,
+      examples: [...w.examples, {
+        sentence: generated.sentence,
+        translation: generated.translation,
+        tokens: generated.tokens,
+        origin: 'ai',
+        timestamp: Date.now(),
+      }],
+    };
+    if (generated.ipa && !next.phonetic) next.phonetic = generated.ipa;
+    // 没有任何释义时才用 AI 给的词性建一条，避免覆盖已有释义
+    if (generated.pos && next.meanings.length === 0) {
+      next.meanings = [{ partOfSpeech: generated.pos, definitions: [] }];
+    }
+    return next;
   });
   return true;
 }
