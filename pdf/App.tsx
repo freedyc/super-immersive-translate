@@ -110,7 +110,7 @@ export function App() {
         </div>
         <div className="navbar-end flex items-center gap-2">
           <select
-            className="select select-bordered select-sm"
+            className="select select-sm"
             value={engine}
             onChange={(e) => setEngine(e.target.value)}
           >

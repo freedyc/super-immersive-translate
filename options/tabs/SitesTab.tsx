@@ -49,14 +49,14 @@ export function SitesTab({ settings, update }: Pick<TabProps, 'settings' | 'upda
           onChange={(v) => update({ siteRules: { ...rules, mode: v } })}
         />
 
-        <div className="form-control">
+        <div>
           <label className="label pb-1">
-            <span className="label-text text-xs text-base-content/60">添加站点</span>
+            <span className="text-xs text-base-content/60">添加站点</span>
           </label>
           <div className="flex gap-2">
             <input
               type="text"
-              className="input input-bordered input-sm flex-1"
+              className="input input-sm flex-1"
               placeholder="example.com"
               value={siteInput}
               onChange={(e) => setSiteInput(e.target.value)}
@@ -95,14 +95,14 @@ export function SitesTab({ settings, update }: Pick<TabProps, 'settings' | 'upda
         <div className="flex gap-2">
           <input
             type="text"
-            className="input input-bordered input-sm flex-1"
+            className="input input-sm flex-1"
             placeholder="example.com"
             value={engineHost}
             onChange={(e) => setEngineHost(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') addSiteEngine(); }}
           />
           <select
-            className="select select-bordered select-sm"
+            className="select select-sm"
             value={engineChoice}
             onChange={(e) => setEngineChoice(e.target.value)}
           >

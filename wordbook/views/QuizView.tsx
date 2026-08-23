@@ -134,7 +134,7 @@ export function QuizView({ words, onGoToLibrary }: {
               <input
                 ref={inputRef}
                 type="text"
-                className="input input-bordered text-center text-lg"
+                className="input w-full text-center text-lg"
                 placeholder="输入英文单词..."
                 autoComplete="off"
                 autoCapitalize="off"

@@ -182,10 +182,10 @@ export function App() {
             <Settings2 className="w-3.5 h-3.5" /> 全局翻译设置
           </h2>
 
-          <div className="form-control w-full">
-            <label className="label py-0.5"><span className="label-text font-bold text-[11px] text-base-content/85">全页翻译引擎</span></label>
+          <div className="w-full">
+            <label className="label py-0.5"><span className="font-bold text-[11px] text-base-content/85">全页翻译引擎</span></label>
             <select
-              className="select select-bordered select-sm w-full rounded-xl font-semibold"
+              className="select select-sm w-full rounded-xl font-semibold"
               value={settings.engine}
               onChange={(e) => update({ engine: e.target.value })}
             >
@@ -197,11 +197,11 @@ export function App() {
             <div className="bg-base-200/50 border border-base-200/60 rounded-xl p-3 flex flex-col gap-2.5">
               {engineFields.map((f) => (
                 <div key={f.key} className="flex flex-col gap-1">
-                  <label className="label py-0"><span className="label-text font-bold text-[10px] text-base-content/75">{f.label}</span></label>
+                  <label className="label py-0"><span className="font-bold text-[10px] text-base-content/75">{f.label}</span></label>
                   <input
                     type={f.type}
                     placeholder={f.placeholder}
-                    className="input input-bordered input-sm w-full rounded-lg"
+                    className="input input-sm w-full rounded-lg"
                     value={(settings as Record<string, unknown>)[f.key] as string || ''}
                     onChange={(e) => update({ [f.key]: e.target.value }, { debounce: true })}
                   />
@@ -213,20 +213,20 @@ export function App() {
           )}
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="form-control">
-              <label className="label py-0.5"><span className="label-text font-bold text-[11px] text-base-content/85">目标语言</span></label>
+            <div>
+              <label className="label py-0.5"><span className="font-bold text-[11px] text-base-content/85">目标语言</span></label>
               <select
-                className="select select-bordered select-sm w-full rounded-xl font-semibold"
+                className="select select-sm w-full rounded-xl font-semibold"
                 value={settings.targetLang}
                 onChange={(e) => update({ targetLang: e.target.value })}
               >
                 {LANGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
-            <div className="form-control">
-              <label className="label py-0.5"><span className="label-text font-bold text-[11px] text-base-content/85">显示模式</span></label>
+            <div>
+              <label className="label py-0.5"><span className="font-bold text-[11px] text-base-content/85">显示模式</span></label>
               <select
-                className="select select-bordered select-sm w-full rounded-xl font-semibold"
+                className="select select-sm w-full rounded-xl font-semibold"
                 value={settings.displayMode}
                 onChange={(e) => update({ displayMode: e.target.value })}
               >
@@ -235,8 +235,8 @@ export function App() {
             </div>
           </div>
 
-          <div className="form-control mt-1 pt-2.5 border-t border-base-200/60">
-            <label className="label py-0 mb-1.5"><span className="label-text font-bold text-[11px] text-base-content/85">译文高亮颜色</span></label>
+          <div className="mt-1 pt-2.5 border-t border-base-200/60">
+            <label className="label py-0 mb-1.5"><span className="font-bold text-[11px] text-base-content/85">译文高亮颜色</span></label>
             <div className="flex justify-between items-center px-1">
               {COLORS.map((c) => (
                 <button
@@ -254,7 +254,7 @@ export function App() {
           <div className="flex flex-col gap-2.5 mt-1.5 bg-base-200/50 p-2.5 rounded-xl border border-base-200/60">
             {[['hoverTranslate', '悬停段落翻译'], ['inputTranslate', '输入框实时翻译']].map(([key, label]) => (
               <label key={key} className="cursor-pointer flex items-center justify-between">
-                <span className="label-text font-bold text-[11px] text-base-content/75">{label}</span>
+                <span className="font-bold text-[11px] text-base-content/75">{label}</span>
                 <input
                   type="checkbox"
                   className="checkbox checkbox-primary checkbox-sm rounded-md"
@@ -271,10 +271,10 @@ export function App() {
             <MousePointer2 className="w-3.5 h-3.5" /> 划词翻译模式
           </h2>
 
-          <div className="form-control">
-            <label className="label py-0.5"><span className="label-text font-bold text-[11px] text-base-content/85">触发方式</span></label>
+          <div>
+            <label className="label py-0.5"><span className="font-bold text-[11px] text-base-content/85">触发方式</span></label>
             <select
-              className="select select-bordered select-sm w-full rounded-xl font-semibold"
+              className="select select-sm w-full rounded-xl font-semibold"
               value={settings.selectionMode}
               onChange={(e) => update({ selectionMode: e.target.value })}
             >
@@ -282,8 +282,8 @@ export function App() {
             </select>
           </div>
 
-          <div className="form-control border-t border-base-200/60 mt-1 pt-2.5">
-            <label className="label py-0.5"><span className="label-text font-bold text-[11px] text-base-content/85">多引擎比对 (划词多选)</span></label>
+          <div className="border-t border-base-200/60 mt-1 pt-2.5">
+            <label className="label py-0.5"><span className="font-bold text-[11px] text-base-content/85">多引擎比对 (划词多选)</span></label>
             <div className="grid grid-cols-3 gap-2 mt-1.5 bg-base-200/30 p-2 rounded-xl border border-base-200/50">
               {SELECTION_ENGINES.map(([v, label]) => (
                 <label key={v} className="cursor-pointer flex items-center gap-1.5 p-1 rounded hover:bg-base-200/50 text-[10px] font-semibold text-base-content/80">

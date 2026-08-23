@@ -56,7 +56,7 @@ export function App() {
           超级翻译
         </span>
         <select
-          className="select select-bordered select-sm flex-1"
+          className="select select-sm flex-1"
           value={tab}
           onChange={(e) => setTab(e.target.value as TabId)}
         >

@@ -20,6 +20,30 @@ const EXERCISE_HINT: Record<ExerciseType, string> = {
   spelling: '看释义默写单词，最费时也最扎实',
 };
 
+/**
+ * 滑杆一行：标题 + 当前值 + 提示。
+ *
+ * 不用 daisyUI 的 form-control / label-text —— 那是 daisyUI 4 的类，
+ * 5 里已经删掉了，写上去等于什么样式都没有。
+ */
+function SliderRow({ label, value, hint, children }: {
+  label: string;
+  value: string;
+  hint: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm text-base-content/60 tabular-nums">{value}</span>
+      </div>
+      {children}
+      <span className="text-xs text-base-content/45">{hint}</span>
+    </div>
+  );
+}
+
 export function SettingsView({ config, allExercises, onChange }: Props) {
   const toggle = (ex: ExerciseType) => {
     const on = config.enabledExercises.includes(ex);
@@ -38,49 +62,37 @@ export function SettingsView({ config, allExercises, onChange }: Props) {
         <div className="card-body gap-4">
           <h2 className="card-title text-base">每日额度</h2>
 
-          <label className="form-control">
-            <div className="label">
-              <span className="label-text">每天学习新词上限</span>
-              <span className="label-text-alt tabular-nums">{config.dailyNewLimit} 个</span>
-            </div>
+          <SliderRow
+            label="每天学习新词上限"
+            value={`${config.dailyNewLimit} 个`}
+            hint="设为 0 就只复习不学新词"
+          >
             <input
               type="range"
-              className="range range-primary range-sm"
+              className="range range-primary range-sm w-full"
               min={0}
               max={50}
               step={5}
               value={config.dailyNewLimit}
               onChange={(e) => onChange({ dailyNewLimit: Number(e.target.value) })}
             />
-            <div className="label">
-              <span className="label-text-alt text-base-content/50">
-                设为 0 就只复习不学新词
-              </span>
-            </div>
-          </label>
+          </SliderRow>
 
-          <label className="form-control">
-            <div className="label">
-              <span className="label-text">每天复习上限</span>
-              <span className="label-text-alt tabular-nums">
-                {config.dailyReviewLimit === 0 ? '不限' : `${config.dailyReviewLimit} 个`}
-              </span>
-            </div>
+          <SliderRow
+            label="每天复习上限"
+            value={config.dailyReviewLimit === 0 ? '不限' : `${config.dailyReviewLimit} 个`}
+            hint="建议保持「不限」：到期的词压着不复习只会越积越多"
+          >
             <input
               type="range"
-              className="range range-warning range-sm"
+              className="range range-warning range-sm w-full"
               min={0}
               max={100}
               step={10}
               value={config.dailyReviewLimit}
               onChange={(e) => onChange({ dailyReviewLimit: Number(e.target.value) })}
             />
-            <div className="label">
-              <span className="label-text-alt text-base-content/50">
-                建议保持「不限」：到期的词压着不复习只会越积越多
-              </span>
-            </div>
-          </label>
+          </SliderRow>
         </div>
       </div>
 

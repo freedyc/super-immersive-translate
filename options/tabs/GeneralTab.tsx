@@ -69,12 +69,12 @@ export function GeneralTab({ settings, update }: Pick<TabProps, 'settings' | 'up
       </Card>
 
       <Card title="AI 引擎提示词">
-        <div className="form-control">
+        <div>
           <label className="label pb-1">
-            <span className="label-text text-xs text-base-content/60">自定义翻译提示词</span>
+            <span className="text-xs text-base-content/60">自定义翻译提示词</span>
           </label>
           <textarea
-            className="textarea textarea-bordered textarea-sm w-full font-mono text-xs"
+            className="textarea textarea-sm w-full font-mono text-xs"
             rows={3}
             value={settings.aiPrompt ?? ''}
             onChange={(e) => update({ aiPrompt: e.target.value }, { debounce: true })}
@@ -95,9 +95,9 @@ export function GeneralTab({ settings, update }: Pick<TabProps, 'settings' | 'up
           onChange={(v) => update({ selectionMode: v })}
         />
 
-        <div className="form-control">
+        <div>
           <label className="label pb-1">
-            <span className="label-text text-xs text-base-content/60">划词引擎 (多选)</span>
+            <span className="text-xs text-base-content/60">划词引擎 (多选)</span>
           </label>
           <div className="flex flex-wrap gap-x-4 gap-y-2 mt-1">
             {SELECTION_ENGINE_OPTIONS.map(([v, label]) => (

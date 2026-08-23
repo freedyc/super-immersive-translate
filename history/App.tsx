@@ -79,7 +79,7 @@ export function App() {
           <input
             type="text"
             placeholder="搜索历史..."
-            className="input input-bordered input-sm w-44"
+            className="input input-sm w-44"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

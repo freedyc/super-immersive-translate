@@ -29,14 +29,14 @@ export function SelectField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="form-control">
+    <div>
       {label && (
         <label className="label pb-1">
-          <span className="label-text text-xs text-base-content/60">{label}</span>
+          <span className="text-xs text-base-content/60">{label}</span>
         </label>
       )}
       <select
-        className="select select-bordered select-sm w-full"
+        className="select select-sm w-full"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -58,15 +58,15 @@ export function TextField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="form-control">
+    <div>
       {label && (
         <label className="label pb-1">
-          <span className="label-text text-xs text-base-content/60">{label}</span>
+          <span className="text-xs text-base-content/60">{label}</span>
         </label>
       )}
       <input
         type={type}
-        className="input input-bordered input-sm w-full"
+        className="input input-sm w-full"
         placeholder={placeholder}
         value={value ?? ''}
         onChange={(e) => onChange(e.target.value)}
@@ -108,14 +108,19 @@ export function RangeField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="form-control">
-      <label className="label pb-1">
-        <span className="label-text text-xs text-base-content/60">{label}</span>
-        <span className="label-text-alt text-xs font-mono">{format ? format(value) : value}</span>
-      </label>
+    <div>
+      {/* 标题和数值分列两端要靠 flex + justify-between 自己写。
+          daisyUI 5 的 .label 是 inline-flex + gap，不再是 4 里的 space-between，
+          套 label/label-text-alt 会让数值紧贴在标题右边。 */}
+      <div className="flex items-baseline justify-between gap-2 pb-1">
+        <span className="text-xs text-base-content/60">{label}</span>
+        <span className="text-xs font-mono text-base-content/60">
+          {format ? format(value) : value}
+        </span>
+      </div>
       <input
         type="range"
-        className="range range-primary range-xs"
+        className="range range-primary range-xs w-full"
         min={min}
         max={max}
         step={step}

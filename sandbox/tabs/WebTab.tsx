@@ -29,7 +29,7 @@ export function WebTab() {
         <div className="flex gap-2">
           <input
             type="text"
-            className="input input-bordered flex-1"
+            className="input flex-1"
             placeholder="输入网址，例如 example.com"
             value={url}
             onChange={(e) => setUrl(e.target.value)}

@@ -26,12 +26,12 @@ let pass = 0;
 let fail = 0;
 const failures = [];
 
-function check(name, cond) {
+function check(name, cond, detail = '') {
   if (cond) {
     pass++;
   } else {
     fail++;
-    failures.push(name);
+    failures.push(detail ? `${name} —— ${detail}` : name);
   }
 }
 
@@ -303,6 +303,45 @@ section('今日队列');
     dailyNewLimit: 10, dailyReviewLimit: 0, enabledExercises: ['en2zh'],
   });
   check('暂停的词不进队列', queue.items.length === 0);
+}
+
+// ── daisyUI 版本卫生 ────────────────────────────────────────────────────────
+// 这个项目没有 linter，daisyUI 4 → 5 删掉的类写上去不会报错，只会静默失效：
+// 页面照常渲染，只是布局不对。RangeField 的数值就这样右对齐失效了很久没人发现。
+section('daisyUI：不再存在的类不能出现在源码里');
+{
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join, extname } = await import('node:path');
+
+  // daisyUI 5 里已删除的类。value 说明为什么它的消失是有后果的
+  const REMOVED = {
+    'form-control': '容器不再是 flex-col',
+    'label-text': '不再有字号/颜色',
+    'label-text-alt': '不再右对齐（.label 从 space-between 变成 inline-flex）',
+    'input-bordered': 'input 默认就带边框',
+    'select-bordered': 'select 默认就带边框',
+    'textarea-bordered': 'textarea 默认就带边框',
+  };
+  const ROOTS = ['popup', 'options', 'sandbox', 'history', 'wordbook', 'pdf', 'content', 'utils'];
+  const EXTS = new Set(['.tsx', '.jsx', '.html', '.js', '.css']);
+
+  const walk = (dir, out = []) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (EXTS.has(extname(full))) out.push(full);
+    }
+    return out;
+  };
+
+  const files = ROOTS.flatMap((r) => walk(r));
+  for (const [cls, why] of Object.entries(REMOVED)) {
+    // 只看 class/className 属性里的整词，注释里提到类名是允许的
+    const re = new RegExp(`class(?:Name)?=(["'\`])[^"'\`]*\\b${cls}\\b`);
+    const hits = files.filter((f) => re.test(readFileSync(f, 'utf8')));
+    check(`没有用 ${cls}（${why}）`, hits.length === 0,
+      hits.length ? `出现在：${hits.join(', ')}` : '');
+  }
 }
 
 // ── 会话存档 ────────────────────────────────────────────────────────────────

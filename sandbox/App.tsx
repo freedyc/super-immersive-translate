@@ -126,7 +126,7 @@ export function App() {
         <div className="flex items-center gap-2">
           <div ref={themeSlotRef} />
           <select
-            className="select select-bordered select-sm rounded-full font-semibold shadow-sm"
+            className="select select-sm rounded-full font-semibold shadow-sm"
             value={engine}
             onChange={(e) => setEngine(e.target.value)}
           >
@@ -147,7 +147,7 @@ export function App() {
           <div className="flex-1 flex items-center gap-4">
             <span className="text-sm text-base-content/60 font-semibold hidden sm:inline">检测语言</span>
             <select
-              className="select select-bordered select-sm text-primary font-bold shadow-sm rounded-xl"
+              className="select select-sm text-primary font-bold shadow-sm rounded-xl"
               value={sourceLang}
               onChange={(e) => setSourceLang(e.target.value)}
             >
@@ -161,7 +161,7 @@ export function App() {
 
           <div className="flex-1 flex items-center gap-4 justify-start">
             <select
-              className="select select-bordered select-sm text-primary font-bold shadow-sm rounded-xl"
+              className="select select-sm text-primary font-bold shadow-sm rounded-xl"
               value={targetLang}
               onChange={(e) => setTargetLang(e.target.value)}
             >
@@ -189,13 +189,13 @@ export function App() {
             </div>
 
             {(ENGINE_FIELDS[engine] || []).map((f) => (
-              <div key={f.key} className="form-control">
+              <div key={f.key}>
                 <label className="label pb-1">
-                  <span className="label-text text-xs text-base-content/60">{f.label}</span>
+                  <span className="text-xs text-base-content/60">{f.label}</span>
                 </label>
                 <input
                   type={f.type}
-                  className="input input-bordered input-sm w-full"
+                  className="input input-sm w-full"
                   placeholder={f.placeholder}
                   value={(settings as unknown as Record<string, string>)[f.key] ?? ''}
                   onChange={(e) => patchSetting(f.key, e.target.value)}

@@ -18,9 +18,9 @@ export function StyleTab({ settings, update }: Pick<TabProps, 'settings' | 'upda
   return (
     <>
       <Card title="译文样式">
-        <div className="form-control">
+        <div>
           <label className="label pb-1">
-            <span className="label-text text-xs text-base-content/60">译文颜色</span>
+            <span className="text-xs text-base-content/60">译文颜色</span>
           </label>
           <div className="flex gap-3 items-center mt-1">
             {COLORS.map((c) => (
