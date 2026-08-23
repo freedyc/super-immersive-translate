@@ -883,6 +883,51 @@ section('剪贴板同步：端到端加密');
     !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
 }
 
+section('剪贴板图片');
+{
+  const { readFileSync } = await import('node:fs');
+  const { pickEvictions } = await import('../utils/image-store.js');
+
+  const mk = (id, ts, pinned) => ({ id, timestamp: ts, pinned });
+  const imgs = [mk('a', 5), mk('b', 4, true), mk('c', 3), mk('d', 2), mk('e', 1, true)];
+
+  const doomed = pickEvictions(imgs, 3);
+  check('超出上限时淘汰最旧的', doomed.length === 2);
+  // 置顶就是为了留住它，被容量规则默默删掉是最难解释的一种数据丢失
+  check('置顶的图片永不被淘汰', !doomed.includes('b') && !doomed.includes('e'));
+  check('淘汰的是时间最早的非置顶项',
+    doomed.includes('d') && doomed.includes('c'));
+  check('未超上限时不淘汰', pickEvictions(imgs, 99).length === 0);
+  check('上限为 0 表示不限制', pickEvictions(imgs, 0).length === 0);
+  check('全是置顶时不淘汰任何一张',
+    pickEvictions([mk('x', 1, true), mk('y', 2, true)], 1).length === 0);
+
+  // 图片必须走 IndexedDB。塞进 clipboardHistory 数组的话，每复制一次**文字**
+  // 都要把那几 MB 重新序列化写一遍——这是设计冲突，不是优化问题
+  const textStore = readFileSync('utils/clipboard.js', 'utf8');
+  check('文字剪贴板不碰 IndexedDB，也不存二进制',
+    !textStore.includes('indexedDB') && !textStore.includes('Blob'));
+  const imgStore = readFileSync('utils/image-store.js', 'utf8');
+  check('图片走 IndexedDB，不进 storage.local',
+    imgStore.includes('indexedDB') && !imgStore.includes('storage.local'));
+
+  // 列表只读缩略图：三十张原图一次性进内存会让页面卡住
+  check('列表查询把原图剔除掉', /\{ blob, \.\.\.meta \}/.test(imgStore));
+
+  // 抓取必须在 Service Worker：内容脚本在宿主页面的源里，
+  // 写进去的 IndexedDB 扩展页面读不到
+  const bg = readFileSync('background/background.js', 'utf8');
+  check('图片抓取在 Service Worker 里', bg.includes('saveImageFromUrl'));
+  check('超过单张上限的图片不入库', /clipboardMaxImageBytes[\s\S]{0,200}throw new Error/.test(bg));
+
+  // 浏览器剪贴板对图片只保证支持 image/png，JPEG 不转直接 write 会抛错
+  const item = readFileSync('history/views/ImageItem.tsx', 'utf8');
+  check('复制图片前把非 PNG 转成 PNG',
+    item.includes("blob.type !== 'image/png'") && item.includes("'image/png'"));
+  check('缩略图的 blob URL 会被撤销（否则翻几次列表就攒一堆）',
+    item.includes('revokeObjectURL'));
+}
+
 section('剪贴板：容量裁剪与合并');
 {
   const { trim } = await import('../utils/clipboard.js');

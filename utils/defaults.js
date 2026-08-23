@@ -91,6 +91,11 @@ export const DEFAULTS = {
   // 剪贴板历史
   clipboardCapture: true,
   clipboardMaxItems: 200,
+  // 图片比文字重得多，条数上限低很多；单张超限的直接不存，
+  // 而不是存进去把库撑爆
+  clipboardSaveImages: true,
+  clipboardMaxImages: 30,
+  clipboardMaxImageBytes: 5 * 1024 * 1024,
   // 同步默认关闭：剪贴板内容比翻译历史敏感得多，开不开该由用户明确决定。
   // 打开后没有口令也不会上传（见 github-sync.js 的 syncClipboardNow）。
   // 口令本身存 storage.local，不进 sync——否则等于把密文和钥匙分给两家云

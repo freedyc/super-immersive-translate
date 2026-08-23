@@ -6,6 +6,7 @@ import { syncNow } from '../utils/github-sync.js';
 import { lookupPhonetic } from '../utils/phonetics.js';
 import { lookupPos } from '../utils/pos.js';
 import { buildRequest } from '../utils/tts-engines.js';
+import { putImage, trimImages } from '../utils/image-store.js';
 
 async function setupPeriodicSyncAlarm() {
   const { githubSyncEnabled, githubSyncMode, githubSyncIntervalMinutes } = await chrome.storage.sync.get(
@@ -35,6 +36,12 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ['selection']
   });
 
+  chrome.contextMenus.create({
+    id: 'save-image-to-clipboard',
+    title: '⚡ 保存图片到剪贴板历史',
+    contexts: ['image']
+  });
+
   if (chrome.sidePanel) {
     chrome.contextMenus.create({
       id: 'open-side-panel',
@@ -61,6 +68,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     chrome.tabs.sendMessage(tab.id, { action: 'toggle' }).catch(() => {});
   } else if (info.menuItemId === 'translate-selection') {
     chrome.tabs.sendMessage(tab.id, { action: 'translateSelection', text: info.selectionText }).catch(() => {});
+  } else if (info.menuItemId === 'save-image-to-clipboard') {
+    saveImageFromUrl(info.srcUrl, tab).catch((err) => {
+      console.warn('[SIT] 保存图片失败:', err?.message || err);
+    });
   } else if (info.menuItemId === 'open-side-panel') {
     if (!chrome.sidePanel) return;
     // sidePanel.open() must be called synchronously within the user gesture.
@@ -172,4 +183,73 @@ async function fetchTtsAudio({ engine, text, lang, opts }) {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
   }
   return { dataUrl: `data:${res.headers.get('content-type') || 'audio/mpeg'};base64,${btoa(binary)}` };
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 剪贴板图片
+//
+// 抓取和入库都在这里做：内容脚本跑在宿主页面的源里，看到的是另一个 IndexedDB，
+// 存进去扩展页面读不到。Service Worker 与扩展页面同源。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 列表里的缩略图边长。原图按需再取，列表不该把三十张原图全读进内存 */
+const THUMB_MAX = 320;
+
+/**
+ * 生成缩略图。
+ *
+ * 失败就返回 null 而不是抛：缩略图只是列表体验，
+ * 不该因为某张图解不开（SVG、动画 WebP 的边界情况）就连原图一起丢掉。
+ */
+async function makeThumbnail(blob) {
+  try {
+    const bitmap = await createImageBitmap(blob);
+    const scale = Math.min(1, THUMB_MAX / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+    const thumb = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.72 });
+    return { thumb, width: bitmap.width, height: bitmap.height };
+  } catch {
+    return null;
+  }
+}
+
+async function saveImageFromUrl(srcUrl, tab) {
+  if (!srcUrl) return;
+  const { clipboardSaveImages, clipboardMaxImages, clipboardMaxImageBytes } =
+    await chrome.storage.sync.get(pick(
+      'clipboardSaveImages', 'clipboardMaxImages', 'clipboardMaxImageBytes',
+    ));
+  if (!clipboardSaveImages) return;
+
+  // data: URL 直接就是数据，http(s) 才需要取。两种都能被 fetch 处理
+  const res = await fetch(srcUrl);
+  if (!res.ok) throw new Error(`取图片失败: HTTP ${res.status}`);
+  const blob = await res.blob();
+
+  if (!blob.type.startsWith('image/')) throw new Error(`不是图片: ${blob.type}`);
+  // 超限的直接不存，而不是存进去把库撑爆
+  if (blob.size > clipboardMaxImageBytes) {
+    throw new Error(`图片过大 (${(blob.size / 1048576).toFixed(1)}MB)，未保存`);
+  }
+
+  const meta = await makeThumbnail(blob);
+  await putImage({
+    id: crypto.randomUUID(),
+    blob,
+    thumb: meta?.thumb ?? null,
+    type: blob.type,
+    size: blob.size,
+    width: meta?.width ?? 0,
+    height: meta?.height ?? 0,
+    srcUrl,
+    url: tab?.url || '',
+    title: tab?.title || '',
+    timestamp: Date.now(),
+  });
+  await trimImages(clipboardMaxImages);
+  chrome.runtime.sendMessage({ action: 'clipboardImagesChanged' }).catch(() => {});
 }

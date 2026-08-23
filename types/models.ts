@@ -282,3 +282,23 @@ export interface ClipboardEntry {
   /** 用户置顶的条目不参与容量裁剪 */
   pinned?: boolean;
 }
+
+/** 剪贴板里的一张图片。blob 只在按 id 单独取时才带上，列表里不含它 */
+export interface ClipboardImageMeta {
+  id: string;
+  /** 列表用的缩略图，入库时生成；解不开的图可能没有 */
+  thumb?: Blob | null;
+  type: string;
+  size: number;
+  width: number;
+  height: number;
+  srcUrl?: string;
+  url?: string;
+  title?: string;
+  timestamp: number;
+  pinned?: boolean;
+}
+
+export interface ClipboardImageRecord extends ClipboardImageMeta {
+  blob: Blob;
+}

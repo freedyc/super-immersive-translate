@@ -193,7 +193,17 @@ the `history/` page's second tab. Two rules are load-bearing: password/OTP field
 untrusted (script-synthesised) copy events are never recorded, and capture must never
 throw — it runs inside the user's real copy action.
 
-GitHub sync for it is **end-to-end encrypted and opt-in** (`githubSyncClipboard`).
+Images live in a **separate store**: `utils/image-store.js` (IndexedDB, one Blob per
+record), captured by the `save-image-to-clipboard` context menu **in the service worker** —
+a content script's IndexedDB belongs to the host page's origin, so anything it wrote would
+be invisible to extension pages. They are deliberately not in the text array: that array is
+read-and-rewritten whole on every copy, so a few MB of image would be re-serialised each
+time you copy text. Images are **not synced** — the Contents API tops out around 1MB.
+Listing strips `blob` and returns only the thumbnail; the full image is fetched by id on
+demand. Copying back converts non-PNG to PNG first — the clipboard only reliably accepts
+`image/png`.
+
+GitHub sync for the text side is **end-to-end encrypted and opt-in** (`githubSyncClipboard`).
 `utils/crypto.js` does AES-256-GCM with a key derived by PBKDF2-SHA256 (600k iterations,
 fresh random salt and IV per encryption). The design rule that must never be relaxed: **no
 passphrase means no upload** — the sync throws rather than degrading to plaintext, and a
