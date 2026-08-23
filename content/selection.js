@@ -4,9 +4,9 @@ import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
 import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sentence.js';
 import { collectWord, getWord } from '../utils/learning/collect.ts';
-import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
+import { formatPhonetic, formatPos, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
-import { lookupPhonetic } from '../utils/phonetics-client.js';
+import { lookupWordMeta } from '../utils/dictionary-client.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -190,27 +190,34 @@ import { lookupPhonetic } from '../utils/phonetics-client.js';
 
     const existing = await getWord(sourceText);
     let phonetic = existing ? pickPhonetic(existing) : '';
+    let pos = existing ? pickPos(existing) : '';
 
-    // 音标先查本地词典。它不依赖 AI 引擎，也不要求这个词已经收藏过——
-    // 划词看一眼读音是最常见的需求，不该先收藏才能看到
-    if (!phonetic) phonetic = await lookupPhonetic(sourceText);
-
-    if (existing || phonetic) {
-      const ex = existing ? pickExample(existing) : null;
-      renderDictionaryInfo(
-        els, phonetic, existing ? pickPos(existing) : '', ex?.sentence, ex?.translation,
-      );
-      // 音标和词性都齐了就不必再调 AI
-      if (phonetic && existing && pickPos(existing)) return;
+    // 音标和词性先查本地词典。它不依赖 AI 引擎，也不要求这个词已经收藏过——
+    // 划词看一眼读音和词性是最常见的需求，不该先收藏才能看到
+    if (!phonetic || !pos) {
+      const meta = await lookupWordMeta(sourceText);
+      phonetic = phonetic || meta.phonetic;
+      pos = pos || formatPos(meta.pos);
     }
 
-    // 剩下的（词性、例句，以及本地词典查不到的词的音标）才需要 AI
+    if (existing || phonetic || pos) {
+      const ex = existing ? pickExample(existing) : null;
+      renderDictionaryInfo(els, phonetic, pos, ex?.sentence, ex?.translation);
+      // 两样都齐、且例句也有了，就不必再调 AI
+      if (phonetic && pos && ex?.sentence) return;
+    }
+
+    // 剩下的（例句，以及本地词典查不到的词的音标/词性）才需要 AI
     const t = new Translator();
     await t.init();
     const generated = await generateExampleSentence(sourceText, t);
     if (!generated) return;
     renderDictionaryInfo(
-      els, phonetic || generated.ipa, generated.pos, generated.sentence, generated.translation,
+      els,
+      phonetic || generated.ipa,
+      pos || generated.pos,
+      generated.sentence,
+      generated.translation,
     );
     // 已收藏的词顺手把补到的信息写回去，否则下次打开还是空的
     if (existing) await enrichWordWithAi(sourceText, true);

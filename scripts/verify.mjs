@@ -396,6 +396,45 @@ section('本地音标词典');
     (await lookupPhonetic('archiving')).endsWith('ɪŋ'));
 }
 
+// ── 本地词性 ────────────────────────────────────────────────────────────────
+// 与音标同一个病根：词性此前也只能由 AI 生成，默认配置下永远是空的。
+section('本地词性词典');
+{
+  const { readFileSync, existsSync } = await import('node:fs');
+  check('数据文件随构建产物一起分发', existsSync('public/data/pos/a.json'));
+  check('WordNet 许可随数据一起保留', existsSync('public/data/pos/LICENSE'));
+
+  const { lookupPos } = await import('../utils/pos.js');
+  const { formatPos } = await import('../utils/learning/wordMeta.ts');
+
+  check('名词', await lookupPos('computer') === 'n');
+  check('形容词', await lookupPos('beautiful') === 'j');
+  check('副词', await lookupPos('quickly') === 'r');
+
+  // 多词性的词按义项数排序：run 有 41 个动词义项、16 个名词义项，
+  // 动词才是主用法。不排序的话展示出来的第一个词性是随机的
+  check('多词性按义项数排序，动词在前', await lookupPos('run') === 'vn');
+
+  // 封闭词类必须压过 WordNet：a 在 WordNet 里是名词（指字母 a），
+  // 但用户划到它时想看到的是冠词
+  check('冠词优先于 WordNet 的「字母 a」义', (await lookupPos('a')).startsWith('a'));
+  check('介词', (await lookupPos('of')).startsWith('i'));
+  check('连词', (await lookupPos('and')).startsWith('c'));
+  check('代词', (await lookupPos('this')).startsWith('p'));
+
+  check('查不到返回空串', await lookupPos('zzqxnotaword') === '');
+  check('词组返回空串', await lookupPos('hello world') === '');
+
+  // 派生：词典没单独收录，但词性可以确定推出
+  check('-ly 从形容词推出副词', await lookupPos('speedily') !== '');
+
+  check('代号排版成中文', formatPos('vn') === '动词 · 名词');
+  check('未知代号被丢弃，不显示成乱码', formatPos('vXn') === '动词 · 名词');
+  check('空代号得到空串', formatPos('') === '');
+  // light 是形/名/动/副四类，全列出来徽章比单词本身还长
+  check('最多显示三类', formatPos('jnvr').split(' · ').length === 3);
+}
+
 // ── 浮层隔离 ────────────────────────────────────────────────────────────────
 // 浮层（划词面板、进度条、输入气泡、字幕兜底）活在 Shadow DOM 里，宿主页 CSS
 // 影响不到；双语译文和字幕译文必须跟宿主内容一起排版，只能留在宿主 DOM。

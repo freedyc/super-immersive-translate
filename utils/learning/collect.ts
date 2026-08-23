@@ -12,7 +12,8 @@
  */
 import type { Example, Meaning, Word } from '../../types/models.ts';
 import { STORAGE_KEYS } from './repository.ts';
-import { lookupPhonetic } from '../phonetics-client.js';
+import { lookupWordMeta } from '../dictionary-client.js';
+import { formatPos } from './wordMeta.ts';
 
 export async function loadWords(): Promise<Word[]> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS.words);
@@ -76,21 +77,22 @@ export async function collectWord(input: CollectInput): Promise<Word> {
     if (next.meanings.length === 0) {
       next.meanings = meaningsFromTranslations(input.translations);
     }
-    // 旧条目可能是音标还依赖 AI 的年代存下的，补一次
-    if (!next.phonetic && !next.phoneticUS) {
-      next.phoneticUS = await lookupPhonetic(next.word);
-    }
+    // 旧条目可能是音标/词性还依赖 AI 的年代存下的，补一次
+    const meta = await lookupWordMeta(next.word);
+    if (!next.phonetic && !next.phoneticUS) next.phoneticUS = meta.phonetic;
+    next.meanings = withPos(next.meanings, meta.pos);
     words[words.indexOf(existing)] = next;
     await saveWords(words);
     return next;
   }
 
+  // 音标和词性都是词典数据，本地查得到就直接填，不该等 AI
+  const meta = await lookupWordMeta(input.text);
   const created: Word = {
     id: crypto.randomUUID(),
     word: input.text.trim(),
-    // 本地词典查得到就直接填美式音标——它是词典数据，不该等 AI
-    phoneticUS: await lookupPhonetic(input.text),
-    meanings: meaningsFromTranslations(input.translations),
+    phoneticUS: meta.phonetic,
+    meanings: withPos(meaningsFromTranslations(input.translations), meta.pos),
     examples: example ? [example] : [],
     source: 'ai',
     addedAt: Date.now(),
@@ -113,6 +115,18 @@ export async function patchWord(
   mutate(next);
   words[words.indexOf(existing)] = next;
   await saveWords(words);
+}
+
+/**
+ * 给第一条释义补上词性。
+ *
+ * 只在原来没有词性时才写——AI 或用户标过的更贴合具体义项，
+ * 本地词典给的是这个词所有可能的词性，不该盖掉更精确的信息。
+ */
+function withPos(meanings: Meaning[], posCode: string): Meaning[] {
+  const label = formatPos(posCode);
+  if (!label || meanings.length === 0 || meanings[0].partOfSpeech) return meanings;
+  return [{ ...meanings[0], partOfSpeech: label }, ...meanings.slice(1)];
 }
 
 /**

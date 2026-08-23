@@ -12,7 +12,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LearningRecord, Word, WordEntry } from '../../types/models.ts';
 import { migrateWordbook } from '../../utils/learning/migrate.ts';
 import { STORAGE_KEYS } from '../../utils/learning/repository.ts';
-import { lookupPhonetic } from '../../utils/phonetics-client.js';
+import { lookupWordMeta } from '../../utils/dictionary-client.js';
+import { formatPos } from '../../utils/learning/wordMeta.ts';
 
 interface LearningState {
   words: Word[];
@@ -74,32 +75,43 @@ const FAKE_POS = new Set(['未知', '未知词性', 'unknown', 'n/a', '-']);
  * 只在真有东西可改时才写；没有就完全不碰存储，否则每次打开页面都白写一轮。
  */
 async function repairWords(words: Word[]): Promise<void> {
-  const phonetics = new Map<string, string>();
-  await Promise.all(
-    words
-      .filter((w) => !w.phonetic && !w.phoneticUS && !w.phoneticUK)
-      .map(async (w) => {
-        const ipa = await lookupPhonetic(w.word);
-        if (ipa) phonetics.set(w.id, ipa);
-      }),
-  );
+  // 缺音标、缺词性、或带着伪造占位符的，都要问一次本地词典
+  const needsWork = words.filter((w) =>
+    (!w.phonetic && !w.phoneticUS && !w.phoneticUK)
+    || w.meanings.some((m) => !m.partOfSpeech || FAKE_POS.has(m.partOfSpeech)));
+  if (needsWork.length === 0) return;
 
-  const fakePos = new Set(
-    words.filter((w) => w.meanings.some((m) => FAKE_POS.has(m.partOfSpeech))).map((w) => w.id),
-  );
-  if (phonetics.size === 0 && fakePos.size === 0) return;
+  const patches = new Map<string, { phonetic?: string; pos?: string }>();
+  await Promise.all(needsWork.map(async (w) => {
+    const meta = await lookupWordMeta(w.word);
+    const patch: { phonetic?: string; pos?: string } = {};
+    if (meta.phonetic && !w.phonetic && !w.phoneticUS && !w.phoneticUK) {
+      patch.phonetic = meta.phonetic;
+    }
+    const pos = formatPos(meta.pos);
+    // 占位符要清掉，哪怕本地词典也查不到词性——留着它会卡死后续的 AI 补全
+    const hasFake = w.meanings.some((m) => FAKE_POS.has(m.partOfSpeech));
+    if (pos || hasFake) patch.pos = pos;
+    if (patch.phonetic || patch.pos !== undefined) patches.set(w.id, patch);
+  }));
+  if (patches.size === 0) return;
 
   // 重新读一次再写：这是后台行为，期间用户可能已经删词或收藏了新词
   const stored = await chrome.storage.local.get(STORAGE_KEYS.words);
   const current = (stored[STORAGE_KEYS.words] as Word[]) ?? [];
   await chrome.storage.local.set({
     [STORAGE_KEYS.words]: current.map((w) => {
-      if (!phonetics.has(w.id) && !fakePos.has(w.id)) return w;
+      const patch = patches.get(w.id);
+      if (!patch) return w;
       const next = { ...w };
-      if (phonetics.has(w.id)) next.phoneticUS = phonetics.get(w.id);
-      if (fakePos.has(w.id)) {
-        next.meanings = w.meanings.map((m) =>
-          (FAKE_POS.has(m.partOfSpeech) ? { ...m, partOfSpeech: '' } : m));
+      if (patch.phonetic) next.phoneticUS = patch.phonetic;
+      if (patch.pos !== undefined) {
+        next.meanings = w.meanings.map((m, i) => {
+          if (FAKE_POS.has(m.partOfSpeech)) return { ...m, partOfSpeech: patch.pos! };
+          // 只给第一条释义补词性；后面几条属于别的义项，套同一个词性是瞎标
+          if (i === 0 && !m.partOfSpeech && patch.pos) return { ...m, partOfSpeech: patch.pos };
+          return m;
+        });
       }
       return next;
     }),
@@ -124,8 +136,8 @@ export function useLearning() {
       (next) => {
         if (!alive) return;
         setState({ ...next, loaded: true, error: null });
-        // 修补历史数据：音标此前只能由 AI 生成，没配 AI 的用户攒下的词全是空的；
-        // 早期迁移还往词性里写过「未知」占位符，它会卡住真实词性的补全
+        // 修补历史数据：音标和词性此前都只能由 AI 生成，没配 AI 的用户攒下的词
+        // 两样全是空的；早期迁移还往词性里写过「未知」占位符，它会卡住后续补全
         repairWords(next.words);
       },
       (err: unknown) => {

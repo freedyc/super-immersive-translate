@@ -4,6 +4,7 @@
 import { pick } from '../utils/defaults.js';
 import { syncNow } from '../utils/github-sync.js';
 import { lookupPhonetic } from '../utils/phonetics.js';
+import { lookupPos } from '../utils/pos.js';
 
 async function setupPeriodicSyncAlarm() {
   const { githubSyncEnabled, githubSyncMode, githubSyncIntervalMinutes } = await chrome.storage.sync.get(
@@ -92,10 +93,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     )).then(sendResponse);
     return true;
   }
-  // 音标查询走 Service Worker：分片载入后常驻在这里，
+  // 本地词典查询走 Service Worker：分片载入后常驻在这里，
   // 内容脚本和各页面共用同一份缓存，不必每个页面各载一次
-  if (msg.action === 'lookupPhonetic') {
-    lookupPhonetic(msg.word).then((phonetic) => sendResponse({ phonetic }));
+  if (msg.action === 'lookupWordMeta') {
+    Promise.all([lookupPhonetic(msg.word), lookupPos(msg.word)])
+      .then(([phonetic, pos]) => sendResponse({ phonetic, pos }));
     return true;
   }
   if (msg.action === 'triggerHistorySync') {

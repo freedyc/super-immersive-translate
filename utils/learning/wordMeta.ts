@@ -46,5 +46,31 @@ export function definitionList(word: Pick<Word, 'meanings'>): string[] {
   return [...new Set(word.meanings.flatMap((m) => m.definitions).filter(Boolean))];
 }
 
+/**
+ * 词性代号 → 中文标签。代号存在数据文件里（见 scripts/build-pos.mjs），
+ * 标签在这里映射——改文案不必重新生成 1.2 MB 的数据。
+ *
+ * 这十类与 utils/example-sentence.js 给 AI 的词类清单是同一套，
+ * 所以本地词典和 AI 两个来源标出来的词性不会互相打架。
+ */
+const POS_LABELS: Record<string, string> = {
+  n: '名词', v: '动词', j: '形容词', r: '副词',
+  p: '代词', i: '介词', c: '连词', e: '感叹词', a: '冠词', d: '限定词',
+};
+
+/**
+ * 把词性代号串排版成展示文案，如 `vn` → `动词 · 名词`。
+ *
+ * 最多显示三类。light 是形/名/动/副四类，全列出来徽章会比单词本身还长，
+ * 而排在后面的词性义项本来就少，对用户的价值递减。
+ */
+export function formatPos(code: string, max = 3): string {
+  return [...(code || '')]
+    .map((c) => POS_LABELS[c])
+    .filter(Boolean)
+    .slice(0, max)
+    .join(' · ');
+}
+
 /** 音标缺失时告诉用户为什么，而不是留白让人以为是加载中 */
-export const MISSING_PHONETIC_HINT = '音标由 AI 生成，需在设置里配置 AI 引擎或启动本地 Ollama';
+export const MISSING_PHONETIC_HINT = '这个词不在本地词典里，可点「重新生成」让 AI 补';

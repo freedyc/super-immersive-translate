@@ -62,17 +62,29 @@ the rule; hand-written CSS is a consequence of it, not the point.
   and accepts that host CSS can reach it. `npm run verify` asserts these two files contain
   only those five classes; anything else belongs in `overlay.css`.
 
-**Phonetics come from a bundled dictionary, not the AI engine.**
-`public/data/phonetics/{a..z}.json` (117k words, CMUdict converted ARPAbet→IPA by
-`scripts/build-phonetics.mjs`, BSD-licensed — keep the `LICENSE` beside it) is sharded by
-first letter and loaded on demand inside the service worker, which answers
-`lookupPhonetic` messages; callers use `utils/phonetics-client.js`. Pronunciation is
-dictionary data — before this it was AI-only, and since the default config has no AI
-engine (`engine: 'google'`, all keys empty, Ollama fallback unreachable) the field was
-silently always empty. Regenerate with
-`node scripts/build-phonetics.mjs <cmudict.dict> public/data/phonetics`. The set is
-**US-only**; British IPA and human audio would need a network source (dictionaryapi.dev
-returns both, free and keyless) and that call is not wired up.
+**Phonetics and part of speech come from bundled dictionaries, not the AI engine.**
+Both are dictionary data. Before this they were AI-only, and since the default config has
+no AI engine (`engine: 'google'`, all keys empty, Ollama fallback unreachable) both fields
+were silently always empty.
+
+- `public/data/phonetics/{a..z}.json` — 117k words, CMUdict converted ARPAbet→IPA by
+  `scripts/build-phonetics.mjs` (BSD). **US pronunciation only.**
+- `public/data/pos/{a..z}.json` — 78k words, WordNet 3.1's four open classes plus the six
+  closed classes enumerated in `scripts/build-pos.mjs` (Princeton license). Values are
+  **codes** (`run` → `vn`), ordered by sense count; `formatPos()` in
+  `utils/learning/wordMeta.ts` maps them to the ten Chinese labels, so changing the copy
+  does not mean regenerating 1.2 MB of data.
+
+Keep each `LICENSE` beside its data. Both are sharded by first letter and loaded on demand
+**inside the service worker**, which answers one `lookupWordMeta` message returning both;
+callers use `utils/dictionary-client.js`. Never load a shard in a content script — that
+would pay ~94 KB per page. Regenerate with
+`node scripts/build-phonetics.mjs <cmudict.dict> public/data/phonetics` and
+`node scripts/build-pos.mjs <wordnet-dir> public/data/pos`.
+
+Never store a placeholder like `'未知'` in `partOfSpeech`. It is truthy, so it makes every
+`!pickPos(word)` backfill guard fail and permanently blocks the real value from ever being
+written. Leave the field empty instead; `verify` asserts this.
 
 React is **not** used in content scripts. The reason is payload, not isolation: the
 bundle is injected into every page visited (`selection.js` is ~6 kB gzip today, and
