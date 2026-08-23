@@ -643,6 +643,22 @@ section('内容脚本：浮层进影子树，随文内容留宿主 DOM');
       sideEffect.join(', '));
   }
 
+  // 影子宿主是 width:0 的盒子。绝对定位元素的 shrink-to-fit 可用宽度取自
+  // 包含块，为 0 时会塌缩到「最小内容宽」——中文配 word-break 就是一个字，
+  // 浮层竖成一列。所以影子树里每个 position:absolute 的块都必须自己定宽。
+  for (const cssFile of ['content/overlay.css', 'content/selection.css']) {
+    // 必须先剥掉注释：说明这条规则的注释里就写着 "width:0"，
+    // 不剥的话正则会在注释里匹配到，删掉真正的 width 声明也照样"通过"
+    const css = readFileSync(cssFile, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const blocks = css.match(/\.[a-z-]+[^{}]*\{[^}]*\}/g) || [];
+    const collapsing = blocks
+      .filter((b) => /position:\s*absolute/.test(b))
+      .filter((b) => !/\bwidth:/.test(b))
+      .map((b) => b.slice(0, b.indexOf('{')).trim());
+    check(`${cssFile} 里绝对定位的浮层都定了宽度`, collapsing.length === 0,
+      collapsing.length ? `会塌缩成一列：${collapsing.join(', ')}` : '');
+  }
+
   // 事件穿出影子树时 target 会重定向成 host，closest 找不到面板，
   // 「点面板内部」会被判成「点了外面」——面板每点一下就关
   const sel = readFileSync('content/selection.js', 'utf8');

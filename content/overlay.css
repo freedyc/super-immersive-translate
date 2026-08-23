@@ -61,6 +61,11 @@
   position: absolute;
   z-index: 2147483646;
   display: none;
+  /* 必须显式定宽：影子宿主是 width:0 的盒子，绝对定位元素的 shrink-to-fit
+     可用宽度取自包含块，为 0 时会塌缩到「最小内容宽」——中文配上下面的
+     word-break，最小内容宽就是一个字，浮层会竖成一列。
+     max-content 让它按内容撑开、忽略可用宽度，再由 JS 设的 max-width 收口。 */
+  width: max-content;
   padding: 6px 10px;
   font-size: 13px;
   line-height: 1.5;

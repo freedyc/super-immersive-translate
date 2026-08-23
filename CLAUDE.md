@@ -50,11 +50,15 @@ the rule; hand-written CSS is a consequence of it, not the point.
   (`content/shadow-ui.js`, one shared root, `all: initial` on the host). Their styles are
   in `content/selection.css` and `content/overlay.css`, imported with **`?inline`** so the
   text lands inside the shadow tree. Never import them for side effects: `@crxjs` would
-  inject them into the host page and the isolation is gone. Two consequences to remember:
+  inject them into the host page and the isolation is gone. Three consequences to remember:
   document-level handlers must test `isInsideUi(event)` (`composedPath()`), because an
   event leaving a shadow tree retargets to the host and `e.target.closest('.sit-panel')`
-  silently becomes null — the panel then closes on every click inside itself; and
-  `document.querySelector` cannot see overlay elements, so hold references instead.
+  silently becomes null — the panel then closes on every click inside itself;
+  `document.querySelector` cannot see overlay elements, so hold references instead; and
+  **every `position: absolute` overlay needs an explicit width** (`width: max-content` is
+  usually right) — the host is a `width: 0` box, so shrink-to-fit resolves the available
+  width to 0 and the element collapses to its minimum content width, which for CJK text
+  with `word-break` is one character per line. `verify` asserts this.
 - **In-flow markup** — `.sit-translation` / `.sit-original` / `.sit-wrapper` /
   `.sit-hover-highlight` / `.sit-subtitle-translation` — must sit in the host DOM to lay
   out next to the text it translates, so it cannot be shadow-rooted. It stays in
