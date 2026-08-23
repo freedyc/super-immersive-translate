@@ -53,8 +53,6 @@ export function App() {
     if (themeSlotDesktopRef.current) initThemeControl(themeSlotDesktopRef.current);
   }, [settings === null]);
 
-  if (!settings) return null;
-
   const setTab = useCallback((next: TabId) => {
     setTabState(next);
     const url = new URL(location.href);
@@ -70,6 +68,11 @@ export function App() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+
+  // 所有 Hook 必须在这个提前返回**之前**调用。settings 是异步读出来的，
+  // 首屏为 null 时若已经有 Hook 排在下面，两次渲染的 Hook 数量就不一致，
+  // React 会以 #310「渲染的 Hook 比上次多」整页崩掉
+  if (!settings) return null;
 
   const tabProps = { settings, update, reload, notify: setToast };
 

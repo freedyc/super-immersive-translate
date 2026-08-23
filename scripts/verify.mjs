@@ -899,6 +899,62 @@ section('剪贴板同步：端到端加密');
     !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
 }
 
+// ── React Hook 顺序 ────────────────────────────────────────────────────────
+// 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
+// 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
+// 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
+section('React：Hook 必须在提前返回之前调用');
+{
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { join, extname } = await import('node:path');
+
+  const walk = (dir, out = []) => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) walk(full, out);
+      else if (extname(full) === '.tsx') out.push(full);
+    }
+    return out;
+  };
+
+  const IS_HOOK = /\buse(State|Effect|Callback|Memo|Ref|Reducer|Context|LayoutEffect)\s*\(/;
+  const violations = [];
+
+  for (const dir of ['options', 'wordbook', 'history', 'popup', 'sandbox', 'pdf', 'components']) {
+    for (const file of walk(dir)) {
+      const lines = readFileSync(file, 'utf8').split('\n');
+      // 按顶层函数切块：一个文件里常有多个组件，不切块的话前一个组件的
+      // return 会被当成后一个组件的提前返回，误报一堆
+      const starts = lines
+        .map((l, i) => (/^(export\s+)?function\s+[A-Z]/.test(l) ? i : -1))
+        .filter((i) => i >= 0);
+
+      starts.forEach((start, k) => {
+        const end = k + 1 < starts.length ? starts[k + 1] : lines.length;
+        const body = lines.slice(start, end);
+        // 组件体内的 Hook 调用：缩进两格
+        const hooks = body
+          .map((l, i) => (/^ {2}\S/.test(l) && IS_HOOK.test(l) ? i : -1))
+          .filter((i) => i >= 0);
+        if (hooks.length === 0) return;
+        const early = body.findIndex(
+          (l, i) => i > hooks[0] && /^ {2}(if \(.*\)\s*return|return[\s(;])/.test(l),
+        );
+        if (early < 0) return;
+        const after = hooks.filter((i) => i > early);
+        if (after.length) {
+          violations.push(
+            `${file}:${start + after[0] + 1}（提前返回在 ${start + early + 1} 行）`,
+          );
+        }
+      });
+    }
+  }
+
+  check('没有 Hook 写在提前返回之后', violations.length === 0,
+    violations.join('; '));
+}
+
 section('多标签页面：刷新要停在原处');
 {
   const { readFileSync } = await import('node:fs');
