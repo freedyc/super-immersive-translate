@@ -93,25 +93,10 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
     removeIcon();
     icon = document.createElement('div');
     icon.className = ICON_CLASS;
-    icon.innerHTML = `<svg viewBox="0 0 32 32" width="22" height="22" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="sitBg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#5a9cf7"/>
-          <stop offset="100%" style="stop-color:#7c5ce7"/>
-        </linearGradient>
-        <linearGradient id="sitGloss" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" style="stop-color:rgba(255,255,255,0.45)"/>
-          <stop offset="50%" style="stop-color:rgba(255,255,255,0)"/>
-        </linearGradient>
-        <filter id="sitShadow"><feDropShadow dx="0" dy="0.5" stdDeviation="0.5" flood-opacity="0.25"/></filter>
-      </defs>
-      <rect width="32" height="32" rx="7" fill="url(#sitBg)"/>
-      <rect width="32" height="17" rx="7" fill="url(#sitGloss)"/>
-      <g filter="url(#sitShadow)">
-        <text x="8" y="22" font-family="Arial,Helvetica,sans-serif" font-size="15" font-weight="800" fill="#fff" letter-spacing="-0.5">S</text>
-        <text x="17.5" y="22" font-family="Georgia,serif" font-size="15" font-weight="700" fill="rgba(255,255,255,0.88)" font-style="italic" letter-spacing="-0.5">T</text>
-      </g>
-    </svg>`;
+    // 图标走 web_accessible_resources 而不是内联 data URI：
+    // 这段脚本注入到每一个访问过的页面，一张 72px 的 PNG 内联成 base64 要
+    // 7000 多字符，是原来那段 SVG 的六倍。走 URL 只多一个字符串
+    icon.innerHTML = `<img src="${chrome.runtime.getURL('icons/trigger.png')}" alt="翻译">`;
     icon.title = '点击翻译';
     const top = rect.bottom + window.scrollY + 4;
     const left = rect.right + window.scrollX + 4;

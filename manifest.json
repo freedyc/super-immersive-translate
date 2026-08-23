@@ -78,7 +78,8 @@
         "history/*",
         "pdf/*",
         "options/*",
-        "sandbox/*"
+        "sandbox/*",
+        "icons/trigger.png"
       ],
       "matches": [
         "<all_urls>"

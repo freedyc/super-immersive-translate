@@ -807,6 +807,20 @@ section('扩展图标');
   check('工具栏图标与扩展图标是同一组',
     JSON.stringify(manifest.icons) === JSON.stringify(manifest.action.default_icon));
 
+  /**
+   * PNG 有没有透明。两种合法形态都要认：
+   * IHDR 第 25 字节的颜色类型 4/6 自带 alpha 通道；颜色类型 3（调色板）
+   * 则靠 tRNS 块声明透明色——小图标常被优化成这种，只认 4/6 会误判。
+   *
+   * 这条不是形式主义：这次换图标的源文件就是 RGB 无 alpha 的，
+   * 所谓"透明棋盘"是画进像素里的灰格子。直接用的话，网页上会出现
+   * 一个灰方块，而 Chrome 不会有任何报错。
+   */
+  const hasAlpha = (file) => {
+    const buf = readFileSync(file);
+    return [4, 6].includes(buf[25]) || buf.includes(Buffer.from('tRNS'));
+  };
+
   // Windows 工具栏取 32；缺了会拿 48 缩，比直接给一张 32 更糊
   for (const size of ['16', '32', '48', '128']) {
     const file = manifest.icons[size];
@@ -817,7 +831,20 @@ section('扩展图标');
     const { w, h } = pngSize(file);
     check(`${file} 实际就是 ${size}×${size}`, w === Number(size) && h === Number(size),
       `实际 ${w}×${h}`);
+    check(`${file} 有透明通道`, hasAlpha(file));
   }
+
+  // 划词触发图标走 web_accessible_resources，不内联进内容脚本：
+  // 那段脚本注入每一个访问过的页面，一张 72px PNG 内联成 base64 要 7000 多字符
+  const TRIGGER = 'icons/trigger.png';
+  check(`${TRIGGER} 存在`, existsSync(TRIGGER));
+  check(`${TRIGGER} 有透明通道`, existsSync(TRIGGER) && hasAlpha(TRIGGER));
+  check('触发图标已声明为网页可访问资源',
+    manifest.web_accessible_resources.some((r) => r.resources.includes(TRIGGER)));
+
+  const sel = readFileSync('content/selection.js', 'utf8');
+  check('划词图标通过 runtime.getURL 引用，没有内联成 data URI',
+    sel.includes(`getURL('${TRIGGER}')`) && !/icon\.innerHTML = `<img src="data:/.test(sel));
 }
 
 // ── 例句译文 ────────────────────────────────────────────────────────────────
