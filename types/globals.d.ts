@@ -15,7 +15,7 @@ interface TtsManager {
    * 念完才 resolve，念不出来 reject。
    * override.engine 供设置页试听用：临时换引擎发声，不改用户的设置。
    */
-  speak(text: string, lang: string, override?: { engine?: string }): Promise<void>;
+  speak(text: string, lang: string, override?: { engine?: string; voiceURI?: string }): Promise<void>;
   stop(): void;
   readonly isSpeaking: boolean;
 }

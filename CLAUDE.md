@@ -62,10 +62,15 @@ the rule; hand-written CSS is a consequence of it, not the point.
   and accepts that host CSS can reach it. `npm run verify` asserts these two files contain
   only those five classes; anything else belongs in `overlay.css`.
 
-**TTS engines are declared in one registry.** `utils/tts-engines.js` holds every engine's
-capabilities — whether it needs a key, whether it can speak Chinese, its per-request
-character cap — and the settings page, `utils/tts.js`, and the background fetcher all read
-that one list. Four engines: `browser` (offline, all languages), `google` (free, keyless,
+**TTS engines are declared in one registry, and configured per language.**
+`utils/tts-engines.js` holds every engine's capabilities — whether it needs a key, whether
+it can speak Chinese, its per-request character cap — and the settings page, `utils/tts.js`,
+and the background fetcher all read that one list. Engine and browser voice are stored
+**per language** (`ttsEngineEn`/`ttsEngineZh`, `ttsBrowserVoiceEn`/`ttsBrowserVoiceZh`);
+`resolveTts(settings, lang)` is the only way to read them and falls back to the pre-split
+`ttsEngine`/`ttsBrowserVoiceURI` so upgrades need no storage migration — but it refuses to
+hand a Chinese legacy voice to English, which is exactly the bug the split fixes. Rate and
+pitch stay shared: they are subjective and language-independent. Four engines: `browser` (offline, all languages), `google` (free, keyless,
 good Chinese and English), `youdao` (free, keyless, human recordings, **English only** —
 Chinese requests return 500), `openai` (needs a key). `speak()` downgrades to `browser`
 when the chosen engine cannot handle the language or has no key, rather than failing.

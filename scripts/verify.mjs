@@ -502,6 +502,51 @@ section('朗读引擎：能力声明与分段');
   check('空文本得到空数组', chunkText('   ', 180).length === 0);
 }
 
+section('朗读：中英文分开配置');
+{
+  const { resolveTts } = await import('../utils/tts-engines.js');
+  const { TTS_SAMPLES, SAMPLE_LANGS } = await import('../utils/tts-samples.js');
+
+  const perLang = {
+    ttsEngineEn: 'youdao', ttsEngineZh: 'google',
+    ttsBrowserVoiceEn: 'Alex', ttsBrowserVoiceZh: 'Tingting',
+  };
+  check('英文取英文那套', resolveTts(perLang, 'en-US').engine === 'youdao');
+  check('中文取中文那套', resolveTts(perLang, 'zh-CN').engine === 'google');
+  check('英文音色不串到中文', resolveTts(perLang, 'zh-CN').voiceURI === 'Tingting');
+
+  // 升级上来的用户不该被重置成默认，也不必写一次存储做迁移
+  const legacy = { ttsEngine: 'google', ttsBrowserVoiceURI: 'Alex' };
+  check('旧的单一引擎设置被两个语种继承',
+    resolveTts(legacy, 'en-US').engine === 'google'
+    && resolveTts(legacy, 'zh-CN').engine === 'google');
+  check('旧音色与语种对得上时继承', resolveTts(legacy, 'en-US').voiceURI === 'Alex');
+
+  // 分语种之前的真 bug：设了中文音色，英文也会用中文嗓子念。
+  // 回退逻辑不能把这个毛病继承过来
+  const legacyZhVoice = { ttsBrowserVoiceURI: 'Microsoft Huihui - Chinese (Simplified, PRC)' };
+  check('旧的中文音色不回退给英文（否则英文会用中文嗓子念）',
+    resolveTts(legacyZhVoice, 'en-US').voiceURI === '');
+  check('旧的中文音色仍回退给中文',
+    resolveTts(legacyZhVoice, 'zh-CN').voiceURI !== '');
+
+  check('没有任何设置时默认浏览器语音', resolveTts({}, 'en-US').engine === 'browser');
+  check('新设置优先于旧设置',
+    resolveTts({ ...legacy, ttsEngineEn: 'browser' }, 'en-US').engine === 'browser');
+
+  // 试听句：每句针对一个发音难点，凑数的话引擎之间听不出差别
+  for (const { lang, label } of SAMPLE_LANGS) {
+    const list = TTS_SAMPLES[lang];
+    check(`${label}试听句有 10 句`, list?.length === 10);
+    check(`${label}试听句都有标签和内容`,
+      list.every((s) => s.label && s.text));
+    check(`${label}试听句互不重复`,
+      new Set(list.map((s) => s.text)).size === list.length);
+  }
+  check('中文试听句确实是中文', /[\u4e00-\u9fa5]/.test(TTS_SAMPLES['zh-CN'][0].text));
+  check('英文试听句不含中文', !/[\u4e00-\u9fa5]/.test(TTS_SAMPLES['en-US'][0].text));
+}
+
 // ── 浮层隔离 ────────────────────────────────────────────────────────────────
 // 浮层（划词面板、进度条、输入气泡、字幕兜底）活在 Shadow DOM 里，宿主页 CSS
 // 影响不到；双语译文和字幕译文必须跟宿主内容一起排版，只能留在宿主 DOM。

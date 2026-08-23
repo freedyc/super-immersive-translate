@@ -1,10 +1,11 @@
 import { pick } from './defaults.js';
-import { chunkText, getEngine, supportsLang } from './tts-engines.js';
+import { chunkText, getEngine, resolveTts, supportsLang } from './tts-engines.js';
 
 class TTSManager {
   constructor() {
     this.audioElement = new Audio();
-    this.currentEngine = 'browser';
+    /** 原始设置；引擎和音色按语种在 speak() 时解析 */
+    this.settings = null;
     
     // Browser settings
     this.browserVoiceURI = '';
@@ -25,12 +26,13 @@ class TTSManager {
 
   async init() {
     const settings = await chrome.storage.sync.get(pick(
-      'ttsEngine', 'ttsBrowserVoiceURI', 'ttsBrowserRate', 'ttsBrowserPitch',
+      'ttsEngine', 'ttsBrowserVoiceURI', 'ttsEngineEn', 'ttsEngineZh',
+      'ttsBrowserVoiceEn', 'ttsBrowserVoiceZh', 'ttsBrowserRate', 'ttsBrowserPitch',
       'openaiKey', 'openaiUrl', 'ttsOpenaiVoice', 'ttsOpenaiSpeed', 'ttsYoudaoAccent'
     ));
 
-    this.currentEngine = settings.ttsEngine;
-    this.browserVoiceURI = settings.ttsBrowserVoiceURI;
+    // 引擎和音色按语种解析，所以整份设置留着，speak() 时再按 lang 取
+    this.settings = settings;
     this.browserRate = parseFloat(settings.ttsBrowserRate) || 1.0;
     this.browserPitch = parseFloat(settings.ttsBrowserPitch) || 1.0;
     
@@ -68,14 +70,19 @@ class TTSManager {
    *
    * @param {string} text
    * @param {string} lang BCP-47，如 en-US / zh-CN
-   * @param {{engine?: string}} [override] 试听用：临时指定引擎，不改用户设置
+   * @param {{engine?: string, voiceURI?: string}} [override]
+   *   试听用：临时指定引擎/音色，不改用户设置
    */
   async speak(text, lang, override = {}) {
     if (!text) return;
     this.stop();
     const token = this.playToken;
 
-    let engine = override.engine || this.currentEngine;
+    // 引擎和音色都按被朗读文本的语种取——中英文各配各的
+    const resolved = resolveTts(this.settings || {}, lang);
+    this.browserVoiceURI = override.voiceURI ?? resolved.voiceURI;
+
+    let engine = override.engine || resolved.engine;
     // 有道只有英文发音，中文请求会直接失败——与其报错，不如退回浏览器语音
     if (!supportsLang(engine, lang)) engine = 'browser';
     // 没配 Key 的 OpenAI 同理，不该让用户点一次等一次超时

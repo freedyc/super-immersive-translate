@@ -72,8 +72,16 @@ export const DEFAULTS = {
   siteEngines: {},
 
   // TTS
+  // 朗读引擎与音色按语种分开：有道只有英文真人录音，Google 的中文更自然，
+  // 而系统语音包也是分语种装的——用一套设置同时管中英文必然有一边将就。
+  // 旧的 ttsEngine / ttsBrowserVoiceURI 保留，作为未设置时的回退值（见 resolveTts）
   ttsEngine: 'browser',
   ttsBrowserVoiceURI: '',
+  ttsEngineEn: '',
+  ttsEngineZh: '',
+  ttsBrowserVoiceEn: '',
+  ttsBrowserVoiceZh: '',
+  // 语速音调不分语种：它们是主观偏好，跟语言本身无关，分开只会让设置项翻倍
   ttsBrowserRate: '1.0',
   ttsBrowserPitch: '1.0',
   ttsOpenaiVoice: 'alloy',

@@ -140,3 +140,31 @@ export function chunkText(text, maxChars) {
   if (rest) chunks.push(rest);
   return chunks;
 }
+
+
+/**
+ * 从原始设置里解出某个语种该用的引擎和音色。
+ *
+ * 旧版本只有一套 ttsEngine / ttsBrowserVoiceURI。这里把它们当作未设置时的
+ * 回退值，于是升级上来的用户不需要重新配，也不必写一次存储去做迁移。
+ *
+ * 音色回退多一层判断：旧的单一音色如果是中文音色，回退给英文就会让英文
+ * 用中文嗓子念——那正是分语种之前一直存在的毛病，不能带进新逻辑。
+ */
+export function resolveTts(settings, lang) {
+  const zh = isChinese(lang);
+  const engine = (zh ? settings.ttsEngineZh : settings.ttsEngineEn)
+    || settings.ttsEngine
+    || 'browser';
+
+  const perLang = zh ? settings.ttsBrowserVoiceZh : settings.ttsBrowserVoiceEn;
+  let voiceURI = perLang || '';
+  if (!voiceURI && settings.ttsBrowserVoiceURI) {
+    // 旧值只在语种对得上时才继承。对不上宁可留空走自动匹配
+    const legacyIsChinese = /zh[-_]/i.test(settings.ttsBrowserVoiceURI)
+      || /Chinese|Mandarin|中文/i.test(settings.ttsBrowserVoiceURI);
+    if (legacyIsChinese === zh) voiceURI = settings.ttsBrowserVoiceURI;
+  }
+
+  return { engine, voiceURI };
+}
