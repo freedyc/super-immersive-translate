@@ -7,15 +7,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1px solid rgba(0,0,0,0.08);
-  border-radius: 8px;
-  box-shadow: 0 3px 12px rgba(0,0,0,0.15), 0 1px 3px rgba(0,0,0,0.08);
+  /* 图标本身就是一块带圆角的紫色瓷贴，不再套白底：
+     方块套方块会多出一圈白边，看着像贴纸而不是按钮。
+     圆角只为让投影贴合瓷贴轮廓 */
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.12);
   cursor: pointer;
   transition: transform 0.15s, box-shadow 0.15s;
   user-select: none;
   animation: sit-icon-in 0.15s ease;
-  padding: 3px;
+  padding: 0;
 }
 
 .sit-icon:hover {
