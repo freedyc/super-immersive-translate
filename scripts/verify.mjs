@@ -1039,6 +1039,49 @@ section('剪贴板：容量裁剪与合并');
   check('任一端置顶则合并后保持置顶', pinMerged[0].pinned === true);
 }
 
+// ── 商店发布 ────────────────────────────────────────────────────────────────
+// 这些字段缺了不会影响本地运行，只在提交审核时才暴露——那时改一轮要等好几天
+section('商店发布必备项');
+{
+  const { readFileSync, existsSync } = await import('node:fs');
+  const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'));
+
+  for (const field of ['author', 'homepage_url', 'minimum_chrome_version', 'description']) {
+    check(`manifest 有 ${field}`, !!manifest[field]);
+  }
+  // 商店的简短说明上限 132 字符，超了提交页直接不让过
+  check('description 不超过 132 字符', (manifest.description || '').length <= 132,
+    `当前 ${manifest.description?.length} 字符`);
+
+  check('有 LICENSE 文件', existsSync('LICENSE'));
+  check('有隐私政策', existsSync('docs/PRIVACY.md'));
+  check('有提交材料清单', existsSync('docs/STORE-SUBMISSION.md'));
+
+  // 隐私政策必须覆盖所有实际会联网的目的地，否则审核对不上就是打回重来
+  const privacy = readFileSync('docs/PRIVACY.md', 'utf8');
+  const DESTINATIONS = [
+    'translate.googleapis.com', 'api.mymemory.translated.net', 'lingva.ml',
+    'libretranslate.com', 'api-free.deepl.com', 'api.openai.com',
+    'generativelanguage.googleapis.com', 'api.anthropic.com', 'api.deepseek.com',
+    'api.ocr.space', 'dict.youdao.com', 'translate.google.com',
+  ];
+  const missing = DESTINATIONS.filter((d) => !privacy.includes(d));
+  check('隐私政策列全了所有对外域名', missing.length === 0,
+    missing.length ? `漏了：${missing.join(', ')}` : '');
+
+  // MV3 硬性要求：不得加载远程代码
+  for (const f of ['utils/translator.js', 'utils/example-sentence.js', 'utils/tts.js']) {
+    const src = readFileSync(f, 'utf8');
+    check(`${f} 没有 eval / new Function`,
+      !/\beval\s*\(|new Function\s*\(/.test(src));
+  }
+
+  // 打包脚本必须自检，否则源码搭车进发布包只能靠肉眼在上百个文件里发现
+  const pkg = readFileSync('scripts/package.mjs', 'utf8');
+  check('打包脚本会回查源码残留', pkg.includes('leaked') && pkg.includes('process.exit(1)'));
+  check('打包脚本会回查 manifest 在根目录', pkg.includes("includes('manifest.json')"));
+}
+
 // ── 扩展图标 ────────────────────────────────────────────────────────────────
 // 图标路径写错或尺寸对不上，Chrome 不会报错，只会显示一个默认的灰色拼图块
 section('扩展图标');
