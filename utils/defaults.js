@@ -78,6 +78,14 @@ export const DEFAULTS = {
   ttsBrowserPitch: '1.0',
   ttsOpenaiVoice: 'alloy',
   ttsOpenaiSpeed: '1.0',
+
+  // 单词学习（形状见 types/models.ts 的 StudyConfig；默认值与
+  // utils/learning/queue.js 的 DEFAULT_STUDY_CONFIG 保持一致）
+  studyConfig: {
+    dailyNewLimit: 10,
+    dailyReviewLimit: 0,
+    enabledExercises: ['en2zh', 'zh2en', 'listening', 'spelling'],
+  },
 };
 
 // Convenience: return a fresh object with only the named keys (and their default

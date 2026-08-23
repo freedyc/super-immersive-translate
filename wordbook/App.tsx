@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
-  BookOpen, Home, List, Layers, PenLine, BarChart2, Upload, Download, Trash2,
+  BookOpen, Home, List, Layers, PenLine, BarChart2, Upload, Download, Trash2, Settings,
 } from 'lucide-react';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
@@ -31,7 +31,9 @@ import { ListView, regenerateExample } from './views/ListView.tsx';
 import { CardsView } from './views/CardsView.tsx';
 import { QuizView } from './views/QuizView.tsx';
 import { StatsView } from './views/StatsView.tsx';
-import { buildTodayQueue, DEFAULT_STUDY_CONFIG } from '../utils/learning/queue.ts';
+import { SettingsView } from './views/SettingsView.tsx';
+import { useStudyConfig } from './lib/useStudyConfig.ts';
+import { buildTodayQueue } from '../utils/learning/queue.ts';
 import { createRecord, recordAnswer } from '../utils/learning/srsService.ts';
 import type { Familiarity, LearningRecord, Toast, Word } from '../types/models.ts';
 
@@ -41,6 +43,7 @@ const NAV = [
   { view: 'cards', label: '卡片浏览', Icon: Layers },
   { view: 'quiz', label: '拼写练习', Icon: PenLine },
   { view: 'stats', label: '学习统计', Icon: BarChart2 },
+  { view: 'settings', label: '学习设置', Icon: Settings },
 ] as const;
 
 type ViewId = (typeof NAV)[number]['view'];
@@ -55,6 +58,7 @@ export function App() {
     words, records, loaded, migratedCount,
     updateRecord, updateWord, removeWord, replaceAll,
   } = useLearning();
+  const { config: studyConfig, update: updateStudyConfig, allExercises } = useStudyConfig();
 
   const [view, setView] = useState<ViewId>(() => {
     const requested = new URLSearchParams(location.search).get('view');
@@ -90,8 +94,8 @@ export function App() {
   }, []);
 
   const queue = useMemo(
-    () => buildTodayQueue(words, records, DEFAULT_STUDY_CONFIG),
-    [words, records],
+    () => buildTodayQueue(words, records, studyConfig),
+    [words, records, studyConfig],
   );
 
   /** 今日要学的新词（去重后的词，不是题目） */
@@ -185,9 +189,11 @@ export function App() {
         words={reviewWords}
         allWords={words}
         records={records}
+        config={studyConfig}
         updateRecord={updateRecord}
         onExit={() => setSession(null)}
         onFinish={() => setSession(newWords.length > 0 ? 'learn' : null)}
+        continueLabel={newWords.length > 0 ? '继续学新词' : undefined}
       />
     );
   }
@@ -284,7 +290,7 @@ export function App() {
                 <TodayView
                   words={words}
                   records={records}
-                  config={DEFAULT_STUDY_CONFIG}
+                  config={studyConfig}
                   hasUnfinished={false}
                   onStart={startSession}
                   onGoToLibrary={() => switchView('list')}
@@ -302,6 +308,13 @@ export function App() {
               {view === 'cards' && <CardsView words={words} />}
               {view === 'quiz' && <QuizView words={words} />}
               {view === 'stats' && <StatsView words={words} records={records} />}
+              {view === 'settings' && (
+                <SettingsView
+                  config={studyConfig}
+                  allExercises={allExercises}
+                  onChange={updateStudyConfig}
+                />
+              )}
             </>
           )}
         </main>

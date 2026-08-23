@@ -19,7 +19,7 @@ import { mergeWords, mergeLearningRecords } from '../utils/learning/syncMerge.ts
 import {
   createRecord, recordAnswer, deriveStatus, describeNextReview,
 } from '../utils/learning/srsService.ts';
-import { buildTodayQueue, canRender, estimateMinutes } from '../utils/learning/queue.ts';
+import { buildTodayQueue, canRender, estimateMinutes, DEFAULT_STUDY_CONFIG } from '../utils/learning/queue.ts';
 
 let pass = 0;
 let fail = 0;
@@ -302,6 +302,23 @@ section('今日队列');
     dailyNewLimit: 10, dailyReviewLimit: 0, enabledExercises: ['en2zh'],
   });
   check('暂停的词不进队列', queue.items.length === 0);
+}
+
+// ── 学习设置默认值 ──────────────────────────────────────────────────────────
+// DEFAULTS.studyConfig 和 DEFAULT_STUDY_CONFIG 是两份独立的字面量（一份给
+// chrome.storage.sync 的读取默认值，一份给纯函数层），两边漂移会让「没改过设置」
+// 的用户和「改过又改回来」的用户看到不同的队列。
+{
+  const { DEFAULTS } = await import('../utils/defaults.js');
+  const d = DEFAULTS.studyConfig;
+  check('DEFAULTS.studyConfig 存在', !!d);
+  check('新词上限与 DEFAULT_STUDY_CONFIG 一致',
+    d.dailyNewLimit === DEFAULT_STUDY_CONFIG.dailyNewLimit);
+  check('复习上限与 DEFAULT_STUDY_CONFIG 一致',
+    d.dailyReviewLimit === DEFAULT_STUDY_CONFIG.dailyReviewLimit);
+  check('启用题型与 DEFAULT_STUDY_CONFIG 一致',
+    JSON.stringify([...d.enabledExercises].sort())
+    === JSON.stringify([...DEFAULT_STUDY_CONFIG.enabledExercises].sort()));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -1,12 +1,15 @@
 /**
  * 我的词库：搜索结果、掌握度、音标/词性、例句双语朗读、AI 重新生成例句、删除。
+ *
+ * 顶部的状态筛选里「需要加强」就是错词本——错词不单独存一张表，
+ * 它本来就是学习记录派生出来的一个状态，另存一份必然跟主表对不上。
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Volume2, RotateCw, Trash2 } from 'lucide-react';
 import { Translator } from '../../utils/translator.js';
 import { generateExampleSentence } from '../../utils/example-sentence.js';
 import { deriveStatus, masteryPercent, STATUS_LABEL } from '../../utils/learning/srsService.ts';
-import type { LearningRecord, Word } from '../../types/models.ts';
+import type { LearningRecord, LearningStatus, Word } from '../../types/models.ts';
 
 interface WordActions {
   onDelete: (wordId: string) => void;
@@ -135,6 +138,28 @@ function WordCard({
   );
 }
 
+type Filter = 'all' | 'difficult' | 'learning' | 'mastered' | 'new';
+
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'difficult', label: '需要加强' },
+  { id: 'learning', label: '学习中' },
+  { id: 'mastered', label: '已掌握' },
+  { id: 'new', label: '未学习' },
+];
+
+function matches(filter: Filter, status: LearningStatus): boolean {
+  switch (filter) {
+    case 'all': return true;
+    case 'difficult': return status === 'difficult';
+    // 「待复习」也属于学习中——对用户来说它们都是「还没学完的」
+    case 'learning': return status === 'learning' || status === 'reviewing';
+    case 'mastered': return status === 'mastered';
+    case 'new': return status === 'new';
+    default: return true;
+  }
+}
+
 export function ListView({
   words, records, totalCount, onDelete, onRegenerate,
 }: {
@@ -142,6 +167,26 @@ export function ListView({
   records: Map<string, LearningRecord>;
   totalCount: number;
 } & WordActions) {
+  const [filter, setFilter] = useState<Filter>('all');
+
+  // 每个筛选项都带计数，用户不用逐个点开才知道哪个是空的
+  const counts = useMemo(() => {
+    const out = {} as Record<Filter, number>;
+    for (const f of FILTERS) out[f.id] = 0;
+    for (const w of words) {
+      const status = deriveStatus(records.get(w.id));
+      for (const f of FILTERS) if (matches(f.id, status)) out[f.id]++;
+    }
+    return out;
+  }, [words, records]);
+
+  const visible = useMemo(
+    () => (filter === 'all'
+      ? words
+      : words.filter((w) => matches(filter, deriveStatus(records.get(w.id))))),
+    [words, records, filter],
+  );
+
   if (totalCount === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-base-content/50">
@@ -151,21 +196,39 @@ export function ListView({
     );
   }
 
-  if (words.length === 0) {
-    return <div className="text-center py-12 text-base-content/50"><p>没有匹配的单词</p></div>;
-  }
-
   return (
-    <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
-      {words.map((w) => (
-        <WordCard
-          key={w.id}
-          word={w}
-          record={records.get(w.id)}
-          onDelete={onDelete}
-          onRegenerate={onRegenerate}
-        />
-      ))}
+    <div className="flex flex-col gap-4">
+      <div role="tablist" className="tabs tabs-box self-start">
+        {FILTERS.map((f) => (
+          <button
+            key={f.id}
+            role="tab"
+            className={`tab gap-1.5 ${filter === f.id ? 'tab-active' : ''}`}
+            onClick={() => setFilter(f.id)}
+          >
+            {f.label}
+            <span className="badge badge-sm badge-ghost tabular-nums">{counts[f.id]}</span>
+          </button>
+        ))}
+      </div>
+
+      {visible.length === 0 ? (
+        <div className="text-center py-12 text-base-content/50">
+          <p>{words.length === 0 ? '没有匹配的单词' : '这个分类下暂时没有单词'}</p>
+        </div>
+      ) : (
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
+          {visible.map((w) => (
+            <WordCard
+              key={w.id}
+              word={w}
+              record={records.get(w.id)}
+              onDelete={onDelete}
+              onRegenerate={onRegenerate}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
