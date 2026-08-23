@@ -819,6 +819,98 @@ section('会话存档：什么样的存档才该恢复');
     === JSON.stringify([...DEFAULT_STUDY_CONFIG.enabledExercises].sort()));
 }
 
+// ── 剪贴板加密 ──────────────────────────────────────────────────────────────
+// 剪贴板里可能有任何东西。这一节守的是「GitHub 上只有密文」这条底线。
+section('剪贴板同步：端到端加密');
+{
+  const { readFileSync } = await import('node:fs');
+  const { encryptJson, decryptJson, isEncrypted, generateRecoveryKey } =
+    await import('../utils/crypto.js');
+
+  const secret = { items: ['我的密码是 hunter2', 'ghp_realtokenlookalike'] };
+  const box = await encryptJson(secret, 'correct horse battery');
+
+  check('密文里没有明文残留', !JSON.stringify(box).includes('hunter2'));
+  check('盐和 IV 随密文保存（它们不需要保密，需要保密的只有口令）',
+    !!box.salt && !!box.iv);
+  check('记下了 KDF 与迭代次数，将来调参数旧密文仍解得开',
+    box.kdf === 'PBKDF2-SHA256' && box.iterations >= 600000);
+
+  const back = await decryptJson(box, 'correct horse battery');
+  check('正确口令能完整还原', JSON.stringify(back) === JSON.stringify(secret));
+
+  let wrong = null;
+  try { await decryptJson(box, 'wrong'); } catch (e) { wrong = e.name; }
+  check('口令不对时抛 WrongPassphraseError，而不是给出错误明文',
+    wrong === 'WrongPassphraseError');
+
+  // AES-GCM 的认证标签：密文被改一个字节，解密必须失败
+  let tampered = null;
+  const bad = { ...box, ciphertext: `${box.ciphertext.slice(0, -4)}AAAA` };
+  try { await decryptJson(bad, 'correct horse battery'); } catch (e) { tampered = e.name; }
+  check('密文被篡改时解密失败（GCM 认证）', tampered === 'WrongPassphraseError');
+
+  // 同样的数据两次加密必须得到不同密文，否则观察者能从"密文没变"推出"内容没变"
+  const a = await encryptJson(secret, 'p');
+  const b = await encryptJson(secret, 'p');
+  check('同数据两次加密密文不同（每次新随机盐和 IV）', a.ciphertext !== b.ciphertext);
+
+  check('isEncrypted 认得自家密文', isEncrypted(box));
+  check('isEncrypted 不把普通数组当密文', !isEncrypted([{ id: 1 }]) && !isEncrypted(null));
+
+  const rk = generateRecoveryKey();
+  check('恢复密钥足够长（256 位随机量）', rk.replace(/-/g, '').length >= 50);
+  check('恢复密钥不含易混字符 I/O/0/1', !/[IO01]/.test(rk));
+  check('两次生成的恢复密钥不同', generateRecoveryKey() !== generateRecoveryKey());
+
+  // 没有口令绝不能退化成明文上传——这是整个功能的底线
+  let noPass = null;
+  try { await encryptJson(secret, ''); } catch (e) { noPass = e.message; }
+  check('没有口令时加密直接报错，不返回明文', !!noPass);
+
+  const syncSrc = readFileSync('utils/github-sync.js', 'utf8');
+  check('同步代码里没有口令就抛错，不会走到上传',
+    /if \(!passphrase\)[\s\S]{0,200}throw new Error/.test(syncSrc));
+  check('剪贴板推送的是 encryptJson 的结果', /encryptJson\(final, passphrase\)/.test(syncSrc));
+
+  // 口令绝不能进 storage.sync —— 那会同步到 Google 账号，
+  // 密文给 GitHub、钥匙给 Google，就谈不上端到端了
+  const uiSrc = readFileSync('options/components/ClipboardSyncCard.tsx', 'utf8');
+  check('口令只存 storage.local，不进 sync',
+    uiSrc.includes('storage.local.set({ clipboardSyncPassphrase')
+    && !/storage\.sync\.set\([^)]*clipboardSyncPassphrase/.test(uiSrc));
+  check('defaults 里没有 clipboardSyncPassphrase（它不属于可同步设置）',
+    !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
+}
+
+section('剪贴板：容量裁剪与合并');
+{
+  const { trim } = await import('../utils/clipboard.js');
+  const { mergeClipboard } = await import('../utils/github-sync.js');
+
+  const mk = (id, ts, pinned) => ({ id, text: `t${id}`, timestamp: ts, pinned });
+  const list = [mk('a', 5), mk('b', 4, true), mk('c', 3), mk('d', 2), mk('e', 1, true)];
+
+  const trimmed = trim(list, 3);
+  check('裁到上限', trimmed.length === 3);
+  // 置顶就是为了留住它，被容量规则默默删掉是最难解释的一种数据丢失
+  check('置顶的条目不会被裁掉',
+    trimmed.some((e) => e.id === 'b') && trimmed.some((e) => e.id === 'e'));
+  check('裁剪不打乱原有顺序',
+    trimmed.map((e) => e.id).join('') === [...trimmed].map((e) => e.id).join(''));
+  check('未超上限时原样返回', trim(list, 99).length === 5);
+  check('上限为 0 表示不限制', trim(list, 0).length === 5);
+
+  const merged = mergeClipboard([mk('a', 9), mk('x', 1)], [mk('a', 3), mk('y', 2)], 0);
+  check('两端取并集', merged.length === 3);
+  check('同 id 取时间较新的', merged.find((e) => e.id === 'a').timestamp === 9);
+  check('结果按时间倒序', merged[0].id === 'a');
+
+  // 置顶是用户的明确意图，同步把它抹掉比多留一个置顶更难解释
+  const pinMerged = mergeClipboard([mk('a', 5)], [mk('a', 9, true)], 0);
+  check('任一端置顶则合并后保持置顶', pinMerged[0].pinned === true);
+}
+
 // ── 扩展图标 ────────────────────────────────────────────────────────────────
 // 图标路径写错或尺寸对不上，Chrome 不会报错，只会显示一个默认的灰色拼图块
 section('扩展图标');

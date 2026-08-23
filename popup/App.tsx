@@ -7,8 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Languages, Image, FileText, Globe, Zap, Settings2, MousePointer2, Info,
-  PanelRight, BookOpen, History, Settings,
+  BookOpen, ClipboardList, FileText, Globe, History, Image, Info, Languages, MousePointer2, PanelRight, Settings, Settings2, Zap,
 } from 'lucide-react';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
 import { DEFAULTS } from '../utils/defaults.js';
@@ -336,6 +335,10 @@ export function App() {
         <button className="flex-1 flex flex-col items-center gap-0.5 py-2 hover:text-primary transition-colors" onClick={() => openPage('history/index.html')}>
           <History className="w-4 h-4" />
           <span className="font-extrabold text-[9px]">历史</span>
+        </button>
+        <button className="flex-1 flex flex-col items-center gap-0.5 py-2 hover:text-primary transition-colors" onClick={() => openPage('history/index.html?tab=clipboard')}>
+          <ClipboardList className="w-4 h-4" />
+          <span className="font-extrabold text-[9px]">剪贴板</span>
         </button>
         <button className="flex-1 flex flex-col items-center gap-0.5 py-2 hover:text-primary transition-colors" onClick={() => openPage('options/options.html')}>
           <Settings className="w-4 h-4" />

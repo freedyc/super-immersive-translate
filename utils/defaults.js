@@ -88,6 +88,14 @@ export const DEFAULTS = {
   ttsOpenaiSpeed: '1.0',
   ttsYoudaoAccent: 'us', // us | uk
 
+  // 剪贴板历史
+  clipboardCapture: true,
+  clipboardMaxItems: 200,
+  // 同步默认关闭：剪贴板内容比翻译历史敏感得多，开不开该由用户明确决定。
+  // 打开后没有口令也不会上传（见 github-sync.js 的 syncClipboardNow）。
+  // 口令本身存 storage.local，不进 sync——否则等于把密文和钥匙分给两家云
+  githubSyncClipboard: false,
+
   // 单词学习（形状见 types/models.ts 的 StudyConfig；默认值与
   // utils/learning/queue.js 的 DEFAULT_STUDY_CONFIG 保持一致）
   studyConfig: {

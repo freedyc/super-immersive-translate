@@ -31,7 +31,8 @@
         "content/selection.js",
         "content/content.js",
         "content/input-translate.js",
-        "content/subtitle.js"
+        "content/subtitle.js",
+        "content/clipboard.js"
       ],
       "run_at": "document_idle"
     }

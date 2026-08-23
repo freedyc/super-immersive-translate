@@ -187,6 +187,23 @@ Minimal MV3 service worker. Registers context menus and the `Alt+T` / `Alt+S` co
 (declared in `manifest.json` `commands`), and forwards them to the active tab's content
 script via `chrome.tabs.sendMessage`. Also answers `getSettings` messages.
 
+### Clipboard history (`content/clipboard.js` → `utils/clipboard.js`)
+Every copy on a page is recorded to `chrome.storage.local.clipboardHistory` and shown in
+the `history/` page's second tab. Two rules are load-bearing: password/OTP fields and
+untrusted (script-synthesised) copy events are never recorded, and capture must never
+throw — it runs inside the user's real copy action.
+
+GitHub sync for it is **end-to-end encrypted and opt-in** (`githubSyncClipboard`).
+`utils/crypto.js` does AES-256-GCM with a key derived by PBKDF2-SHA256 (600k iterations,
+fresh random salt and IV per encryption). The design rule that must never be relaxed: **no
+passphrase means no upload** — the sync throws rather than degrading to plaintext, and a
+wrong passphrase aborts instead of overwriting the remote with local data. The passphrase
+lives in `chrome.storage.local`, never in `sync` — syncing it would hand the ciphertext to
+GitHub and the key to Google. Asymmetric keys were deliberately not used: the private key
+would have to reach every device anyway, so it reduces to protecting a secret with a
+passphrase, with more ways to lose the data. `generateRecoveryKey()` covers the
+"hold the key" case by generating a 260-bit passphrase to store in a password manager.
+
 ### Settings = the cross-module contract
 All modules read/write `chrome.storage.sync`. Settings keys (engine, targetLang, sourceLang,
 selectionMode, selectionEngines, per-engine keys/URLs/models, aiPrompt, displayMode,

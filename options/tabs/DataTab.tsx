@@ -9,6 +9,7 @@ import { Card, SelectField, TextField, CheckField } from '../components/Field.ts
 import { DEFAULTS } from '../../utils/defaults.js';
 import type { TabProps } from '../lib/types.ts';
 import type { SyncStatus } from '../../types/models.ts';
+import { ClipboardSyncCard } from '../components/ClipboardSyncCard.tsx';
 
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -162,6 +163,11 @@ export function DataTab({ settings, update, reload, notify }: TabProps) {
                 onChange={(v) => update({ githubSyncWordbook: v })}
               />
             </div>
+
+            <ClipboardSyncCard
+              enabled={!!settings.githubSyncClipboard}
+              onToggle={(v) => update({ githubSyncClipboard: v })}
+            />
 
             <div className="flex flex-col gap-3">
               <h4 className="text-xs font-bold uppercase tracking-wide text-base-content/40">同步载体</h4>

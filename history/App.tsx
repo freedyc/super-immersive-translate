@@ -13,7 +13,9 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
 import { applyTheme, initThemeControl } from '../utils/theme.js';
-import type { HistoryEntry } from '../types/models.ts';
+import { ClipboardList } from 'lucide-react';
+import { ClipboardView } from './views/ClipboardView.tsx';
+import type { ClipboardEntry, HistoryEntry } from '../types/models.ts';
 
 function formatTime(ts: number | undefined): string {
   if (!ts) return '';
@@ -25,8 +27,14 @@ function formatTime(ts: number | undefined): string {
   return `${d.toLocaleDateString('zh-CN')} ${d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+type Tab = 'translation' | 'clipboard';
+
 export function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [clipboard, setClipboard] = useState<ClipboardEntry[]>([]);
+  const [tab, setTab] = useState<Tab>(
+    () => (new URLSearchParams(location.search).get('tab') === 'clipboard' ? 'clipboard' : 'translation'),
+  );
   const [search, setSearch] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const themeSlotRef = useRef<HTMLDivElement>(null);
@@ -37,15 +45,22 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    chrome.storage.local.get('translationHistory')
-      .then(({ translationHistory = [] }) => setHistory(translationHistory as HistoryEntry[]));
+    chrome.storage.local.get(['translationHistory', 'clipboardHistory']).then((stored) => {
+      setHistory((stored.translationHistory as HistoryEntry[]) ?? []);
+      setClipboard((stored.clipboardHistory as ClipboardEntry[]) ?? []);
+    });
 
     const onChanged = (
       changes: Record<string, chrome.storage.StorageChange>,
       area: string,
     ) => {
-      if (area === 'local' && changes.translationHistory) {
+      if (area !== 'local') return;
+      if (changes.translationHistory) {
         setHistory((changes.translationHistory.newValue as HistoryEntry[]) || []);
+      }
+      // 剪贴板是在别的标签页复制时写入的，不监听的话这一页会一直是打开时的快照
+      if (changes.clipboardHistory) {
+        setClipboard((changes.clipboardHistory.newValue as ClipboardEntry[]) || []);
       }
     };
     chrome.storage.onChanged.addListener(onChanged);
@@ -56,6 +71,13 @@ export function App() {
     setHistory(next);
     await chrome.storage.local.set({ translationHistory: next });
   }, []);
+
+  const persistClipboard = useCallback(async (next: ClipboardEntry[]) => {
+    setClipboard(next);
+    await chrome.storage.local.set({ clipboardHistory: next });
+  }, []);
+
+  const current = tab === 'translation' ? history : clipboard;
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -70,10 +92,24 @@ export function App() {
     <>
       <div className="navbar bg-base-100 shadow px-4">
         <div className="navbar-start">
-          <h1 className="text-base font-bold flex items-center gap-2">
-            <History className="w-5 h-5 text-primary" />
-            翻译历史
-          </h1>
+          <div role="tablist" className="tabs tabs-box">
+            <button
+              role="tab"
+              className={`tab gap-1.5 ${tab === 'translation' ? 'tab-active' : ''}`}
+              onClick={() => { setTab('translation'); setSearch(''); }}
+            >
+              <History className="w-4 h-4" />
+              翻译历史
+            </button>
+            <button
+              role="tab"
+              className={`tab gap-1.5 ${tab === 'clipboard' ? 'tab-active' : ''}`}
+              onClick={() => { setTab('clipboard'); setSearch(''); }}
+            >
+              <ClipboardList className="w-4 h-4" />
+              剪贴板
+            </button>
+          </div>
         </div>
         <div className="navbar-end flex items-center gap-2">
           <input
@@ -83,10 +119,10 @@ export function App() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <span className="badge badge-ghost">{history.length} 条记录</span>
+          <span className="badge badge-ghost">{current.length} 条记录</span>
           <button
             className="btn btn-error btn-outline btn-sm gap-1"
-            disabled={history.length === 0}
+            disabled={current.length === 0}
             onClick={() => setConfirmClear(true)}
           >
             <Trash2 className="w-4 h-4" />
@@ -101,7 +137,9 @@ export function App() {
       </p>
 
       <main className="container mx-auto p-4">
-        {history.length === 0 ? (
+        {tab === 'clipboard' ? (
+          <ClipboardView entries={clipboard} search={search} onChange={persistClipboard} />
+        ) : history.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-base-content/50">
             <Inbox className="w-16 h-16 mb-4 text-base-content/30" />
             <h3 className="text-lg font-semibold mb-1">暂无翻译历史</h3>
@@ -149,18 +187,25 @@ export function App() {
       </main>
 
       <Dialog open={confirmClear} onClose={() => setConfirmClear(false)}>
-        <DialogTitle>清空翻译历史？</DialogTitle>
+        <DialogTitle>
+          清空{tab === 'clipboard' ? '剪贴板记录' : '翻译历史'}？
+        </DialogTitle>
         <DialogContent>
           <DialogContentText>
-            将删除全部 {history.length} 条记录，此操作不可撤销。
+            将删除全部 {current.length} 条记录，此操作不可撤销。
             如果开启了 GitHub 同步，删除的记录可能会在下次同步时从其他设备恢复。
+            {tab === 'clipboard' && ' 置顶的记录也会一并删除。'}
           </DialogContentText>
         </DialogContent>
         <DialogActions>
           <button className="btn btn-ghost btn-sm" onClick={() => setConfirmClear(false)}>取消</button>
           <button
             className="btn btn-error btn-sm"
-            onClick={async () => { await persist([]); setConfirmClear(false); }}
+            onClick={async () => {
+              if (tab === 'clipboard') await persistClipboard([]);
+              else await persist([]);
+              setConfirmClear(false);
+            }}
           >
             确认清空
           </button>

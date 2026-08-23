@@ -1,5 +1,7 @@
 // GitHub 同步：只负责"读远端 / 写远端 / 合并"，不做调度决策（调度在 background）。
 import { pick } from './defaults.js';
+import { decryptJson, encryptJson, isEncrypted } from './crypto.js';
+import { trim as trimClipboard } from './clipboard.js';
 // 2.1 学习数据的合并逻辑写在 TypeScript 里：这个文件历史上最常见的 bug 就是
 // 新增字段忘了加进合并函数、同步一次字段就被静默丢掉（pos / ipa 都发生过），
 // 显式字段 + 类型检查能把这类问题挡在编译期。
@@ -98,7 +100,9 @@ async function pushToRepo(headers, target, list, mergeFn, commitMessage, attempt
   const { list: remoteList, sha } = await pullFromRepo(headers, target);
   // 每次尝试都要与刚拉到的远端最新内容合并（而不仅在重试时），否则并发同步会互相覆盖，
   // 且大概率不会命中 409（因为用的就是最新 sha），下面的冲突重试保护也就形同虚设。
-  const toWrite = mergeFn(list, remoteList);
+  // await：加密同步的合并要先解密，是异步的。await 一个非 Promise 无副作用，
+  // 现有的同步 mergeFn 照常工作
+  const toWrite = await mergeFn(list, remoteList);
   const body = {
     message: commitMessage,
     content: toBase64(JSON.stringify(toWrite)),
@@ -440,6 +444,9 @@ export async function syncNow() {
       }
     }
 
+    const { githubSyncClipboard } = await chrome.storage.sync.get(pick('githubSyncClipboard'));
+    if (githubSyncClipboard) await syncClipboardNow();
+
     await chrome.storage.local.set({ githubSyncStatus: { lastSyncAt: Date.now(), lastError: null } });
     return { ok: true, error: null };
   } catch (err) {
@@ -448,4 +455,83 @@ export async function syncNow() {
   } finally {
     syncInFlight = false;
   }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 剪贴板历史同步（端到端加密）
+//
+// 剪贴板里可能有任何东西，明文推到 GitHub 等于把它交给 GitHub。所以这条链路
+// 有一条不可协商的规则：**没有口令就不同步**，绝不退化成明文上传。
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CLIPBOARD_GIST_FILENAME = 'clipboard.enc.json';
+const CLIPBOARD_REPO_PATH = 'clipboard.enc.json';
+
+/**
+ * 口令存在 storage.local 而不是 storage.sync。
+ * sync 会同步到 Google 账号——把解密口令跟密文分别交给两家云厂商，
+ * 也就谈不上端到端加密了。代价是换设备要重新输入一次，这是应该付的代价。
+ */
+async function getClipboardPassphrase() {
+  const { clipboardSyncPassphrase } = await chrome.storage.local.get('clipboardSyncPassphrase');
+  return clipboardSyncPassphrase || '';
+}
+
+/**
+ * 合并两端的剪贴板记录。
+ *
+ * 按 id 取并集；同 id 取时间较新的一条。置顶状态只要有一边置顶就保留——
+ * 置顶是用户的明确意图，同步把它抹掉比多留一个置顶更难解释。
+ */
+export function mergeClipboard(local = [], remote = [], maxItems = 0) {
+  const byId = new Map();
+  for (const entry of [...remote, ...local]) {
+    if (!entry?.id) continue;
+    const prev = byId.get(entry.id);
+    if (!prev) { byId.set(entry.id, { ...entry }); continue; }
+    const newer = (entry.timestamp || 0) > (prev.timestamp || 0) ? entry : prev;
+    byId.set(entry.id, { ...newer, pinned: !!(prev.pinned || entry.pinned) });
+  }
+  const merged = [...byId.values()].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  return trimClipboard(merged, maxItems);
+}
+
+async function syncClipboardNow() {
+  const passphrase = await getClipboardPassphrase();
+  if (!passphrase) {
+    throw new Error('剪贴板同步需要先设置加密口令——没有口令不会上传，以免明文外泄');
+  }
+
+  const { clipboardMaxItems } = await chrome.storage.sync.get(pick('clipboardMaxItems'));
+  const { clipboardHistory: local = [] } = await chrome.storage.local.get('clipboardHistory');
+
+  // 远端可能是空的（首次同步）、也可能是别的设备写的密文
+  const remoteRaw = await pullRemoteFile(CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH)
+    .catch(() => null);
+
+  let remote = [];
+  if (isEncrypted(remoteRaw)) {
+    // 口令不对时**不要**用本地数据覆盖远端：那会把另一台设备的记录全删掉。
+    // 让错误冒上去，用户看到的是"口令不对"，而不是数据悄悄消失
+    remote = await decryptJson(remoteRaw, passphrase);
+  } else if (Array.isArray(remoteRaw) && remoteRaw.length > 0) {
+    throw new Error('远端剪贴板文件不是本扩展加密的格式，已停止同步以免覆盖它');
+  }
+
+  const merged = mergeClipboard(local, Array.isArray(remote) ? remote : [], clipboardMaxItems);
+  await chrome.storage.local.set({ clipboardHistory: merged });
+
+  await pushRemoteFile(
+    CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH,
+    // 推送时再与刚拉到的远端合一次（应对 409 重试），同样要先解密
+    async (mine, remoteAtPush) => {
+      let theirs = [];
+      if (isEncrypted(remoteAtPush)) theirs = await decryptJson(remoteAtPush, passphrase);
+      const final = mergeClipboard(mine, Array.isArray(theirs) ? theirs : [], clipboardMaxItems);
+      return encryptJson(final, passphrase);
+    },
+    merged,
+    'Update clipboard (encrypted)',
+  );
 }

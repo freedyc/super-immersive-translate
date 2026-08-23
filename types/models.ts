@@ -265,3 +265,20 @@ export interface StudyQueue {
   newWordCount: number;
   reviewWordCount: number;
 }
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 剪贴板历史
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 一条复制记录 */
+export interface ClipboardEntry {
+  id: string;
+  text: string;
+  /** 复制发生的页面 */
+  url?: string;
+  title?: string;
+  timestamp: number;
+  /** 用户置顶的条目不参与容量裁剪 */
+  pinned?: boolean;
+}
