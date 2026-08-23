@@ -3,8 +3,17 @@
   "name": "Super Immersive Translate - 超级翻译",
   "version": "2.1.0",
   "description": "超级沉浸式双语翻译插件，多引擎并行划词翻译 + 全页双语对照",
-  "permissions": ["storage", "unlimitedStorage", "activeTab", "contextMenus", "sidePanel", "alarms"],
-  "host_permissions": ["<all_urls>"],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "activeTab",
+    "contextMenus",
+    "sidePanel",
+    "alarms"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
   "background": {
     "service_worker": "background/background.js"
   },
@@ -13,8 +22,17 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["utils/translator.js", "utils/tts.js", "content/selection.js", "content/content.js", "content/input-translate.js", "content/subtitle.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "utils/translator.js",
+        "utils/tts.js",
+        "content/selection.js",
+        "content/content.js",
+        "content/input-translate.js",
+        "content/subtitle.js"
+      ],
       "run_at": "document_idle"
     }
   ],
@@ -22,12 +40,14 @@
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
   },
   "icons": {
     "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
@@ -37,18 +57,32 @@
   },
   "commands": {
     "toggle-translate": {
-      "suggested_key": { "default": "Alt+T", "mac": "Alt+T" },
+      "suggested_key": {
+        "default": "Alt+T",
+        "mac": "Alt+T"
+      },
       "description": "切换全页翻译"
     },
     "translate-selection": {
-      "suggested_key": { "default": "Alt+S", "mac": "Alt+S" },
+      "suggested_key": {
+        "default": "Alt+S",
+        "mac": "Alt+S"
+      },
       "description": "翻译选中文字"
     }
   },
   "web_accessible_resources": [
     {
-      "resources": ["wordbook/*", "history/*", "pdf/*", "options/*", "sandbox/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "wordbook/*",
+        "history/*",
+        "pdf/*",
+        "options/*",
+        "sandbox/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }

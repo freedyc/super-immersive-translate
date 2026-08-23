@@ -791,6 +791,35 @@ section('会话存档：什么样的存档才该恢复');
     === JSON.stringify([...DEFAULT_STUDY_CONFIG.enabledExercises].sort()));
 }
 
+// ── 扩展图标 ────────────────────────────────────────────────────────────────
+// 图标路径写错或尺寸对不上，Chrome 不会报错，只会显示一个默认的灰色拼图块
+section('扩展图标');
+{
+  const { readFileSync, existsSync } = await import('node:fs');
+  const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'));
+
+  /** 读 PNG 头里的宽高（IHDR 在固定偏移，不必引依赖） */
+  const pngSize = (file) => {
+    const buf = readFileSync(file);
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  };
+
+  check('工具栏图标与扩展图标是同一组',
+    JSON.stringify(manifest.icons) === JSON.stringify(manifest.action.default_icon));
+
+  // Windows 工具栏取 32；缺了会拿 48 缩，比直接给一张 32 更糊
+  for (const size of ['16', '32', '48', '128']) {
+    const file = manifest.icons[size];
+    check(`声明了 ${size}px 图标`, !!file);
+    if (!file) continue;
+    check(`${file} 存在`, existsSync(file));
+    if (!existsSync(file)) continue;
+    const { w, h } = pngSize(file);
+    check(`${file} 实际就是 ${size}×${size}`, w === Number(size) && h === Number(size),
+      `实际 ${w}×${h}`);
+  }
+}
+
 // ── 例句译文 ────────────────────────────────────────────────────────────────
 // collectWord 的 sentenceTranslation 从来没有调用方传过，于是从阅读抓到的
 // 例句在词库里一直只有原句没有译文。语境例句是这个产品的差异点，缺一半没意义。
