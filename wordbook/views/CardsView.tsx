@@ -2,11 +2,16 @@
  * 卡片浏览：自由翻阅，不接入 FSRS 调度（那是「今日学习」的职责）。
  */
 import { useEffect, useState } from 'react';
-import { Volume2, RotateCw, ArrowLeft, ArrowRight, Shuffle } from 'lucide-react';
+import { RotateCw, ArrowLeft, ArrowRight, Shuffle, Layers } from 'lucide-react';
 import { TaggedSentence } from '../components/TaggedSentence.tsx';
+import { EmptyState } from '../components/EmptyState.tsx';
+import { SpeakButton } from '../components/SpeakButton.tsx';
 import type { Word } from '../../types/models.ts';
 
-export function CardsView({ words }: { words: Word[] }) {
+export function CardsView({ words, onGoToLibrary }: {
+  words: Word[];
+  onGoToLibrary: () => void;
+}) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
 
@@ -34,6 +39,18 @@ export function CardsView({ words }: { words: Word[] }) {
   const example = word?.examples[0];
   const phonetic = word?.phonetic || word?.phoneticUS || word?.phoneticUK;
 
+  if (words.length === 0) {
+    return (
+      <EmptyState
+        Icon={Layers}
+        title="还没有可以浏览的卡片"
+        hint="卡片浏览用的是词库里的词。在网页上划词翻译时点收藏，词就会进到这里。"
+        actionLabel="去我的词库"
+        onAction={onGoToLibrary}
+      />
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto mt-8 text-center">
       {/* 背面要放释义+其他词性+例句+例句翻译，高度不够会被裁掉 */}
@@ -57,13 +74,13 @@ export function CardsView({ words }: { words: Word[] }) {
                       {primary.partOfSpeech}
                     </span>
                   )}
-                  <button
-                    className="btn btn-ghost btn-circle btn-sm text-primary-content hover:bg-primary-content/15"
+                  <SpeakButton
+                    text={word.word}
+                    lang="en-US"
                     title="发音"
-                    onClick={(e) => { e.stopPropagation(); window.ttsManager.speak(word.word, 'en-US'); }}
-                  >
-                    <Volume2 className="w-4 h-4" />
-                  </button>
+                    size="sm"
+                    className="text-primary-content hover:bg-primary-content/15"
+                  />
                 </div>
               )}
             </div>

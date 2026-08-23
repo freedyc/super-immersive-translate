@@ -4,7 +4,7 @@
  * 四种题型统一由 components/questions 下的组件渲染，本文件只负责编排：
  * 建队列、推进、记录结果、结束时给结算页。
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import { ROLE_ORDER, shuffled } from '../lib/mastery.ts';
 import { canAsk } from '../lib/questions.ts';
@@ -12,6 +12,7 @@ import { ChoiceQuestion } from '../components/questions/ChoiceQuestion.tsx';
 import { ListeningQuestion } from '../components/questions/ListeningQuestion.tsx';
 import { SpellingQuestion } from '../components/questions/SpellingQuestion.tsx';
 import { ResultView, type SessionResult } from './ResultView.tsx';
+import type { SessionSnapshot } from '../lib/useStudySession.ts';
 import {
   createRecord, describeNextReview, earliestReviewAt, isExerciseDue, recordAnswer,
 } from '../../utils/learning/srsService.ts';
@@ -37,6 +38,12 @@ interface Props {
   onFinish: () => void;
   /** 复习完还有新词要学时的按钮文案 */
   continueLabel?: string;
+  /** 上次中断的存档；有则接着答，而不是重新洗牌 */
+  resume?: SessionSnapshot | null;
+  /** 每答一题回调，用于写存档 */
+  onProgress?: (snapshot: Omit<SessionSnapshot, 'date' | 'phase'>) => void;
+  /** 本轮全部答完 */
+  onSessionEnd?: () => void;
 }
 
 function GrammarSidebar({ word }: { word: Word }) {
@@ -68,9 +75,21 @@ function GrammarSidebar({ word }: { word: Word }) {
 
 export function ReviewView({
   words, allWords, records, config, updateRecord, onExit, onFinish, continueLabel,
+  resume, onProgress, onSessionEnd,
 }: Props) {
   // 进入时定一次队列：每答一题都会写回记录，跟着 records 重建会让队列在答题中途被打乱
   const [queue, setQueue] = useState<QueueItem[]>(() => {
+    if (resume) {
+      const byId = new Map(words.map((w) => [w.id, w]));
+      // 存档里的词可能已经被删了，跳过而不是让流程崩在一个空词上
+      const restored = resume.queue
+        .map((q) => {
+          const word = byId.get(q.wordId);
+          return word && q.exercise ? { word, exercise: q.exercise } : null;
+        })
+        .filter((x): x is QueueItem => x !== null);
+      if (restored.length > 0) return restored;
+    }
     const items: QueueItem[] = [];
     for (const word of words) {
       const record = records.get(word.id);
@@ -83,10 +102,21 @@ export function ReviewView({
     return shuffled(items);
   });
 
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(resume?.index ?? 0);
   const [revealed, setRevealed] = useState(false);
-  const [stats, setStats] = useState({ correct: 0, total: 0 });
-  const [missed, setMissed] = useState<Map<string, Word>>(new Map());
+  const [stats, setStats] = useState(
+    () => ({ correct: resume?.correct ?? 0, total: resume?.total ?? 0 }),
+  );
+  const [missed, setMissed] = useState<Map<string, Word>>(() => {
+    if (!resume) return new Map();
+    const byId = new Map(words.map((w) => [w.id, w]));
+    const out = new Map<string, Word>();
+    for (const id of resume.missedIds) {
+      const w = byId.get(id);
+      if (w) out.set(id, w);
+    }
+    return out;
+  });
 
   const done = index >= queue.length;
   const current = done ? null : queue[index];
@@ -99,12 +129,30 @@ export function ReviewView({
       recordAnswer(prev ?? createRecord(word.id), exercise, g));
 
     const wasCorrect = g !== 'again';
-    setStats((s) => ({ correct: s.correct + (wasCorrect ? 1 : 0), total: s.total + 1 }));
-    if (!wasCorrect) setMissed((m) => new Map(m).set(word.id, word));
+    const nextStats = {
+      correct: stats.correct + (wasCorrect ? 1 : 0),
+      total: stats.total + 1,
+    };
+    const nextMissed = wasCorrect ? missed : new Map(missed).set(word.id, word);
+    const nextIndex = index + 1;
 
+    setStats(nextStats);
+    setMissed(nextMissed);
     setRevealed(false);
-    setIndex((i) => i + 1);
-  }, [current, updateRecord]);
+    setIndex(nextIndex);
+
+    if (nextIndex >= queue.length) {
+      onSessionEnd?.();
+    } else {
+      onProgress?.({
+        queue: queue.map((q) => ({ wordId: q.word.id, exercise: q.exercise })),
+        index: nextIndex,
+        correct: nextStats.correct,
+        total: nextStats.total,
+        missedIds: [...nextMissed.keys()],
+      });
+    }
+  }, [current, updateRecord, stats, missed, index, queue, onProgress, onSessionEnd]);
 
   const result: SessionResult = useMemo(() => {
     const missedWords = [...missed.values()];
@@ -136,6 +184,11 @@ export function ReviewView({
     setStats({ correct: 0, total: 0 });
     setMissed(new Map());
   }, [missed, config.enabledExercises, allWords]);
+
+  // 队列本来就空（没有可出的题）时也要销掉存档，否则「继续学习」会一直亮着
+  useEffect(() => {
+    if (queue.length === 0) onSessionEnd?.();
+  }, [queue.length, onSessionEnd]);
 
   // 队列本来就是空的（比如所有到期词都出不了题）：别把用户困在空白页
   if (queue.length === 0) {

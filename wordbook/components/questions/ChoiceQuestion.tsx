@@ -6,10 +6,11 @@
  * 答对按反应快慢推导难易度（越快说明记得越牢），答错一律 again。
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Volume2 } from 'lucide-react';
+import {  } from 'lucide-react';
 import type { Familiarity, Word } from '../../../types/models.ts';
 import { buildChoices, EXERCISE_LABEL, primaryDefinition } from '../../lib/questions.ts';
 import { AnswerFeedback } from '../AnswerFeedback.tsx';
+import { SpeakButton } from '../SpeakButton.tsx';
 
 interface Props {
   word: Word;
@@ -81,13 +82,7 @@ export function ChoiceQuestion({ word, pool, mode, onGrade }: Props) {
           {mode === 'en2zh' && (
             <div className="flex items-center gap-2">
               {phonetic && <span className="text-sm font-mono text-base-content/50">{phonetic}</span>}
-              <button
-                className="btn btn-ghost btn-sm btn-circle"
-                title="发音"
-                onClick={() => window.ttsManager.speak(word.word, 'en-US')}
-              >
-                <Volume2 className="w-4 h-4" />
-              </button>
+              <SpeakButton text={word.word} lang="en-US" title="发音" size="sm" />
             </div>
           )}
         </div>

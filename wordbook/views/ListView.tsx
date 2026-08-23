@@ -5,10 +5,12 @@
  * 它本来就是学习记录派生出来的一个状态，另存一份必然跟主表对不上。
  */
 import { useMemo, useState } from 'react';
-import { Volume2, RotateCw, Trash2 } from 'lucide-react';
+import { RotateCw, Trash2 } from 'lucide-react';
 import { Translator } from '../../utils/translator.js';
 import { generateExampleSentence } from '../../utils/example-sentence.js';
 import { deriveStatus, masteryPercent, STATUS_LABEL } from '../../utils/learning/srsService.ts';
+import { SpeakButton } from '../components/SpeakButton.tsx';
+import { WordDetailDrawer } from '../components/WordDetailDrawer.tsx';
 import type { LearningRecord, LearningStatus, Word } from '../../types/models.ts';
 
 interface WordActions {
@@ -16,21 +18,13 @@ interface WordActions {
   onRegenerate: (word: Word) => Promise<void>;
 }
 
-function SpeakButton({ text, lang, title }: { text: string; lang: string; title: string }) {
-  return (
-    <button
-      className="btn btn-ghost btn-xs btn-circle shrink-0"
-      title={title}
-      onClick={(e) => { e.stopPropagation(); window.ttsManager.speak(text, lang); }}
-    >
-      <Volume2 className="w-3 h-3" />
-    </button>
-  );
-}
-
 function WordCard({
-  word, record, onDelete, onRegenerate,
-}: { word: Word; record: LearningRecord | undefined } & WordActions) {
+  word, record, onDelete, onRegenerate, onOpen,
+}: {
+  word: Word;
+  record: LearningRecord | undefined;
+  onOpen: (word: Word) => void;
+} & WordActions) {
   const [busy, setBusy] = useState(false);
 
   const status = deriveStatus(record);
@@ -56,18 +50,19 @@ function WordCard({
     <div className="card bg-base-100 shadow rounded-xl hover:shadow-lg transition-shadow">
       <div className="card-body gap-2 p-4">
         <div className="flex items-start justify-between gap-2">
+          {/* 点词头打开详情抽屉。整卡可点会跟卡内的发音/删除按钮抢事件 */}
           <div className="flex items-center gap-2 flex-wrap">
-            <div className="font-bold text-lg text-base-content">{word.word}</div>
+            <button
+              className="font-bold text-lg text-base-content link link-hover text-left"
+              title="查看详情"
+              onClick={() => onOpen(word)}
+            >
+              {word.word}
+            </button>
             {phonetic && <span className="text-xs text-base-content/40 font-mono">{phonetic}</span>}
           </div>
           <div className="flex gap-1 shrink-0">
-            <button
-              className="btn btn-ghost btn-xs btn-circle"
-              title="发音"
-              onClick={() => window.ttsManager.speak(word.word, 'en-US')}
-            >
-              <Volume2 className="w-4 h-4" />
-            </button>
+            <SpeakButton text={word.word} lang="en-US" title="发音" />
             <button
               className="btn btn-ghost btn-xs btn-circle"
               title="AI 生成新例句 / 补全音标词性"
@@ -168,6 +163,7 @@ export function ListView({
   totalCount: number;
 } & WordActions) {
   const [filter, setFilter] = useState<Filter>('all');
+  const [detail, setDetail] = useState<Word | null>(null);
 
   // 每个筛选项都带计数，用户不用逐个点开才知道哪个是空的
   const counts = useMemo(() => {
@@ -225,10 +221,17 @@ export function ListView({
               record={records.get(w.id)}
               onDelete={onDelete}
               onRegenerate={onRegenerate}
+              onOpen={setDetail}
             />
           ))}
         </div>
       )}
+
+      <WordDetailDrawer
+        word={detail}
+        record={detail ? records.get(detail.id) : undefined}
+        onClose={() => setDetail(null)}
+      />
     </div>
   );
 }

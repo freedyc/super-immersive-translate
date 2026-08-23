@@ -86,6 +86,9 @@ class TTSManager {
     });
   }
 
+  // 返回的 Promise 等到真正念完才 resolve，念不出来则 reject。
+  // 早期版本在 speak() 排队后就立即 resolve，调用方据此做的「播放中」状态
+  // 会瞬间闪过——等于没有状态；「失败」更是永远等不到。
   async _speakBrowser(text, lang) {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = this.browserRate;
@@ -103,7 +106,15 @@ class TTSManager {
       }
     }
 
-    window.speechSynthesis.speak(utterance);
+    return new Promise((resolve, reject) => {
+      utterance.onend = () => resolve();
+      utterance.onerror = (e) => {
+        // 主动 stop() 造成的中断不算失败，否则切换单词就会弹一次错
+        if (e.error === 'interrupted' || e.error === 'canceled') resolve();
+        else reject(new Error(`浏览器语音失败：${e.error || 'unknown'}`));
+      };
+      window.speechSynthesis.speak(utterance);
+    });
   }
 
   async _speakOpenAI(text) {

@@ -8,7 +8,8 @@
  *    （正确答案、混淆说明），自动跳走等于没给人看的机会。
  */
 import { useEffect } from 'react';
-import { Volume2, ArrowRight, Check } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
+import { SpeakButton } from './SpeakButton.tsx';
 import type { Familiarity, Word } from '../../types/models.ts';
 
 interface Props {
@@ -80,13 +81,7 @@ export function AnswerFeedback({
           <div className="flex items-center gap-2">
             <span className="text-base-content/60">正确答案：</span>
             <span className="font-semibold">{correctAnswer}</span>
-            <button
-              className="btn btn-ghost btn-xs btn-circle"
-              title="朗读"
-              onClick={() => window.ttsManager.speak(word.word, 'en-US')}
-            >
-              <Volume2 className="w-3.5 h-3.5" />
-            </button>
+            <SpeakButton text={word.word} lang="en-US" title="朗读" />
           </div>
           {/* 只有真的能说清混淆对象时才显示，不硬凑一句解析 */}
           {confusedWith && confusedWith !== word.word && (

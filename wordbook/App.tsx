@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import {
   BookOpen, Home, List, Layers, PenLine, BarChart2, Upload, Download, Trash2, Settings,
+  AlertTriangle,
 } from 'lucide-react';
 import Autocomplete from '@mui/material/Autocomplete';
 import TextField from '@mui/material/TextField';
@@ -33,6 +34,7 @@ import { QuizView } from './views/QuizView.tsx';
 import { StatsView } from './views/StatsView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { useStudyConfig } from './lib/useStudyConfig.ts';
+import { useStudySession, type SessionSnapshot } from './lib/useStudySession.ts';
 import { buildTodayQueue } from '../utils/learning/queue.ts';
 import { createRecord, recordAnswer } from '../utils/learning/srsService.ts';
 import type { Familiarity, LearningRecord, Toast, Word } from '../types/models.ts';
@@ -55,10 +57,13 @@ type Session = null | 'review' | 'learn';
 
 export function App() {
   const {
-    words, records, loaded, migratedCount,
+    words, records, loaded, error, migratedCount,
     updateRecord, updateWord, removeWord, replaceAll,
   } = useLearning();
   const { config: studyConfig, update: updateStudyConfig, allExercises } = useStudyConfig();
+  const {
+    session: saved, hasUnfinished, save: saveSession, clear: clearSession,
+  } = useStudySession();
 
   const [view, setView] = useState<ViewId>(() => {
     const requested = new URLSearchParams(location.search).get('view');
@@ -109,9 +114,52 @@ export function App() {
     return words.filter((w) => ids.has(w.id));
   }, [queue, words]);
 
+  /**
+   * 学新词阶段的词表在进入时定死。
+   * newWords 是从学习记录派生的，评估过一个词它就会缩短——跟着它渲染，
+   * 词表会在用户脚下一个个消失，最后一个词还没评完组件就先卸载了。
+   */
+  const [learnList, setLearnList] = useState<Word[]>([]);
+
+  const beginLearn = useCallback((resumeIds?: string[]) => {
+    const byId = new Map(words.map((w) => [w.id, w]));
+    // 存档里的词可能已被删除，过滤掉而不是留下空洞
+    const list = resumeIds
+      ? resumeIds.map((id) => byId.get(id)).filter((w): w is Word => !!w)
+      : newWords;
+    setLearnList(list);
+    setSession(list.length > 0 ? 'learn' : null);
+  }, [words, newWords]);
+
+  /** 有存档就接着上次的阶段，否则先复习再学新词 */
   const startSession = useCallback(() => {
-    setSession(reviewWords.length > 0 ? 'review' : 'learn');
-  }, [reviewWords.length]);
+    if (hasUnfinished && saved) {
+      if (saved.phase === 'learn') {
+        beginLearn(saved.queue.map((q) => q.wordId));
+      } else {
+        setSession('review');
+      }
+      return;
+    }
+    if (reviewWords.length > 0) setSession('review');
+    else beginLearn();
+  }, [hasUnfinished, saved, reviewWords.length, beginLearn]);
+
+  const persistReview = useCallback((snap: Omit<SessionSnapshot, 'date' | 'phase'>) => {
+    saveSession({ ...snap, date: new Date().toDateString(), phase: 'review' });
+  }, [saveSession]);
+
+  const persistLearn = useCallback((index: number) => {
+    saveSession({
+      date: new Date().toDateString(),
+      phase: 'learn',
+      queue: learnList.map((w) => ({ wordId: w.id })),
+      index,
+      correct: 0,
+      total: 0,
+      missedIds: [],
+    });
+  }, [saveSession, learnList]);
 
   /** 学新词时的熟悉度评估。只种下 en2zh 方向——这次测的就是「看词能否想起意思」 */
   const handleFamiliarity = useCallback(async (wordId: string, grade: Familiarity) => {
@@ -192,20 +240,25 @@ export function App() {
         config={studyConfig}
         updateRecord={updateRecord}
         onExit={() => setSession(null)}
-        onFinish={() => setSession(newWords.length > 0 ? 'learn' : null)}
+        onFinish={() => beginLearn()}
         continueLabel={newWords.length > 0 ? '继续学新词' : undefined}
+        resume={saved?.phase === 'review' ? saved : null}
+        onProgress={persistReview}
+        onSessionEnd={clearSession}
       />
     );
   }
 
-  if (session === 'learn' && newWords.length > 0) {
+  if (session === 'learn' && learnList.length > 0) {
     return (
       <LearnView
-        words={newWords}
+        words={learnList}
         records={records}
         onGrade={handleFamiliarity}
         onExit={() => setSession(null)}
-        onFinish={() => setSession(null)}
+        onFinish={() => { clearSession(); setSession(null); }}
+        resumeIndex={saved?.phase === 'learn' ? saved.index : undefined}
+        onProgress={persistLearn}
       />
     );
   }
@@ -281,8 +334,24 @@ export function App() {
 
         <main className="flex-1 p-6">
           {!loaded ? (
-            <div className="flex justify-center py-20">
+            <div className="flex flex-col items-center gap-3 py-20">
               <span className="loading loading-spinner loading-lg text-primary" />
+              <span className="text-sm text-base-content/50">正在读取学习数据…</span>
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+              <AlertTriangle className="w-10 h-10 text-warning/60" />
+              <h3 className="text-lg font-semibold">读不出学习数据</h3>
+              <p className="text-sm text-base-content/60 max-w-md">
+                {error}
+              </p>
+              <p className="text-xs text-base-content/40 max-w-md">
+                数据还在扩展的本地存储里，没有丢。可以先刷新页面重试；
+                如果一直这样，把浏览器控制台的报错发出来。
+              </p>
+              <button className="btn btn-primary btn-sm" onClick={() => location.reload()}>
+                刷新重试
+              </button>
             </div>
           ) : (
             <>
@@ -291,7 +360,7 @@ export function App() {
                   words={words}
                   records={records}
                   config={studyConfig}
-                  hasUnfinished={false}
+                  hasUnfinished={hasUnfinished}
                   onStart={startSession}
                   onGoToLibrary={() => switchView('list')}
                 />
@@ -305,8 +374,8 @@ export function App() {
                   onRegenerate={handleRegenerate}
                 />
               )}
-              {view === 'cards' && <CardsView words={words} />}
-              {view === 'quiz' && <QuizView words={words} />}
+              {view === 'cards' && <CardsView words={words} onGoToLibrary={() => switchView('list')} />}
+              {view === 'quiz' && <QuizView words={words} onGoToLibrary={() => switchView('list')} />}
               {view === 'stats' && <StatsView words={words} records={records} />}
               {view === 'settings' && (
                 <SettingsView

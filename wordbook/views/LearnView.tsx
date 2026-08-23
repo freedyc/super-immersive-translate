@@ -9,8 +9,9 @@
  * 没测过就凭空给它们排复习计划是替用户编数据。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Volume2, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Familiarity, LearningRecord, Word } from '../../types/models.ts';
+import { SpeakButton } from '../components/SpeakButton.tsx';
 import { TaggedSentence } from '../components/TaggedSentence.tsx';
 
 /** 四档熟悉度。顺序即从生疏到熟练，对应键盘 1–4 */
@@ -27,16 +28,28 @@ interface Props {
   onGrade: (wordId: string, grade: Familiarity) => Promise<void> | void;
   onExit: () => void;
   onFinish: () => void;
+  /** 上次中断到第几个词 */
+  resumeIndex?: number;
+  /** 每评估一个词回调一次，用于写存档 */
+  onProgress?: (index: number) => void;
 }
 
-export function LearnView({ words, onGrade, onExit, onFinish }: Props) {
-  const [index, setIndex] = useState(0);
+export function LearnView({
+  words, onGrade, onExit, onFinish, resumeIndex, onProgress,
+}: Props) {
+  // 进入时把词表定死。每评估一个词就会写记录，而上层的「今日新词」是从记录
+  // 派生的——它会在评估过程中缩短，跟着它走会让后面的词被整个跳过。
+  const [list] = useState<Word[]>(words);
+  // 存档里的下标可能大于当前新词数（词被删了），越界就从头开始
+  const [index, setIndex] = useState(
+    () => (resumeIndex && resumeIndex < words.length ? resumeIndex : 0),
+  );
   const [revealed, setRevealed] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  const word = words[index];
-  const done = index >= words.length;
+  const word = list[index];
+  const done = index >= list.length;
 
   useEffect(() => {
     setRevealed(false);
@@ -52,11 +65,13 @@ export function LearnView({ words, onGrade, onExit, onFinish }: Props) {
     setBusy(true);
     try {
       await onGrade(word.id, g);
-      setIndex((i) => i + 1);
+      const next = index + 1;
+      setIndex(next);
+      onProgress?.(next);
     } finally {
       setBusy(false);
     }
-  }, [word, busy, onGrade]);
+  }, [word, busy, onGrade, index, onProgress]);
 
   // 键盘：空格揭晓释义，1–4 评估熟悉度。学习流程里手不该离开键盘
   useEffect(() => {
@@ -95,10 +110,10 @@ export function LearnView({ words, onGrade, onExit, onFinish }: Props) {
         <progress
           className="progress progress-primary flex-1 h-2"
           value={index}
-          max={words.length}
+          max={list.length}
         />
         <span className="text-sm text-base-content/60 tabular-nums whitespace-nowrap">
-          {index + 1} / {words.length}
+          {index + 1} / {list.length}
         </span>
       </div>
 
@@ -111,13 +126,7 @@ export function LearnView({ words, onGrade, onExit, onFinish }: Props) {
             )}
           </div>
 
-          <button
-            className="btn btn-ghost btn-sm gap-1.5"
-            onClick={() => window.ttsManager.speak(word.word, 'en-US')}
-          >
-            <Volume2 className="w-4 h-4" />
-            朗读
-          </button>
+          <SpeakButton text={word.word} lang="en-US" title="朗读" size="sm" />
 
           {!revealed ? (
             <div className="flex flex-col items-center gap-3 py-6">

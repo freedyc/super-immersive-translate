@@ -17,11 +17,13 @@ interface LearningState {
   words: Word[];
   records: Map<string, LearningRecord>;
   loaded: boolean;
+  /** 读取失败的原因；非空时页面显示错误态而不是一直转圈 */
+  error: string | null;
   /** 本次加载是否执行了迁移，用于给用户一个「已从旧版本导入」的提示 */
   migratedCount: number;
 }
 
-async function loadOrMigrate(): Promise<Omit<LearningState, 'loaded'>> {
+async function loadOrMigrate(): Promise<Omit<LearningState, 'loaded' | 'error'>> {
   const stored = await chrome.storage.local.get([
     STORAGE_KEYS.words,
     STORAGE_KEYS.records,
@@ -61,15 +63,28 @@ export function useLearning() {
     words: [],
     records: new Map(),
     loaded: false,
+    error: null,
     migratedCount: 0,
   });
 
   useEffect(() => {
     let alive = true;
 
-    loadOrMigrate().then((next) => {
-      if (alive) setState({ ...next, loaded: true });
-    });
+    // 没有 catch 的话，storage 读失败会让页面永远停在加载转圈上——
+    // 那是最难排查的一种坏掉：用户看不出是坏了还是慢
+    loadOrMigrate().then(
+      (next) => { if (alive) setState({ ...next, loaded: true, error: null }); },
+      (err: unknown) => {
+        console.error('[wordbook] 读取学习数据失败', err);
+        if (alive) {
+          setState((prev) => ({
+            ...prev,
+            loaded: true,
+            error: (err as Error)?.message || '未知错误',
+          }));
+        }
+      },
+    );
 
     const onChanged = (
       changes: Record<string, chrome.storage.StorageChange>,
@@ -169,6 +184,7 @@ export function useLearning() {
     records: state.records,
     wordById,
     loaded: state.loaded,
+    error: state.error,
     migratedCount: state.migratedCount,
     updateRecord,
     updateWord,

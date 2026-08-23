@@ -20,6 +20,7 @@ import {
   createRecord, recordAnswer, deriveStatus, describeNextReview,
 } from '../utils/learning/srsService.ts';
 import { buildTodayQueue, canRender, estimateMinutes, DEFAULT_STUDY_CONFIG } from '../utils/learning/queue.ts';
+import { isResumable } from '../utils/learning/session.ts';
 
 let pass = 0;
 let fail = 0;
@@ -302,6 +303,35 @@ section('今日队列');
     dailyNewLimit: 10, dailyReviewLimit: 0, enabledExercises: ['en2zh'],
   });
   check('暂停的词不进队列', queue.items.length === 0);
+}
+
+// ── 会话存档 ────────────────────────────────────────────────────────────────
+section('会话存档：什么样的存档才该恢复');
+{
+  const today = new Date();
+  const base = {
+    date: today.toDateString(),
+    phase: 'review',
+    queue: [{ wordId: 'a', exercise: 'en2zh' }, { wordId: 'b', exercise: 'spelling' },
+            { wordId: 'c', exercise: 'en2zh' }],
+    index: 1,
+    correct: 1,
+    total: 1,
+    missedIds: [],
+  };
+
+  check('答了一题、还没答完的存档可以恢复', isResumable(base, today));
+  check('null 不可恢复', !isResumable(null, today));
+  check('一题没答的存档不算进度', !isResumable({ ...base, index: 0 }, today));
+  check('答完的存档不该再恢复', !isResumable({ ...base, index: 3 }, today));
+  check('下标越界的存档不可恢复', !isResumable({ ...base, index: 99 }, today));
+  check('下标不是整数的存档不可恢复', !isResumable({ ...base, index: 1.5 }, today));
+  check('未知阶段的存档不可恢复', !isResumable({ ...base, phase: 'x' }, today));
+  check('学新词阶段同样可恢复', isResumable({ ...base, phase: 'learn' }, today));
+
+  const yesterday = new Date(today.getTime() - 24 * 3600 * 1000);
+  check('跨天的存档作废（今天该复习的词已经不一样了）',
+    !isResumable({ ...base, date: yesterday.toDateString() }, today));
 }
 
 // ── 学习设置默认值 ──────────────────────────────────────────────────────────
