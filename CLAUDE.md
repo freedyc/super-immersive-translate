@@ -62,6 +62,18 @@ the rule; hand-written CSS is a consequence of it, not the point.
   and accepts that host CSS can reach it. `npm run verify` asserts these two files contain
   only those five classes; anything else belongs in `overlay.css`.
 
+**Phonetics come from a bundled dictionary, not the AI engine.**
+`public/data/phonetics/{a..z}.json` (117k words, CMUdict converted ARPAbet→IPA by
+`scripts/build-phonetics.mjs`, BSD-licensed — keep the `LICENSE` beside it) is sharded by
+first letter and loaded on demand inside the service worker, which answers
+`lookupPhonetic` messages; callers use `utils/phonetics-client.js`. Pronunciation is
+dictionary data — before this it was AI-only, and since the default config has no AI
+engine (`engine: 'google'`, all keys empty, Ollama fallback unreachable) the field was
+silently always empty. Regenerate with
+`node scripts/build-phonetics.mjs <cmudict.dict> public/data/phonetics`. The set is
+**US-only**; British IPA and human audio would need a network source (dictionaryapi.dev
+returns both, free and keyless) and that call is not wired up.
+
 React is **not** used in content scripts. The reason is payload, not isolation: the
 bundle is injected into every page visited (`selection.js` is ~6 kB gzip today, and
 react+react-dom would add ~45 kB). Shadow DOM would make it safe — it is still not worth

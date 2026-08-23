@@ -306,6 +306,77 @@ section('今日队列');
   check('暂停的词不进队列', queue.items.length === 0);
 }
 
+// ── 本地音标 ────────────────────────────────────────────────────────────────
+// 音标此前唯一来源是 AI 生成，而默认配置（engine: google，AI key 全空）下
+// pickEngine 兜底试本地 Ollama、连不上被静默吞掉——划词面板和我的词库永远空着。
+// 本地词典让它不再依赖任何引擎，所以数据本身的正确性要有断言兜着。
+section('本地音标词典');
+{
+  const { readFileSync, existsSync } = await import('node:fs');
+
+  check('数据文件随构建产物一起分发', existsSync('public/data/phonetics/a.json'));
+  check('CMUdict 许可随数据一起保留', existsSync('public/data/phonetics/LICENSE'));
+
+  const shard = (letter) =>
+    JSON.parse(readFileSync(`public/data/phonetics/${letter}.json`, 'utf8'));
+
+  // 重音标记必须落在**音节**开头。只按「尽量多划给后一个音节」切会切出
+  // ˌsɛɹəˈndɪpɪti、tɹænˈzleɪt 这种——nd、zl 不是合法的英语音节起始
+  const cases = [
+    ['c', 'computer', 'kəmˈpjutɚ'],
+    ['s', 'serendipity', 'ˌsɛɹənˈdɪpɪti'],
+    ['t', 'translate', 'tɹænzˈleɪt'],
+    ['i', 'international', 'ˌɪntɚˈnæʃənəl'],
+    ['p', 'pronunciation', 'pɹoʊˌnʌnsiˈeɪʃən'],
+    ['e', 'extraordinary', 'ˌɛkstɹəˈɔɹdəˌnɛɹi'],
+  ];
+  for (const [letter, word, expected] of cases) {
+    const got = shard(letter)[word];
+    check(`${word} 的音节切分与重音正确`, got === expected, `得到 ${got}`);
+  }
+
+  const t = shard('t');
+  check('单音节词不标重音（标了只是噪音）', t.thought === 'θɔt');
+  const a = shard('a');
+  check('非重读 AH 弱化成 ə 而不是 ʌ', a.about === 'əˈbaʊt');
+  check('非重读 ER 弱化成 ɚ', shard('w').water === 'ˈwɔtɚ');
+
+  check('覆盖量级在 11 万词以上',
+    Object.keys(shard('s')).length + Object.keys(shard('c')).length > 20000);
+
+  // 音标里不该混进 ARPAbet 残留（转换失败时最容易漏出来的形态）
+  const sample = Object.values(shard('a')).slice(0, 2000);
+  check('没有未转换的 ARPAbet 残留', !sample.some((v) => /[A-Z0-9]/.test(v)));
+
+  // 跑真正的查询模块，只把 chrome.runtime/fetch 换成本地读文件。
+  // 词形派生（runs / running / walked）没有断言的话，改坏了不会有任何迹象
+  globalThis.chrome = { runtime: { getURL: (u) => u } };
+  globalThis.fetch = async (u) => {
+    try {
+      return { ok: true, json: async () => JSON.parse(readFileSync(`public/${u}`, 'utf8')) };
+    } catch { return { ok: false, json: async () => ({}) }; }
+  };
+  const { lookupPhonetic } = await import('../utils/phonetics.js');
+
+  check('直接命中', await lookupPhonetic('computer') === 'kəmˈpjutɚ');
+  check('大小写不敏感', await lookupPhonetic('Computer') === 'kəmˈpjutɚ');
+  check('查不到返回空串，不是 undefined', await lookupPhonetic('zzqxnotaword') === '');
+  check('词组没有单一读音，返回空串', await lookupPhonetic('hello world') === '');
+
+  // 下面这些词典里没有收，只能靠词形派生。用 CMUdict 已经收了的词（runs/walked）
+  // 测派生等于什么都没测——那些是直接命中，派生函数根本没被调用
+  check('派生 -ing（onboard → onboarding）',
+    await lookupPhonetic('onboarding') === 'ˈɑnˌbɔɹdɪŋ');
+  check('派生 -ed：前为 d 则加 ɪd（onboard → onboarded）',
+    (await lookupPhonetic('onboarded')).endsWith('dɪd'));
+  check('派生 -s：前为浊音加 z（api → apis）',
+    (await lookupPhonetic('apis')).endsWith('z'));
+  check('派生 -ing 且词干结尾哑 e 被去掉（curate → curating）',
+    (await lookupPhonetic('curating')).endsWith('ɪŋ'));
+  check('派生 -ing 且词干结尾哑 e（archive → archiving）',
+    (await lookupPhonetic('archiving')).endsWith('ɪŋ'));
+}
+
 // ── 浮层隔离 ────────────────────────────────────────────────────────────────
 // 浮层（划词面板、进度条、输入气泡、字幕兜底）活在 Shadow DOM 里，宿主页 CSS
 // 影响不到；双语译文和字幕译文必须跟宿主内容一起排版，只能留在宿主 DOM。

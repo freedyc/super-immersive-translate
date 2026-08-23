@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { LearningRecord, Word, WordEntry } from '../../types/models.ts';
 import { migrateWordbook } from '../../utils/learning/migrate.ts';
 import { STORAGE_KEYS } from '../../utils/learning/repository.ts';
+import { lookupPhonetic } from '../../utils/phonetics-client.js';
 
 interface LearningState {
   words: Word[];
@@ -63,6 +64,32 @@ async function loadOrMigrate(): Promise<Omit<LearningState, 'loaded' | 'error'>>
   };
 }
 
+/**
+ * 给缺音标的词补上本地词典里的读音。
+ *
+ * 只写回真正查到的那些；一个都没查到就不碰存储，避免每次打开页面
+ * 都白写一次 storage（还会触发一轮同步）。
+ */
+async function backfillPhonetics(words: Word[]): Promise<void> {
+  const missing = words.filter((w) => !w.phonetic && !w.phoneticUS && !w.phoneticUK);
+  if (missing.length === 0) return;
+
+  const found = new Map<string, string>();
+  await Promise.all(missing.map(async (w) => {
+    const ipa = await lookupPhonetic(w.word);
+    if (ipa) found.set(w.id, ipa);
+  }));
+  if (found.size === 0) return;
+
+  // 重新读一次再写：补音标是后台行为，期间用户可能已经删词或收藏了新词
+  const stored = await chrome.storage.local.get(STORAGE_KEYS.words);
+  const current = (stored[STORAGE_KEYS.words] as Word[]) ?? [];
+  await chrome.storage.local.set({
+    [STORAGE_KEYS.words]: current.map((w) =>
+      (found.has(w.id) ? { ...w, phoneticUS: found.get(w.id) } : w)),
+  });
+}
+
 export function useLearning() {
   const [state, setState] = useState<LearningState>({
     words: [],
@@ -78,7 +105,13 @@ export function useLearning() {
     // 没有 catch 的话，storage 读失败会让页面永远停在加载转圈上——
     // 那是最难排查的一种坏掉：用户看不出是坏了还是慢
     loadOrMigrate().then(
-      (next) => { if (alive) setState({ ...next, loaded: true, error: null }); },
+      (next) => {
+        if (!alive) return;
+        setState({ ...next, loaded: true, error: null });
+        // 音标此前只能由 AI 生成，没配 AI 的用户攒下的词全是空的。
+        // 本地词典不依赖 AI，进页面补一次，之后就一直有了
+        backfillPhonetics(next.words);
+      },
       (err: unknown) => {
         console.error('[wordbook] 读取学习数据失败', err);
         if (alive) {

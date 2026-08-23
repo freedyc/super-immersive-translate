@@ -12,6 +12,7 @@
  */
 import type { Example, Meaning, Word } from '../../types/models.ts';
 import { STORAGE_KEYS } from './repository.ts';
+import { lookupPhonetic } from '../phonetics-client.js';
 
 export async function loadWords(): Promise<Word[]> {
   const stored = await chrome.storage.local.get(STORAGE_KEYS.words);
@@ -75,6 +76,10 @@ export async function collectWord(input: CollectInput): Promise<Word> {
     if (next.meanings.length === 0) {
       next.meanings = meaningsFromTranslations(input.translations);
     }
+    // 旧条目可能是音标还依赖 AI 的年代存下的，补一次
+    if (!next.phonetic && !next.phoneticUS) {
+      next.phoneticUS = await lookupPhonetic(next.word);
+    }
     words[words.indexOf(existing)] = next;
     await saveWords(words);
     return next;
@@ -83,6 +88,8 @@ export async function collectWord(input: CollectInput): Promise<Word> {
   const created: Word = {
     id: crypto.randomUUID(),
     word: input.text.trim(),
+    // 本地词典查得到就直接填美式音标——它是词典数据，不该等 AI
+    phoneticUS: await lookupPhonetic(input.text),
     meanings: meaningsFromTranslations(input.translations),
     examples: example ? [example] : [],
     source: 'ai',

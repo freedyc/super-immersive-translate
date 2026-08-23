@@ -3,6 +3,7 @@
  */
 import { pick } from '../utils/defaults.js';
 import { syncNow } from '../utils/github-sync.js';
+import { lookupPhonetic } from '../utils/phonetics.js';
 
 async function setupPeriodicSyncAlarm() {
   const { githubSyncEnabled, githubSyncMode, githubSyncIntervalMinutes } = await chrome.storage.sync.get(
@@ -89,6 +90,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       'engine', 'targetLang', 'sourceLang', 'selectionMode', 'selectionEngines',
       'deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl'
     )).then(sendResponse);
+    return true;
+  }
+  // 音标查询走 Service Worker：分片载入后常驻在这里，
+  // 内容脚本和各页面共用同一份缓存，不必每个页面各载一次
+  if (msg.action === 'lookupPhonetic') {
+    lookupPhonetic(msg.word).then((phonetic) => sendResponse({ phonetic }));
     return true;
   }
   if (msg.action === 'triggerHistorySync') {

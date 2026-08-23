@@ -6,6 +6,7 @@ import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sent
 import { collectWord, getWord } from '../utils/learning/collect.ts';
 import { formatPhonetic, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
+import { lookupPhonetic } from '../utils/phonetics-client.js';
 
 /**
  * Selection Translation Module - Saladict-style
@@ -188,24 +189,31 @@ import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
     if (!isSingleWord(sourceText)) return;
 
     const existing = await getWord(sourceText);
-    if (existing) {
-      const ex = pickExample(existing);
+    let phonetic = existing ? pickPhonetic(existing) : '';
+
+    // 音标先查本地词典。它不依赖 AI 引擎，也不要求这个词已经收藏过——
+    // 划词看一眼读音是最常见的需求，不该先收藏才能看到
+    if (!phonetic) phonetic = await lookupPhonetic(sourceText);
+
+    if (existing || phonetic) {
+      const ex = existing ? pickExample(existing) : null;
       renderDictionaryInfo(
-        els, pickPhonetic(existing), pickPos(existing), ex?.sentence, ex?.translation,
+        els, phonetic, existing ? pickPos(existing) : '', ex?.sentence, ex?.translation,
       );
-      // 已收藏但还缺音标/词性（AI 当时没配好或调用失败），趁这次打开补一次
-      if (pickPhonetic(existing) && pickPos(existing)) return;
+      // 音标和词性都齐了就不必再调 AI
+      if (phonetic && existing && pickPos(existing)) return;
     }
 
+    // 剩下的（词性、例句，以及本地词典查不到的词的音标）才需要 AI
     const t = new Translator();
     await t.init();
     const generated = await generateExampleSentence(sourceText, t);
     if (!generated) return;
-    renderDictionaryInfo(els, generated.ipa, generated.pos, generated.sentence, generated.translation);
-    // 已收藏的词顺手把补到的音标/词性写回去，否则下次打开还是空的
-    if (existing) {
-      await enrichWordWithAi(sourceText, true);
-    }
+    renderDictionaryInfo(
+      els, phonetic || generated.ipa, generated.pos, generated.sentence, generated.translation,
+    );
+    // 已收藏的词顺手把补到的信息写回去，否则下次打开还是空的
+    if (existing) await enrichWordWithAi(sourceText, true);
   }
 
   function renderPanel(sourceText, engineResults) {
