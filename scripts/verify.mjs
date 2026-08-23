@@ -883,6 +883,29 @@ section('剪贴板同步：端到端加密');
     !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
 }
 
+section('多标签页面：刷新要停在原处');
+{
+  const { readFileSync } = await import('node:fs');
+
+  // 刷新跳回第一个标签，是设置页最容易被察觉的毛病——
+  // 「改一项 → 刷新验证 → 再改一项」正是这一页最常见的用法
+  const PAGES = [
+    ['options/App.tsx', 'tab'],
+    ['history/App.tsx', 'tab'],
+    ['wordbook/App.tsx', 'view'],
+  ];
+  for (const [file, param] of PAGES) {
+    const src = readFileSync(file, 'utf8');
+    check(`${file} 从 URL 读取初始${param}`,
+      new RegExp(`URLSearchParams\\(location\\.search\\)[\\s\\S]{0,80}get\\('${param}'\\)`).test(src));
+    check(`${file} 切换时写回 URL`,
+      src.includes(`searchParams.set('${param}'`)
+      && /history\.replaceState/.test(src));
+    // pushState 会让切几次标签后要按很多下返回键才能离开这一页
+    check(`${file} 用 replaceState 而不是 pushState`, !src.includes('history.pushState'));
+  }
+}
+
 section('翻译并发：每引擎可配');
 {
   const { resolveEngineConcurrency, ENGINE_CONCURRENCY, MAX_CONCURRENCY } =

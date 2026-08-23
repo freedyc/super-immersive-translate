@@ -32,7 +32,7 @@ type Tab = 'translation' | 'clipboard';
 export function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [clipboard, setClipboard] = useState<ClipboardEntry[]>([]);
-  const [tab, setTab] = useState<Tab>(
+  const [tab, setTabState] = useState<Tab>(
     () => (new URLSearchParams(location.search).get('tab') === 'clipboard' ? 'clipboard' : 'translation'),
   );
   const [search, setSearch] = useState('');
@@ -65,6 +65,17 @@ export function App() {
     };
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
+
+  // 标签页记进 URL：不记的话刷新会跳回翻译历史，
+  // 而 popup 的「剪贴板」入口正是靠 ?tab=clipboard 深链进来的
+  const setTab = useCallback((next: Tab) => {
+    setTabState(next);
+    const url = new URL(location.href);
+    url.searchParams.set('tab', next);
+    // 必须写 window.history：本组件的 history 变量是翻译历史列表，把全局遮住了
+    // replaceState 而不是 pushState：切标签不该在浏览器历史里堆条目
+    window.history.replaceState(null, '', url);
   }, []);
 
   const persist = useCallback(async (next: HistoryEntry[]) => {

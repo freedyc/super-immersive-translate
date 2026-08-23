@@ -2,7 +2,7 @@
  * 设置页外壳：侧边导航 + 窄屏下拉降级 + 六个标签页。
  * 所有设置项都是即改即存（无「保存」按钮），沿用原来的交互。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Settings2, Palette, Keyboard, Globe2, Mic, Database, Zap } from 'lucide-react';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -27,9 +27,19 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
+const VALID_TABS: readonly string[] = TABS.map((t) => t.id);
+
+/** 从 URL 读当前标签页。参数是乱写的就回到常规，而不是渲染一个空白页 */
+function tabFromUrl(): TabId {
+  const requested = new URLSearchParams(location.search).get('tab');
+  return VALID_TABS.includes(requested ?? '') ? (requested as TabId) : 'general';
+}
+
 export function App() {
   const { settings, update, reload } = useSettings();
-  const [tab, setTab] = useState<TabId>('general');
+  // 当前标签页记在 URL 里：不记的话刷新会跳回常规，
+  // 而设置页最常见的用法恰恰是「改一项 → 刷新验证 → 再改一项」
+  const [tab, setTabState] = useState<TabId>(tabFromUrl);
   const [toast, setToast] = useState<Toast | null>(null);
   // 窄屏顶栏和宽屏侧栏各挂一个主题控件：两处的容器分别只在各自断点下可见，
   // 只挂一处的话另一个断点下主题切换就没入口了。两个控件都写同一份 storage，
@@ -44,6 +54,22 @@ export function App() {
   }, [settings === null]);
 
   if (!settings) return null;
+
+  const setTab = useCallback((next: TabId) => {
+    setTabState(next);
+    const url = new URL(location.href);
+    url.searchParams.set('tab', next);
+    // replaceState 而不是 pushState：切标签不该在浏览器历史里堆一串条目，
+    // 否则用户按返回键要点很多下才能离开设置页
+    history.replaceState(null, '', url);
+  }, []);
+
+  // 浏览器前进/后退时跟上 URL
+  useEffect(() => {
+    const onPop = () => setTabState(tabFromUrl());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   const tabProps = { settings, update, reload, notify: setToast };
 
