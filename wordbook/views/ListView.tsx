@@ -11,6 +11,7 @@ import { generateExampleSentence } from '../../utils/example-sentence.js';
 import { deriveStatus, masteryPercent, STATUS_LABEL } from '../../utils/learning/srsService.ts';
 import { SpeakButton } from '../components/SpeakButton.tsx';
 import { WordMeta } from '../../components/WordMeta.tsx';
+import { pickExample } from '../../utils/learning/wordMeta.ts';
 import { WordDetailDrawer } from '../components/WordDetailDrawer.tsx';
 import type { LearningRecord, LearningStatus, Word } from '../../types/models.ts';
 
@@ -35,7 +36,9 @@ function WordCard({
     ? 'progress-success'
     : (status === 'difficult' ? 'progress-error' : 'progress-primary');
 
-  const example = word.examples[0];
+  // 用共享的挑选规则：真实语境例句优先。此前这里取 examples[0]，
+  // 跟详情抽屉挑的可能不是同一条，同一个词在两处显示不同例句
+  const example = pickExample(word);
 
   const handleRegenerate = async () => {
     setBusy(true);

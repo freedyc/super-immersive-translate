@@ -791,6 +791,68 @@ section('会话存档：什么样的存档才该恢复');
     === JSON.stringify([...DEFAULT_STUDY_CONFIG.enabledExercises].sort()));
 }
 
+// ── 例句译文 ────────────────────────────────────────────────────────────────
+// collectWord 的 sentenceTranslation 从来没有调用方传过，于是从阅读抓到的
+// 例句在词库里一直只有原句没有译文。语境例句是这个产品的差异点，缺一半没意义。
+section('例句译文补全');
+{
+  let stored = {
+    words: [{
+      id: 'w1',
+      word: 'ephemeral',
+      meanings: [],
+      examples: [
+        { sentence: 'Fame is ephemeral.', origin: 'context', timestamp: 1 },
+        { sentence: 'Already done.', translation: '已经有了', origin: 'ai', timestamp: 2 },
+      ],
+      source: 'ai',
+      addedAt: 0,
+    }],
+  };
+  globalThis.chrome = {
+    storage: {
+      local: {
+        get: async (keys) => {
+          const list = Array.isArray(keys) ? keys : [keys];
+          return Object.fromEntries(list.map((k) => [k, stored[k]]));
+        },
+        set: async (patch) => { stored = { ...stored, ...patch }; },
+      },
+    },
+    runtime: { sendMessage: async () => {} },
+  };
+
+  const { translateMissingExamples } = await import('../utils/example-sentence.js');
+
+  const asked = [];
+  const fakeTranslator = {
+    translate: async (text) => { asked.push(text); return `【译】${text}`; },
+  };
+  await translateMissingExamples('ephemeral', fakeTranslator);
+
+  const examples = stored.words[0].examples;
+  check('缺译文的例句被补上', examples[0].translation === '【译】Fame is ephemeral.');
+  check('已有译文的例句不被覆盖', examples[1].translation === '已经有了');
+  check('已有译文的例句不白翻一次', !asked.includes('Already done.'));
+  check('原句本身不被改动', examples[0].sentence === 'Fame is ephemeral.');
+
+  // 引擎把英文识别成目标语言时会原样返回，那不是译文
+  stored.words[0].examples = [{ sentence: 'Echo me.', origin: 'context', timestamp: 1 }];
+  await translateMissingExamples('ephemeral', { translate: async (t) => t });
+  check('原样返回的“译文”不写入', !stored.words[0].examples[0].translation);
+
+  // 大小写不同的词也要能找到（collectWord 是大小写不敏感的）
+  stored.words[0].examples = [{ sentence: 'Case test.', origin: 'context', timestamp: 1 }];
+  await translateMissingExamples('Ephemeral', fakeTranslator);
+  check('查词大小写不敏感', stored.words[0].examples[0].translation === '【译】Case test.');
+
+  // 词已经被删了：不能抛，收藏流程不该被这一步搞崩
+  stored.words = [];
+  let threw = false;
+  try { await translateMissingExamples('gone', fakeTranslator); } catch { threw = true; }
+  check('词已被删时安静返回，不抛异常', !threw);
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 console.log('');
 if (fail === 0) {

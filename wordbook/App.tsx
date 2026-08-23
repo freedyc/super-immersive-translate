@@ -35,6 +35,7 @@ import { StatsView } from './views/StatsView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { useStudyConfig } from './lib/useStudyConfig.ts';
 import { useStudySession, type SessionSnapshot } from './lib/useStudySession.ts';
+import { useExampleTranslations } from './lib/useExampleTranslations.ts';
 import { buildTodayQueue } from '../utils/learning/queue.ts';
 import { createRecord, recordAnswer } from '../utils/learning/srsService.ts';
 import type { Familiarity, LearningRecord, Toast, Word } from '../types/models.ts';
@@ -64,6 +65,8 @@ export function App() {
   const {
     session: saved, hasUnfinished, save: saveSession, clear: clearSession,
   } = useStudySession();
+  // 老数据里从阅读抓到的例句只有原句没有译文，进页面补一次
+  useExampleTranslations(words, loaded);
 
   const [view, setView] = useState<ViewId>(() => {
     const requested = new URLSearchParams(location.search).get('view');

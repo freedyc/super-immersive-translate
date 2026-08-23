@@ -2,7 +2,7 @@ import selectionCss from './selection.css?inline';
 import { Translator } from '../utils/translator.js';
 import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
-import { enrichWordWithAi, generateExampleSentence } from '../utils/example-sentence.js';
+import { enrichWordWithAi, generateExampleSentence, translateMissingExamples } from '../utils/example-sentence.js';
 import { collectWord, getWord } from '../utils/learning/collect.ts';
 import { formatPhonetic, formatPos, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
@@ -334,8 +334,15 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
         title: document.title,
       });
 
+      const hasContext = saved.examples.some(e => e.origin === 'context');
       // 没有真实例句就用 AI 补一个；有真实例句就只在缺音标/词性时轻量识别一次
-      enrichWordWithAi(sourceText, saved.examples.some(e => e.origin === 'context'));
+      enrichWordWithAi(sourceText, hasContext);
+      // 抓到的原句还要补中文译文——词库里例句下面要显示双语。
+      // 收藏本身已经完成，这一步失败也不影响
+      if (hasContext) {
+        const t = new Translator();
+        t.init().then(() => translateMissingExamples(sourceText, t)).catch(() => {});
+      }
 
       // 已经真的存进单词本了，保持"已收藏"状态，不再像临时提示那样几秒后跳回去
       btn.textContent = '✅';

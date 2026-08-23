@@ -316,3 +316,45 @@ function applyMeta(word, meta) {
     ];
   }
 }
+
+
+/**
+ * 给缺译文的例句补上中文翻译。
+ *
+ * 从阅读里抓到的例句只存了原句——collectWord 的 sentenceTranslation 从来没有
+ * 调用方传过，于是「我的词库」里真实语境例句下面一直是空的。语境例句是这个
+ * 产品相对 Anki 的差异点，只给原句不给译文等于把差异点做废了一半。
+ *
+ * 用普通翻译引擎，不用 AI：句子翻译是 Translator 的本行，而 AI 引擎在默认
+ * 配置下根本不可用（音标和词性之前永远为空就是这么来的）。
+ *
+ * @param {string} wordText
+ * @param {object} t 已经 init() 过的 Translator 实例
+ */
+export async function translateMissingExamples(wordText, t) {
+  const word = await getWord(wordText);
+  if (!word) return;
+
+  const pending = word.examples.filter((e) => e.sentence && !e.translation);
+  if (pending.length === 0) return;
+
+  const results = new Map();
+  await Promise.all(pending.map(async (e) => {
+    try {
+      const translated = await t.translate(e.sentence);
+      // 引擎偶尔原样返回（识别成目标语言了），那种"译文"没有意义
+      if (translated && translated !== e.sentence) results.set(e.sentence, translated);
+    } catch {
+      // 单句失败不影响其他句子，也不该让收藏流程感知到
+    }
+  }));
+  if (results.size === 0) return;
+
+  await patchWord(wordText, (w) => {
+    // patchWord 会重新读一次存储，对象引用变了，按句子文本匹配
+    w.examples = w.examples.map((e) =>
+      (!e.translation && results.has(e.sentence)
+        ? { ...e, translation: results.get(e.sentence) }
+        : e));
+  });
+}
