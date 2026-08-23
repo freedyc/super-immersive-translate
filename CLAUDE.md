@@ -174,6 +174,14 @@ engines in parallel and aggregate their results in the panel.
    generic `<video>` textTrack cue watcher when no site adapter matches. Toggle via the
    `subtitleTranslate` setting.
 
+**Content scripts must import what they use — never rely on the manifest's `js` order.**
+`@crxjs` turns each entry into an asynchronously loaded module, so two entries have no
+guaranteed execution order. `content/selection.js` used to read `window.ttsManager` on the
+strength of `utils/tts.js` being listed before it, which failed randomly with
+`Cannot read properties of undefined`. Write the real `import` instead: entries share the
+same emitted chunk, so the module body still runs exactly once. `verify` asserts that any
+content script touching `window.ttsManager` / `window.translator` imports its provider.
+
 ### Background: `background/background.js`
 Minimal MV3 service worker. Registers context menus and the `Alt+T` / `Alt+S` commands
 (declared in `manifest.json` `commands`), and forwards them to the active tab's content

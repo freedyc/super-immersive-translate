@@ -1,5 +1,10 @@
 import selectionCss from './selection.css?inline';
 import { Translator } from '../utils/translator.js';
+// 显式导入而不是依赖 manifest 里的顺序：@crxjs 把每个内容脚本包成异步加载的
+// 模块，两个条目之间的执行顺序**不保证**。此前这里靠 manifest 顺序拿
+// window.ttsManager，结果是随机地 Cannot read properties of undefined。
+// 二者共用同一个打包 chunk，模块体只会执行一次，不会有两个实例
+import '../utils/tts.js';
 import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
 import { enrichWordWithAi, generateExampleSentence, translateMissingExamples } from '../utils/example-sentence.js';
@@ -54,7 +59,7 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
       selectionMode = 'icon';
       selectionEngines = DEFAULT_SELECTION_ENGINES;
     }
-    window.ttsManager.init();
+    // 不再在这里 init()：speak() 会自己保证就绪，且 tts.js 现在监听设置变更
   }
 
   loadSettings();

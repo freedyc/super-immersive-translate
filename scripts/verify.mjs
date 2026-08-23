@@ -652,6 +652,34 @@ section('内容脚本：浮层进影子树，随文内容留宿主 DOM');
     !/document\.body\.appendChild/.test(sel));
 }
 
+// ── 内容脚本的跨文件依赖 ────────────────────────────────────────────────────
+// @crxjs 把每个内容脚本包成异步加载的模块，manifest 里 js 数组的顺序**不保证**
+// 执行顺序。靠顺序去拿另一个脚本挂在 window 上的对象，会随机地
+// Cannot read properties of undefined —— 依赖必须写成真正的 import。
+section('内容脚本：window 上的共享对象必须显式导入');
+{
+  const { readdirSync, readFileSync } = await import('node:fs');
+
+  // window 上的全局 → 定义它的模块
+  const PROVIDERS = {
+    ttsManager: 'utils/tts.js',
+    translator: 'utils/translator.js',
+  };
+
+  for (const file of readdirSync('content').filter((f) => f.endsWith('.js'))) {
+    const src = readFileSync(`content/${file}`, 'utf8');
+    for (const [global, provider] of Object.entries(PROVIDERS)) {
+      // 只看代码里的用法，注释里提到不算
+      const code = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+      if (!code.includes(`window.${global}`)) continue;
+      const name = provider.split('/').pop();
+      check(`content/${file} 用了 window.${global}，就必须导入 ${provider}`,
+        new RegExp(`import\\s+['"]\\.\\./utils/${name.replace('.', '\\.')}['"]`).test(src)
+        || new RegExp(`from\\s+['"]\\.\\./utils/${name.replace('.', '\\.')}['"]`).test(src));
+    }
+  }
+}
+
 // ── 单一存储 ────────────────────────────────────────────────────────────────
 // 「我的词库没有音标」的根因：划词面板写旧的 wordbook 表，词库页读新的 words 表，
 // 事后补的音标补进了旧表。写入路径必须只有一条。
