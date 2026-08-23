@@ -5,6 +5,7 @@ import { pick } from '../utils/defaults.js';
 import { syncNow } from '../utils/github-sync.js';
 import { lookupPhonetic } from '../utils/phonetics.js';
 import { lookupPos } from '../utils/pos.js';
+import { buildRequest } from '../utils/tts-engines.js';
 
 async function setupPeriodicSyncAlarm() {
   const { githubSyncEnabled, githubSyncMode, githubSyncIntervalMinutes } = await chrome.storage.sync.get(
@@ -100,6 +101,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then(([phonetic, pos]) => sendResponse({ phonetic, pos }));
     return true;
   }
+  // 朗读音频统一在这里取：内容脚本自己 fetch 跨域会受宿主页面的 CORS 约束，
+  // 扩展的 host_permissions 只在 Service Worker 和扩展页面里生效
+  if (msg.action === 'ttsFetch') {
+    fetchTtsAudio(msg).then(sendResponse, (err) => sendResponse({ error: err.message }));
+    return true;
+  }
   if (msg.action === 'triggerHistorySync') {
     syncNow().then(sendResponse);
     return true;
@@ -134,3 +141,35 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     syncNow();
   }
 });
+
+
+/**
+ * 取一段朗读音频，返回 data URL。
+ *
+ * 回传 data URL 而不是 blob URL：blob URL 绑在创建它的上下文上，
+ * Service Worker 里造的到了内容脚本里就是个失效地址。
+ */
+async function fetchTtsAudio({ engine, text, lang, opts }) {
+  const req = buildRequest(engine, text, lang, opts || {});
+  if (!req) throw new Error(`引擎 ${engine} 不走网络`);
+
+  const res = await fetch(req.url, {
+    ...(req.init || {}),
+    // Google/有道的取音频端点会看 UA，缺了就可能被当成爬虫挡掉
+    headers: { ...(req.init?.headers || {}) },
+  });
+  if (!res.ok) {
+    throw new Error(`朗读服务返回 ${res.status}`);
+  }
+  const buf = await res.arrayBuffer();
+  if (buf.byteLength < 512) {
+    // 这些免费端点失败时也会回 200 + 一小段 JSON 错误，光看状态码判断不出来
+    throw new Error('朗读服务没有返回音频');
+  }
+  let binary = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  }
+  return { dataUrl: `data:${res.headers.get('content-type') || 'audio/mpeg'};base64,${btoa(binary)}` };
+}

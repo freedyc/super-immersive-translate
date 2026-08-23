@@ -1,4 +1,5 @@
 import { pick } from './defaults.js';
+import { chunkText, getEngine, supportsLang } from './tts-engines.js';
 
 class TTSManager {
   constructor() {
@@ -15,12 +16,17 @@ class TTSManager {
     this.openaiUrl = 'https://api.openai.com/v1/audio/speech';
     this.openaiVoice = 'alloy';
     this.openaiSpeed = 1.0;
+
+    // 有道：英式 / 美式
+    this.youdaoAccent = 'us';
+    // 播放长文本时逐段播，中途 stop() 要能把后续段也取消掉
+    this.playToken = 0;
   }
 
   async init() {
     const settings = await chrome.storage.sync.get(pick(
       'ttsEngine', 'ttsBrowserVoiceURI', 'ttsBrowserRate', 'ttsBrowserPitch',
-      'openaiKey', 'openaiUrl', 'ttsOpenaiVoice', 'ttsOpenaiSpeed'
+      'openaiKey', 'openaiUrl', 'ttsOpenaiVoice', 'ttsOpenaiSpeed', 'ttsYoudaoAccent'
     ));
 
     this.currentEngine = settings.ttsEngine;
@@ -41,9 +47,11 @@ class TTSManager {
 
     this.openaiVoice = settings.ttsOpenaiVoice;
     this.openaiSpeed = parseFloat(settings.ttsOpenaiSpeed) || 1.0;
+    this.youdaoAccent = settings.ttsYoudaoAccent || 'us';
   }
 
   stop() {
+    this.playToken++; // 让正在排队的后续段自行作废
     window.speechSynthesis.cancel();
     if (this.audioElement && !this.audioElement.paused) {
       this.audioElement.pause();
@@ -55,15 +63,66 @@ class TTSManager {
     return window.speechSynthesis.speaking || (!this.audioElement.paused && this.audioElement.currentTime > 0);
   }
 
-  async speak(text, lang) {
+  /**
+   * 朗读一段文本。念完才 resolve，念不出来 reject。
+   *
+   * @param {string} text
+   * @param {string} lang BCP-47，如 en-US / zh-CN
+   * @param {{engine?: string}} [override] 试听用：临时指定引擎，不改用户设置
+   */
+  async speak(text, lang, override = {}) {
     if (!text) return;
     this.stop();
+    const token = this.playToken;
 
-    if (this.currentEngine === 'openai' && this.openaiKey) {
-      await this._speakOpenAI(text);
-    } else {
+    let engine = override.engine || this.currentEngine;
+    // 有道只有英文发音，中文请求会直接失败——与其报错，不如退回浏览器语音
+    if (!supportsLang(engine, lang)) engine = 'browser';
+    // 没配 Key 的 OpenAI 同理，不该让用户点一次等一次超时
+    if (engine === 'openai' && !this.openaiKey) engine = 'browser';
+
+    if (engine === 'browser') {
       await this._speakBrowser(text, lang);
+      return;
     }
+
+    const { maxChars } = getEngine(engine);
+    const chunks = chunkText(text, maxChars);
+    for (const chunk of chunks) {
+      if (token !== this.playToken) return; // 期间被 stop() 了
+      await this._speakRemote(engine, chunk, lang, token);
+    }
+  }
+
+  /** 网络引擎：音频由 Service Worker 取回（内容脚本跨域受宿主页 CORS 限制） */
+  async _speakRemote(engine, text, lang, token) {
+    const res = await chrome.runtime.sendMessage({
+      action: 'ttsFetch',
+      engine,
+      text,
+      lang,
+      opts: {
+        openaiUrl: this.openaiUrl,
+        openaiKey: this.openaiKey,
+        openaiVoice: this.openaiVoice,
+        openaiSpeed: this.openaiSpeed,
+        youdaoAccent: this.youdaoAccent,
+      },
+    }).catch(() => null);
+
+    if (!res?.dataUrl) {
+      throw new Error(res?.error || '朗读服务不可用');
+    }
+    if (token !== this.playToken) return;
+
+    await new Promise((resolve, reject) => {
+      const audio = this.audioElement;
+      audio.src = res.dataUrl;
+      audio.playbackRate = engine === 'openai' ? 1 : this.browserRate;
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error('音频播放失败'));
+      audio.play().catch(reject);
+    });
   }
 
   // speechSynthesis.getVoices() 在页面里第一次调用时经常还是空数组——真正的语音列表
@@ -117,51 +176,6 @@ class TTSManager {
     });
   }
 
-  async _speakOpenAI(text) {
-    return new Promise(async (resolve, reject) => {
-      try {
-        const response = await fetch(this.openaiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.openaiKey}`
-          },
-          body: JSON.stringify({
-            model: 'tts-1',
-            input: text,
-            voice: this.openaiVoice,
-            speed: this.openaiSpeed
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`OpenAI TTS API error: ${response.status}`);
-        }
-
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        
-        this.audioElement.src = url;
-        
-        this.audioElement.onended = () => {
-          URL.revokeObjectURL(url);
-          resolve();
-        };
-
-        this.audioElement.onerror = (err) => {
-          URL.revokeObjectURL(url);
-          reject(err);
-        };
-
-        await this.audioElement.play();
-      } catch (err) {
-        console.error('[TTS] OpenAI speak failed:', err);
-        // Fallback to browser if OpenAI fails
-        this._speakBrowser(text, 'auto');
-        resolve(); // resolve anyway so caller doesn't hang
-      }
-    });
-  }
 }
 
 window.ttsManager = new TTSManager();

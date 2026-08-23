@@ -62,6 +62,20 @@ the rule; hand-written CSS is a consequence of it, not the point.
   and accepts that host CSS can reach it. `npm run verify` asserts these two files contain
   only those five classes; anything else belongs in `overlay.css`.
 
+**TTS engines are declared in one registry.** `utils/tts-engines.js` holds every engine's
+capabilities — whether it needs a key, whether it can speak Chinese, its per-request
+character cap — and the settings page, `utils/tts.js`, and the background fetcher all read
+that one list. Four engines: `browser` (offline, all languages), `google` (free, keyless,
+good Chinese and English), `youdao` (free, keyless, human recordings, **English only** —
+Chinese requests return 500), `openai` (needs a key). `speak()` downgrades to `browser`
+when the chosen engine cannot handle the language or has no key, rather than failing.
+
+Network audio is fetched **in the service worker** (`ttsFetch`) and returned as a data URL.
+A content script's own cross-origin fetch is bound by the host page's CORS — extension
+`host_permissions` do not apply there — and a blob URL made in the worker is dead in any
+other context. Google caps a request near 200 chars, so `chunkText()` splits on sentence
+ends and plays the pieces in sequence.
+
 **Phonetics and part of speech come from bundled dictionaries, not the AI engine.**
 Both are dictionary data. Before this they were AI-only, and since the default config has
 no AI engine (`engine: 'google'`, all keys empty, Ollama fallback unreachable) both fields

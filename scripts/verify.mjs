@@ -435,6 +435,73 @@ section('本地词性词典');
   check('最多显示三类', formatPos('jnvr').split(' · ').length === 3);
 }
 
+// ── 朗读引擎 ────────────────────────────────────────────────────────────────
+section('朗读引擎：能力声明与分段');
+{
+  const { TTS_ENGINES, getEngine, supportsLang, buildRequest, chunkText, isChinese } =
+    await import('../utils/tts-engines.js');
+
+  check('浏览器语音是默认，排在第一个', TTS_ENGINES[0].id === 'browser');
+  check('至少两个免费且无需 Key 的引擎',
+    TTS_ENGINES.filter((e) => !e.needsKey).length >= 2);
+  check('免费引擎里有支持中文的',
+    TTS_ENGINES.some((e) => !e.needsKey && e.langs === 'all' && e.id !== 'browser'));
+
+  // 有道的中文请求会返回 500——不是音质问题，是根本没有。
+  // 这条声明是 speak() 里语言降级的依据，写错了用户点一次失败一次
+  check('有道声明为仅英文', getEngine('youdao').langs === 'en');
+  check('中文交给有道会被判为不支持', supportsLang('youdao', 'zh-CN') === false);
+  check('英文交给有道是支持的', supportsLang('youdao', 'en-US') === true);
+  check('Google 中英文都支持', supportsLang('google', 'zh-CN') && supportsLang('google', 'en-US'));
+  check('中文语种判断认得 zh-CN / zh-TW',
+    isChinese('zh-CN') && isChinese('zh-TW') && !isChinese('en-US'));
+
+  // 未知引擎不能让调用方拿到 undefined 再崩在 .maxChars 上
+  check('未知引擎回退到默认引擎', getEngine('nope').id === 'browser');
+
+  const g = buildRequest('google', 'hello world', 'zh-CN');
+  check('Google 请求带 client=tw-ob（这是免鉴权的那个端点）',
+    g.url.includes('client=tw-ob'));
+  check('Google 请求把语种带上', g.url.includes('tl=zh-CN'));
+  check('文本经过 URL 编码', buildRequest('google', 'a b&c', 'en').url.includes('a+b%26c'));
+  check('有道美式是 type=2', buildRequest('youdao', 'test', 'en', {}).url.includes('type=2'));
+  check('有道英式是 type=1',
+    buildRequest('youdao', 'test', 'en', { youdaoAccent: 'uk' }).url.includes('type=1'));
+  check('浏览器语音不构造网络请求', buildRequest('browser', 'x', 'en') === null);
+
+  // Google 单次上限约 200 字符，超了返回 400。分段没做对的表现是长句直接不出声
+  const en = 'The quick brown fox jumps over the lazy dog. '.repeat(8);
+  const chunks = chunkText(en, 180);
+  check('长英文被分段', chunks.length > 1);
+  check('每段都不超过上限', chunks.every((c) => c.length <= 180));
+  // 这条必须用构造输入：拿重复句子测「是否在句末切」会被蒙混过去——
+  // 那种文本里最后一个空格正好紧跟句号，句末分支和词边界分支结果一样，
+  // 把句末逻辑整个删掉断言照样通过
+  {
+    const head = `${'x'.repeat(100)}. `;      // 句号在下标 100
+    const tail = 'yyyy '.repeat(20);          // 后面还有很多词边界
+    const [first] = chunkText(head + tail, 180);
+    check('在句末切且标点归前一段（不是退到词边界）',
+      first === `${'x'.repeat(100)}.`, `得到 ${JSON.stringify(first.slice(-8))}`);
+  }
+  {
+    // 句末位置太靠前时不该采纳，否则会切出一堆很短的片段，连读起来一顿一顿
+    const early = `ok. ${'z'.repeat(200)}`;
+    const [first] = chunkText(early, 180);
+    check('句末位置过于靠前时退到词边界', first !== 'ok.');
+  }
+  check('分段后内容不丢字',
+    chunks.join(' ').replace(/\s+/g, '') === en.trim().replace(/\s+/g, ''));
+
+  // 中文没有空格，退不到词边界，但仍然要能切出来而不是死循环
+  const zh = '这是一段很长的中文文本，用来测试分段是否正确。'.repeat(10);
+  const zhChunks = chunkText(zh, 180);
+  check('长中文也能分段', zhChunks.length > 1 && zhChunks.every((c) => c.length <= 180));
+
+  check('短文本不分段', chunkText('hello', 180).length === 1);
+  check('空文本得到空数组', chunkText('   ', 180).length === 0);
+}
+
 // ── 浮层隔离 ────────────────────────────────────────────────────────────────
 // 浮层（划词面板、进度条、输入气泡、字幕兜底）活在 Shadow DOM 里，宿主页 CSS
 // 影响不到；双语译文和字幕译文必须跟宿主内容一起排版，只能留在宿主 DOM。
