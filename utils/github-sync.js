@@ -1,5 +1,10 @@
 // GitHub 同步：只负责"读远端 / 写远端 / 合并"，不做调度决策（调度在 background）。
 import { pick } from './defaults.js';
+// 2.1 学习数据的合并逻辑写在 TypeScript 里：这个文件历史上最常见的 bug 就是
+// 新增字段忘了加进合并函数、同步一次字段就被静默丢掉（pos / ipa 都发生过），
+// 显式字段 + 类型检查能把这类问题挡在编译期。
+import { mergeWords, mergeLearningRecords } from './learning/syncMerge.ts';
+import { migrateWordbook } from './learning/migrate.ts';
 
 const API_BASE = 'https://api.github.com';
 const HISTORY_GIST_FILENAME = 'translation-history.json';
@@ -297,6 +302,90 @@ async function syncHistoryNow() {
   await pushRemoteHistory(finalMerged);
 }
 
+// ── 2.1 学习数据同步（words + learningRecords）────────────────────────────────
+//
+// 与旧的 wordbook.json 并存，按「本地是否已迁移」二选一：
+//   未迁移 → 继续同步 wordbook.json（旧行为，不破坏现有用户）
+//   已迁移 → 同步 wordbook-v2.json
+// 两者不同时推送：双写等于两个真源，一旦不一致就没法判断谁对。
+//
+// ⚠️ 已知限制：如果用户有多台设备且版本不一致（A 已升级、B 还在旧版），
+// A 写 v2 文件、B 写旧文件，两边不会互相看见。这是有意的取舍——双写会让
+// 本就微妙的三方合并复杂度翻倍。升级时建议把所有设备一起升。
+const LEARNING_GIST_FILENAME = 'wordbook-v2.json';
+const LEARNING_REPO_PATH = 'wordbook-v2.json';
+
+/** 把远端拉回来的任意内容规整成 v2 载荷：文件不存在时原语返回的是 []，不是对象 */
+function normalizeLearningPayload(raw) {
+  if (raw && !Array.isArray(raw) && raw.version === 2) {
+    return {
+      version: 2,
+      words: Array.isArray(raw.words) ? raw.words : [],
+      records: Array.isArray(raw.records) ? raw.records : [],
+    };
+  }
+  return { version: 2, words: [], records: [] };
+}
+
+function mergeLearningPayload(local, remote) {
+  const a = normalizeLearningPayload(local);
+  const b = normalizeLearningPayload(remote);
+  return {
+    version: 2,
+    words: mergeWords(a.words, b.words),
+    records: mergeLearningRecords(a.records, b.records),
+  };
+}
+
+/** 本地是否已经迁移到 2.1 的数据结构 */
+async function hasMigratedLocally() {
+  const { words, learningRecords } = await chrome.storage.local.get(['words', 'learningRecords']);
+  return (Array.isArray(words) && words.length > 0)
+    || (Array.isArray(learningRecords) && learningRecords.length > 0);
+}
+
+async function readLocalLearning() {
+  const { words = [], learningRecords = [] } = await chrome.storage.local.get([
+    'words', 'learningRecords',
+  ]);
+  return {
+    version: 2,
+    words: Array.isArray(words) ? words : [],
+    records: Array.isArray(learningRecords) ? learningRecords : [],
+  };
+}
+
+async function syncLearningNow() {
+  const local = await readLocalLearning();
+
+  let remote = normalizeLearningPayload(
+    await pullRemoteFile(LEARNING_GIST_FILENAME, LEARNING_REPO_PATH)
+  );
+
+  // 远端还没有 v2 文件（对端设备尚未升级，或首次在新设备上同步）：
+  // 回退去读旧的 wordbook.json 并就地迁移，避免升级后远端历史数据看起来"消失"
+  if (remote.words.length === 0 && remote.records.length === 0) {
+    const legacyRemote = await pullRemoteWordbook();
+    if (Array.isArray(legacyRemote) && legacyRemote.length > 0) {
+      const migrated = migrateWordbook(legacyRemote, local.records);
+      remote = { version: 2, words: migrated.words, records: migrated.records };
+    }
+  }
+
+  const merged = mergeLearningPayload(local, remote);
+
+  // 防竞态：拉取期间（网络往返，可能几秒）用户可能又学了几个词，
+  // 写回前重新读一次最新快照再合并一次，否则会用旧快照覆盖这段时间的新进度
+  const latest = await readLocalLearning();
+  const final = mergeLearningPayload(latest, merged);
+
+  await chrome.storage.local.set({ words: final.words, learningRecords: final.records });
+  await pushRemoteFile(
+    LEARNING_GIST_FILENAME, LEARNING_REPO_PATH,
+    mergeLearningPayload, final, 'Update learning data'
+  );
+}
+
 async function syncWordbookNow() {
   // 仓库模式下，历史记录的路径是用户在设置里自定义的 githubRepoPath；单词本固定用
   // WORDBOOK_REPO_PATH（'wordbook.json'）。如果两者恰好相同，会导致历史和单词本
@@ -304,9 +393,11 @@ async function syncWordbookNow() {
   const { githubSyncTargetType, githubRepoPath } = await chrome.storage.sync.get(
     pick('githubSyncTargetType', 'githubRepoPath')
   );
-  if (githubSyncTargetType === 'repo' && githubRepoPath === WORDBOOK_REPO_PATH) {
+  if (githubSyncTargetType === 'repo'
+      && (githubRepoPath === WORDBOOK_REPO_PATH || githubRepoPath === LEARNING_REPO_PATH)) {
     throw new Error(
-      `仓库路径与单词本同步文件 ${WORDBOOK_REPO_PATH} 冲突，请修改「同步载体」里的仓库文件路径设置`
+      `仓库路径与单词本同步文件（${WORDBOOK_REPO_PATH} / ${LEARNING_REPO_PATH}）冲突，`
+      + '请修改「同步载体」里的仓库文件路径设置'
     );
   }
 
@@ -340,7 +431,13 @@ export async function syncNow() {
 
     const { githubSyncWordbook } = await chrome.storage.sync.get(pick('githubSyncWordbook'));
     if (githubSyncWordbook) {
-      await syncWordbookNow();
+      // 已迁移到 2.1 数据结构的走新路径，否则维持旧行为——
+      // 这样本批只加能力、不改变尚未迁移用户的同步表现
+      if (await hasMigratedLocally()) {
+        await syncLearningNow();
+      } else {
+        await syncWordbookNow();
+      }
     }
 
     await chrome.storage.local.set({ githubSyncStatus: { lastSyncAt: Date.now(), lastError: null } });

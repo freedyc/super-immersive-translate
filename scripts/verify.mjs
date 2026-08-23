@@ -1,0 +1,316 @@
+/**
+ * 纯逻辑行为验证。
+ *
+ * 运行：npm run verify
+ *
+ * 为什么存在：本项目没有测试框架（见 CLAUDE.md），而数据迁移和跨设备合并是
+ * 出错代价最高、又最难靠肉眼复查的两块——迁移丢数据、合并静默吞字段，
+ * 用户往往过很久才发现，且发现时数据已经没了。typecheck 只能保证类型对，
+ * 保证不了逻辑对，所以这两处需要真的跑一遍。
+ *
+ * 为什么不引测试框架：这里只需要"跑一遍纯函数、断言结果"，Node 24 能直接
+ * 执行 TypeScript（原生剥离类型），零依赖零配置。等将来真的需要 mock、快照、
+ * 覆盖率的时候再引框架不迟。
+ *
+ * 只测纯函数：碰 chrome.* API 的代码不在这里测，那需要浏览器环境。
+ */
+import { convertEntry, migrateWordbook } from '../utils/learning/migrate.ts';
+import { mergeWords, mergeLearningRecords } from '../utils/learning/syncMerge.ts';
+import {
+  createRecord, recordAnswer, deriveStatus, describeNextReview,
+} from '../utils/learning/srsService.ts';
+import { buildTodayQueue, canRender, estimateMinutes } from '../utils/learning/queue.ts';
+
+let pass = 0;
+let fail = 0;
+const failures = [];
+
+function check(name, cond) {
+  if (cond) {
+    pass++;
+  } else {
+    fail++;
+    failures.push(name);
+  }
+}
+
+function section(title) {
+  console.log(`\n\x1b[36m${title}\x1b[0m`);
+}
+
+const card = (over = {}) => ({
+  due: '2099-01-01T00:00:00.000Z',
+  last_review: '2026-08-01T00:00:00.000Z',
+  stability: 5,
+  difficulty: 3,
+  reps: 1,
+  state: 2,
+  ...over,
+});
+
+const word = (over = {}) => ({
+  id: 'w1',
+  word: 'ubiquitous',
+  meanings: [{ partOfSpeech: '形容词', definitions: ['普遍存在的'] }],
+  examples: [],
+  source: 'ai',
+  addedAt: 1000,
+  ...over,
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+section('迁移：语境例句是产品核心资产，一条都不能丢');
+
+{
+  const { word: w } = convertEntry({
+    id: 'w1',
+    text: 'ubiquitous',
+    translations: { google: '普遍存在的', deepl: '普遍存在的' },
+    timestamp: 1000,
+    url: 'https://a.com',
+    title: '某页面',
+    ipa: '/juːˈbɪkwɪtəs/',
+    contexts: [
+      { sentence: 'It is ubiquitous.', url: 'https://a.com', title: '某页面', timestamp: 900 },
+      { sentence: 'AI made this.', translation: '生成的', url: null, timestamp: 950, source: 'ai' },
+    ],
+  });
+  check('两条例句都保留', w.examples.length === 2);
+  check('真实语境标 context', w.examples[0].origin === 'context');
+  check('来源页地址保留', w.examples[0].sourceUrl === 'https://a.com');
+  check('AI 例句标 ai', w.examples[1].origin === 'ai');
+  check('收藏时间保留', w.addedAt === 1000);
+  check('收藏来源页保留', w.sourceUrl === 'https://a.com');
+  check('未标英美的音标进 phonetic 而非猜成 phoneticUS',
+    w.phonetic === '/juːˈbɪkwɪtəs/' && w.phoneticUS === undefined);
+  check('多引擎相同译文已去重', w.meanings[0].definitions.length === 1);
+}
+
+section('迁移：复习进度映射');
+
+{
+  const { record } = convertEntry({
+    id: 'w2',
+    text: 'synergy',
+    translations: { google: '协同' },
+    timestamp: 1,
+    srs: { recall: card({ reps: 4 }), recognition: card({ reps: 2 }) },
+  });
+  check('recall → spelling', !!record.byExercise.spelling);
+  check('recognition → en2zh', !!record.byExercise.en2zh);
+  check('没学过的题型不凭空造', record.byExercise.listening === undefined);
+  check('studyCount 由 reps 汇总', record.studyCount === 6);
+}
+
+{
+  const { record } = convertEntry({ id: 'w3', text: 'new', translations: {}, timestamp: 1 });
+  check('从没学过的词不产生学习记录', record === null);
+}
+
+section('迁移：幂等 —— 重跑不能把用户新进度打回去');
+
+{
+  const entries = [{
+    id: 'w4', text: 'test', translations: { g: 'x' }, timestamp: 1,
+    srs: { recall: card({ reps: 1 }) },
+  }];
+  const userProgress = {
+    wordId: 'w4', studyCount: 99, correctCount: 50, wrongCount: 1, streak: 7,
+    byExercise: { spelling: { card: card({ reps: 99 }), correct: 50, wrong: 1 } },
+  };
+  const again = migrateWordbook(entries, [userProgress]);
+  check('保留用户新进度而非旧数据', again.records[0].studyCount === 99);
+  check('不重复计入迁移数', again.migratedWithProgress === 0);
+}
+
+{
+  const dirty = migrateWordbook([
+    null,
+    { text: '' },
+    { id: 'ok', text: 'fine', translations: {}, timestamp: 1 },
+  ]);
+  check('脏数据被跳过而不是让迁移崩掉', dirty.words.length === 1 && dirty.words[0].word === 'fine');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+section('同步合并：词典数据');
+
+{
+  const local = [word({
+    examples: [{ sentence: 'Local one.', sourceUrl: 'https://a.com', origin: 'context', timestamp: 1 }],
+    addedAt: 2000,
+  })];
+  const remote = [word({
+    id: 'remote-id',
+    examples: [{ sentence: 'Remote one.', sourceUrl: 'https://b.com', origin: 'context', timestamp: 2 }],
+    addedAt: 1000,
+    tags: ['cet4'],
+  })];
+  const merged = mergeWords(local, remote);
+
+  check('同一个词合并成一条', merged.length === 1);
+  check('两端例句取并集，都不丢', merged[0].examples.length === 2);
+  check('addedAt 取更早的（第一次遇见才有意义）', merged[0].addedAt === 1000);
+  check('id 取远端优先（避免两台设备互推时 id 反复跳变）', merged[0].id === 'remote-id');
+  check('远端独有的 tags 保留', merged[0].tags?.includes('cet4'));
+}
+
+{
+  // 同一句话来自不同页面，是两条独立语境，不该被判成重复
+  const a = [word({ examples: [{ sentence: 'Same text.', sourceUrl: 'https://a.com', origin: 'context', timestamp: 1 }] })];
+  const b = [word({ examples: [{ sentence: 'Same text.', sourceUrl: 'https://b.com', origin: 'context', timestamp: 2 }] })];
+  check('同句不同来源页视为两条', mergeWords(a, b)[0].examples.length === 2);
+
+  const c = [word({ examples: [{ sentence: 'Same text.', sourceUrl: 'https://a.com', origin: 'context', timestamp: 1 }] })];
+  check('同句同来源页才算重复', mergeWords(a, c)[0].examples.length === 1);
+}
+
+{
+  const merged = mergeWords(
+    [word({ meanings: [{ partOfSpeech: '形容词', definitions: ['普遍存在的'] }] })],
+    [word({ meanings: [{ partOfSpeech: '形容词', definitions: ['无所不在的'] }] })],
+  );
+  check('同词性下的释义取并集', merged[0].meanings[0].definitions.length === 2);
+}
+
+{
+  const merged = mergeWords([word({ source: 'ai' })], [word({ source: 'ecdict' })]);
+  check('词典来源取更权威的一方（ecdict 优于 ai）', merged[0].source === 'ecdict');
+}
+
+section('同步合并：学习记录');
+
+{
+  const local = [{
+    wordId: 'w1', studyCount: 10, correctCount: 8, wrongCount: 2, streak: 3,
+    lastStudiedAt: 2000,
+    byExercise: { spelling: { card: card({ last_review: '2026-08-10T00:00:00.000Z' }), correct: 8, wrong: 2 } },
+  }];
+  const remote = [{
+    wordId: 'w1', studyCount: 4, correctCount: 4, wrongCount: 0, streak: 1,
+    lastStudiedAt: 1000,
+    byExercise: {
+      spelling: { card: card({ last_review: '2026-08-05T00:00:00.000Z' }), correct: 4, wrong: 0 },
+      en2zh: { card: card(), correct: 2, wrong: 0 },
+    },
+  }];
+  const merged = mergeLearningRecords(local, remote)[0];
+
+  check('计数取较大值（本地优先会抹掉另一台的练习量）', merged.studyCount === 10);
+  check('两端各自独有的题型都保留', !!merged.byExercise.spelling && !!merged.byExercise.en2zh);
+  check('同题型取 last_review 较新的整张卡',
+    merged.byExercise.spelling.card.last_review === '2026-08-10T00:00:00.000Z');
+  check('streak 跟随最后学过的一方', merged.streak === 3);
+  check('firstStudiedAt 取更早', merged.lastStudiedAt === 2000);
+}
+
+{
+  // 求和会在多次同步后重复累加，这里确认用的是取大值
+  const rec = (n) => [{
+    wordId: 'w1', studyCount: n, correctCount: n, wrongCount: 0, streak: 0,
+    byExercise: { spelling: { card: card(), correct: n, wrong: 0 } },
+  }];
+  const once = mergeLearningRecords(rec(5), rec(5));
+  const twice = mergeLearningRecords(once, rec(5));
+  check('反复同步不会把计数越滚越大', twice[0].studyCount === 5);
+  check('题型内的计数同样不累加', twice[0].byExercise.spelling.correct === 5);
+}
+
+{
+  const local = [{
+    wordId: 'w1', studyCount: 1, correctCount: 1, wrongCount: 0, streak: 0,
+    lastStudiedAt: 2000, note: '本地笔记', byExercise: {},
+  }];
+  const remote = [{
+    wordId: 'w1', studyCount: 1, correctCount: 1, wrongCount: 0, streak: 0,
+    lastStudiedAt: 1000, note: '远端笔记', byExercise: {},
+  }];
+  const merged = mergeLearningRecords(local, remote)[0];
+  check('两端笔记都不丢（手写内容丢了不可恢复）',
+    merged.note.includes('本地笔记') && merged.note.includes('远端笔记'));
+
+  const same = mergeLearningRecords(local, [{ ...remote[0], note: '本地笔记' }])[0];
+  check('相同笔记不重复拼接', same.note === '本地笔记');
+}
+
+{
+  const favLocal = [{ wordId: 'w1', studyCount: 0, correctCount: 0, wrongCount: 0, streak: 0, byExercise: {} }];
+  const favRemote = [{ wordId: 'w1', studyCount: 0, correctCount: 0, wrongCount: 0, streak: 0, favorite: true, byExercise: {} }];
+  check('任一端收藏即保留收藏', mergeLearningRecords(favLocal, favRemote)[0].favorite === true);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+section('调度服务');
+
+{
+  const r0 = createRecord('w1');
+  check('新记录状态为 new', deriveStatus(r0) === 'new');
+
+  const r1 = recordAnswer(r0, 'spelling', 'good');
+  check('答对后 streak 增加', r1.streak === 1);
+  check('答对计入 correctCount', r1.correctCount === 1);
+
+  const r2 = recordAnswer(r1, 'spelling', 'again');
+  check('答错清零 streak', r2.streak === 0);
+  check('答错计入 wrongCount', r2.wrongCount === 1);
+
+  const r3 = recordAnswer(r1, 'spelling', 'hard');
+  check('hard 算答对而不是答错（否则正确率会偏低）', r3.wrongCount === 0);
+}
+
+{
+  const suspended = { ...createRecord('w1'), suspended: true, byExercise: { spelling: { card: card(), correct: 1, wrong: 0 } } };
+  check('暂停状态优先级最高', deriveStatus(suspended) === 'suspended');
+}
+
+{
+  const now = new Date('2026-08-20T00:00:00.000Z');
+  check('今天到期说成「今天复习」',
+    describeNextReview(new Date('2026-08-20T10:00:00.000Z'), now) === '今天复习');
+  check('明天到期说成「明天复习」',
+    describeNextReview(new Date('2026-08-21T10:00:00.000Z'), now) === '明天复习');
+  check('没安排时不假装有时间', describeNextReview(null, now) === '尚未安排');
+}
+
+section('今日队列');
+
+{
+  const noMeaning = word({ id: 'nm', word: 'x', meanings: [] });
+  check('没有释义的词出不了选择题', canRender(noMeaning, 'en2zh') === false);
+  check('TTS 不可用时出不了听力题',
+    canRender(word(), 'listening', { ttsAvailable: false }) === false);
+  check('有释义时选择题可用', canRender(word(), 'en2zh') === true);
+}
+
+{
+  const words = Array.from({ length: 20 }, (_, i) => word({ id: `w${i}`, word: `word${i}` }));
+  const queue = buildTodayQueue(words, new Map(), {
+    dailyNewLimit: 3,
+    dailyReviewLimit: 0,
+    enabledExercises: ['en2zh', 'spelling'],
+  });
+  check('新词上限按单词计而非按题目计', queue.newWordCount === 3);
+  check('3 个词 × 2 题型 = 6 道题', queue.items.length === 6);
+  check('全是新词时复习数为 0', queue.reviewWordCount === 0);
+  check('预计时长至少 1 分钟', estimateMinutes(queue) >= 1);
+}
+
+{
+  const words = [word({ id: 'w1' })];
+  const records = new Map([['w1', { ...createRecord('w1'), suspended: true }]]);
+  const queue = buildTodayQueue(words, records, {
+    dailyNewLimit: 10, dailyReviewLimit: 0, enabledExercises: ['en2zh'],
+  });
+  check('暂停的词不进队列', queue.items.length === 0);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+console.log('');
+if (fail === 0) {
+  console.log(`\x1b[32m✓ 全部通过：${pass} 项\x1b[0m`);
+  process.exit(0);
+} else {
+  console.log(`\x1b[31m✗ ${fail} 项失败 / 共 ${pass + fail} 项\x1b[0m`);
+  failures.forEach((f) => console.log(`  · ${f}`));
+  process.exit(1);
+}
