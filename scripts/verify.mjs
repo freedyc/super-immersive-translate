@@ -932,8 +932,14 @@ section('划词面板：词条区');
   check('渲染前判空，没有义项就不显示这一块',
     /if \(!el \|\| !data\?\.senses\?\.length\) return/.test(sel));
 
-  // 词条和例句是两次独立请求，串行会让面板多等一轮
-  check('词条与例句并行请求', /Promise\.all\(\[[\s\S]{0,120}analyzeWordSenses/.test(sel));
+  // 两次独立请求各自渲染。用 Promise.all 会让先回来的干等另一个——
+  // 词条是这块的主内容，不该因为例句慢而一起卡住
+  check('词条与例句各自独立渲染，不互相等待',
+    /analyzeWordSenses\([^)]*\)\s*\n?\s*\.then/.test(sel)
+    && !/Promise\.all\(\[[\s\S]{0,120}analyzeWordSenses/.test(sel));
+  // AI 拿不到本就该静默忽略，不能变成 unhandled rejection 弹在控制台
+  check('两条链路都有 catch 兜底',
+    (sel.match(/\.catch\(\(\) => \{\}\)/g) || []).length >= 2);
 
   // 面板会出现在任意网页上，用户内容必须转义
   check('义项内容经过 HTML 转义',

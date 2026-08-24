@@ -268,25 +268,30 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
     const t = new Translator();
     await t.init();
 
-    // 词条与例句并行发起：它们是两次独立请求，串行会让面板多等一轮
-    const [entry, generated] = await Promise.all([
-      analyzeWordSenses(sourceText, t),
-      generateExampleSentence(sourceText, t),
-    ]);
+    // 两次独立请求，各自到了各自渲染。
+    // 用 Promise.all 会让先回来的那个干等另一个——词条是这块的主内容，
+    // 不该因为例句慢而一起卡住。本地 Ollama 两次请求是排队执行的，
+    // 这个差距尤其明显。
+    // 两个函数内部都自己 catch 并返回 null，这里再补一层 catch 是防止
+    // 意料之外的抛出变成 unhandled rejection——AI 拿不到本就该静默忽略。
+    analyzeWordSenses(sourceText, t)
+      .then((entry) => { if (entry) renderEntry(els.entryEl, entry); })
+      .catch(() => {});
 
-    if (entry) renderEntry(els.entryEl, entry);
-
-    if (generated) {
-      renderDictionaryInfo(
-        els,
-        phonetic || generated.ipa,
-        pos || generated.pos,
-        generated.sentence,
-        generated.translation,
-      );
-    }
-    // 已收藏的词顺手把补到的信息写回去，否则下次打开还是空的
-    if (existing && generated) await enrichWordWithAi(sourceText, true);
+    generateExampleSentence(sourceText, t)
+      .then(async (generated) => {
+        if (!generated) return;
+        renderDictionaryInfo(
+          els,
+          phonetic || generated.ipa,
+          pos || generated.pos,
+          generated.sentence,
+          generated.translation,
+        );
+        // 已收藏的词顺手把补到的信息写回去，否则下次打开还是空的
+        if (existing) await enrichWordWithAi(sourceText, true);
+      })
+      .catch(() => {});
   }
 
   function renderPanel(sourceText, engineResults) {
