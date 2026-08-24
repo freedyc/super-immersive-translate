@@ -903,6 +903,26 @@ section('剪贴板同步：端到端加密');
 // 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
 // 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
 // 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
+section('AI 请求必须有超时');
+{
+  const { readFileSync } = await import('node:fs');
+
+  // 没有超时的话，一个卡住的本地模型会让请求永远挂着：面板一直转圈，
+  // 而且每次重载扩展都会把在途请求变成孤儿继续占着服务端的并发槽位，
+  // 最后把本地推理队列彻底堵死——这是真实发生过的，Ollama 卡到
+  // 连一句 "hi" 都要 120 秒超时。
+  for (const f of ['utils/translator.js', 'utils/example-sentence.js']) {
+    const src = readFileSync(f, 'utf8');
+    // 裸 fetch( 一处都不该剩（fetchWithTimeout 里面那次除外）
+    const bare = [...src.matchAll(/await fetch\(/g)].length;
+    check(`${f} 没有不带超时的 fetch`, bare === 0, `还有 ${bare} 处`);
+    check(`${f} 有超时包装`, /AbortSignal\.timeout\(/.test(src));
+    // 本地推理天生慢，按在线接口的超时卡会误杀大模型
+    check(`${f} 本地引擎用更长的超时`,
+      /LOCAL_TIMEOUT_MS/.test(src) && /}, LOCAL_TIMEOUT_MS\)/.test(src));
+  }
+}
+
 section('划词面板：词条区');
 {
   const { readFileSync } = await import('node:fs');

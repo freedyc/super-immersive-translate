@@ -5,7 +5,7 @@
  */
 import { pick } from './defaults.js';
 
-export /**
+/**
  * 请求超时。没有超时的话，一个卡住的本地模型会让请求永远挂着——
  * 面板一直转圈，用户不知道发生了什么，而且每次重载扩展都会把在途请求变成
  * 孤儿继续占着服务端的并发槽位，最后把本地推理队列彻底堵死（真实踩过）。
@@ -24,7 +24,7 @@ function fetchWithTimeout(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
   return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
 }
 
-class Translator {
+export class Translator {
   constructor() {
     this.engine = 'google';
     this.targetLang = 'zh-CN';

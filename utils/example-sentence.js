@@ -93,9 +93,23 @@ function parseJsonResult(text) {
   }
 }
 
+/**
+ * 请求超时。跟 translator.js 同样的理由：没有超时的话，一个卡住的本地模型
+ * 会让请求永远挂着，重载扩展后还会变成孤儿继续占着服务端的并发槽位，
+ * 最后把本地推理队列彻底堵死。
+ *
+ * 本地推理天生慢，大模型一次几十秒是正常的，所以在线接口和本地引擎分两档。
+ */
+const HTTP_TIMEOUT_MS = 30000;
+const LOCAL_TIMEOUT_MS = 120000;
+
+function fetchWithTimeout(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+}
+
 async function callOpenAI(t, prompt) {
   const url = t.openaiUrl || 'https://api.openai.com/v1/chat/completions';
-  const resp = await fetch(url, {
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t.openaiKey}` },
     body: JSON.stringify({
@@ -112,7 +126,7 @@ async function callOpenAI(t, prompt) {
 async function callGemini(t, prompt) {
   const model = t.geminiModel || 'gemini-1.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${t.geminiKey}`;
-  const resp = await fetch(url, {
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -126,7 +140,7 @@ async function callGemini(t, prompt) {
 }
 
 async function callClaude(t, prompt) {
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -148,7 +162,8 @@ async function callClaude(t, prompt) {
 
 async function callOllama(t, prompt) {
   const url = t.ollamaUrl || 'http://localhost:11434/api/chat';
-  const resp = await fetch(url, {
+  // 本地推理用长超时：按在线接口的 30 秒卡会误杀大模型
+  const resp = await fetchWithTimeout(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -157,7 +172,7 @@ async function callOllama(t, prompt) {
       stream: false,
       options: { temperature: 0.7 }
     })
-  });
+  }, LOCAL_TIMEOUT_MS);
   if (!resp.ok) throw new Error(`Ollama API ${resp.status}`);
   const data = await resp.json();
   return data.message?.content || '';
