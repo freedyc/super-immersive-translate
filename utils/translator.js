@@ -5,7 +5,26 @@
  */
 import { pick } from './defaults.js';
 
-export class Translator {
+export /**
+ * 请求超时。没有超时的话，一个卡住的本地模型会让请求永远挂着——
+ * 面板一直转圈，用户不知道发生了什么，而且每次重载扩展都会把在途请求变成
+ * 孤儿继续占着服务端的并发槽位，最后把本地推理队列彻底堵死（真实踩过）。
+ *
+ * 本地推理天生比在线 API 慢，大模型一次几十秒是正常的，所以给两档：
+ * 在线接口 20 秒足够，本地引擎放宽到 120 秒。
+ */
+const HTTP_TIMEOUT_MS = 20000;
+const LOCAL_TIMEOUT_MS = 120000;
+
+/**
+ * 带超时的 fetch。超时会抛 TimeoutError，被各 engine 的调用方
+ * 当成普通失败处理（_flushQueue 会退回 Google）。
+ */
+function fetchWithTimeout(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
+  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+}
+
+class Translator {
   constructor() {
     this.engine = 'google';
     this.targetLang = 'zh-CN';
@@ -165,7 +184,7 @@ export class Translator {
     const merged = texts.join(SEP);
     const url = 'https://translate.googleapis.com/translate_a/single?' +
       new URLSearchParams({ client: 'gtx', sl: this.sourceLang, tl: this.targetLang, dt: 't', q: merged });
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url);
     if (!resp.ok) throw new Error(`Google API ${resp.status}`);
     const data = await resp.json();
     const full = data[0].map(item => item[0]).join('');
@@ -177,7 +196,7 @@ export class Translator {
   async _googleSingle(text) {
     const url = 'https://translate.googleapis.com/translate_a/single?' +
       new URLSearchParams({ client: 'gtx', sl: this.sourceLang, tl: this.targetLang, dt: 't', q: text });
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url);
     if (!resp.ok) throw new Error(`Google API ${resp.status}`);
     const data = await resp.json();
     return data[0].map(item => item[0]).join('');
@@ -199,7 +218,7 @@ export class Translator {
     const tl = this.targetLang;
     const url = 'https://api.mymemory.translated.net/get?' +
       new URLSearchParams({ q: text, langpair: `${sl}|${tl}` });
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url);
     if (resp.status === 429 && retries > 0) {
       await this._delay(1500);
       return this._mymemorySingle(text, retries - 1);
@@ -218,7 +237,7 @@ export class Translator {
     const sl = this.sourceLang === 'auto' ? 'auto' : this.sourceLang;
     const tl = this.targetLang.split('-')[0]; // lingva uses simple codes
     const url = `https://lingva.ml/api/v1/${sl}/${tl}/${encodeURIComponent(merged)}`;
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url);
     if (!resp.ok) throw new Error(`Lingva API ${resp.status}`);
     const data = await resp.json();
     const full = data.translation || '';
@@ -231,7 +250,7 @@ export class Translator {
     const sl = this.sourceLang === 'auto' ? 'auto' : this.sourceLang;
     const tl = this.targetLang.split('-')[0];
     const url = `https://lingva.ml/api/v1/${sl}/${tl}/${encodeURIComponent(text)}`;
-    const resp = await fetch(url);
+    const resp = await fetchWithTimeout(url);
     if (!resp.ok) throw new Error(`Lingva API ${resp.status}`);
     const data = await resp.json();
     return data.translation || '';
@@ -243,7 +262,7 @@ export class Translator {
     const sl = this.sourceLang === 'auto' ? 'auto' : this.sourceLang;
     // LibreTranslate doesn't support batch natively, parallel requests
     return Promise.all(texts.map(async text => {
-      const resp = await fetch(`${baseUrl}/translate`, {
+      const resp = await fetchWithTimeout(`${baseUrl}/translate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: text, source: sl, target: this.targetLang.split('-')[0] })
@@ -258,7 +277,7 @@ export class Translator {
   async _deeplBatch(texts) {
     if (!this.deeplKey) throw new Error('DeepL API key not set');
     const url = 'https://api-free.deepl.com/v2/translate';
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -275,7 +294,7 @@ export class Translator {
   // --- Custom API ---
   async _customBatch(texts) {
     if (!this.customApiUrl) throw new Error('Custom API URL not set');
-    const resp = await fetch(this.customApiUrl, {
+    const resp = await fetchWithTimeout(this.customApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -319,7 +338,7 @@ export class Translator {
     const merged = texts.join(SEP);
     const url = this.openaiUrl || 'https://api.openai.com/v1/chat/completions';
     
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -347,7 +366,7 @@ export class Translator {
     const model = this.geminiModel || 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiKey}`;
     
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -367,7 +386,8 @@ export class Translator {
     const merged = texts.join(SEP);
     const url = this.ollamaUrl || 'http://localhost:11434/api/chat';
     
-    const resp = await fetch(url, {
+    // 本地推理用长超时：大模型一次几十秒是正常的，按在线接口的 20 秒卡会误杀
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -379,7 +399,7 @@ export class Translator {
         stream: false,
         options: { temperature: 0.3 }
       })
-    });
+    }, LOCAL_TIMEOUT_MS);
     if (!resp.ok) throw new Error(`Ollama API ${resp.status}`);
     const data = await resp.json();
     const resultText = data.message?.content || '';
@@ -392,7 +412,7 @@ export class Translator {
     const merged = texts.join(SEP);
     const url = 'https://api.anthropic.com/v1/messages';
     
-    const resp = await fetch(url, {
+    const resp = await fetchWithTimeout(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
