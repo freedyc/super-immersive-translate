@@ -358,3 +358,72 @@ export async function translateMissingExamples(wordText, t) {
         : e));
   });
 }
+
+
+/**
+ * 词典式释义：多个义项，每项带词性、释义与一条例句。
+ *
+ * 这是「划词面板」里那块词条内容的数据源。跟 generateExampleSentence 的区别是
+ * 那个只造一条例句，这里要把一个词的**几个不同义项**分开列出——
+ * challenge 作名词是「挑衅/考验」、作动词是「挑战」，混成一段就看不出区别了。
+ *
+ * 返回 null 表示拿不到（没有可用 AI 引擎、或返回的结构不对）。调用方必须
+ * 能接受 null：默认配置下根本没有 AI 引擎可用，这块内容本就是锦上添花。
+ *
+ * @param {string} word
+ * @param {object} t 已经 init() 过的 Translator 实例
+ * @returns {Promise<{senses: Array<{pos:string, definition:string, example:string,
+ *   translation:string}>, primary: string, note: string} | null>}
+ */
+export async function analyzeWordSenses(word, t) {
+  const engine = pickEngine(t);
+  if (!engine) return null;
+
+  const targetLangName = LANG_NAMES[t.targetLang] || t.targetLang || 'Simplified Chinese';
+  const prompt = `You are a bilingual dictionary. Analyse the word "${word}".
+
+Return STRICT JSON, no markdown fence, with this exact shape:
+{
+  "senses": [
+    { "pos": "<one of ${POS_LIST}>",
+      "definition": "<the meaning in ${targetLangName}, use ；to separate near-synonyms>",
+      "example": "<one natural English sentence using the word in THIS sense>",
+      "translation": "<that sentence in ${targetLangName}>" }
+  ],
+  "primary": "<the single most common meaning in ${targetLangName}, 2-6 characters>",
+  "note": "<one short sentence in ${targetLangName} summarising what this word conveys>"
+}
+
+Rules:
+- List 2 to 4 distinct senses. Different parts of speech MUST be separate senses.
+- Every sense needs its own example sentence that actually disambiguates it.
+- "pos" must be exactly one of the listed Chinese categories.
+- Output nothing but the JSON object.`;
+
+  try {
+    const raw = await callEngine(engine, t, prompt);
+    const parsed = parseJsonResult(raw);
+    if (!parsed || !Array.isArray(parsed.senses)) return null;
+
+    const senses = parsed.senses
+      .filter((s) => s && typeof s.definition === 'string' && s.definition.trim())
+      .map((s) => ({
+        pos: typeof s.pos === 'string' ? s.pos.trim() : '',
+        definition: s.definition.trim(),
+        example: typeof s.example === 'string' ? s.example.trim() : '',
+        translation: typeof s.translation === 'string' ? s.translation.trim() : ''
+      }))
+      // 四个以上就太长了，面板会被这一块撑满，engine 结果反而要滚很久才看得到
+      .slice(0, 4);
+    if (senses.length === 0) return null;
+
+    return {
+      senses,
+      primary: typeof parsed.primary === 'string' ? parsed.primary.trim() : '',
+      note: typeof parsed.note === 'string' ? parsed.note.trim() : ''
+    };
+  } catch (err) {
+    console.warn('[ExampleSentence] 词义分析失败:', err.message || err);
+    return null;
+  }
+}

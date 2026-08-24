@@ -7,7 +7,9 @@ import { Translator } from '../utils/translator.js';
 import '../utils/tts.js';
 import { pick } from '../utils/defaults.js';
 import { saveHistoryEntry } from '../utils/history.js';
-import { enrichWordWithAi, generateExampleSentence, translateMissingExamples } from '../utils/example-sentence.js';
+import {
+  analyzeWordSenses, enrichWordWithAi, generateExampleSentence, translateMissingExamples,
+} from '../utils/example-sentence.js';
 import { collectWord, getWord } from '../utils/learning/collect.ts';
 import { formatPhonetic, formatPos, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
@@ -172,6 +174,71 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
     }
   }
 
+  /**
+   * 渲染词条区：多义项 + 例句 + 主释义 + 一句话说明。
+   *
+   * 放在输入框下面、引擎结果上面：查词的人最想先看到「这个词几个意思」，
+   * 各引擎的译文是用来相互印证的，排在后面。
+   */
+  function renderEntry(el, data) {
+    if (!el || !data?.senses?.length) return;
+
+    const senses = data.senses.map((s) => `
+      <div class="sit-sense">
+        <div class="sit-sense-head">
+          ${s.pos ? `<span class="sit-sense-pos">${escapeHtml(s.pos)}</span>` : ''}
+          <span class="sit-sense-def">${escapeHtml(s.definition)}</span>
+        </div>
+        ${s.example ? `
+        <div class="sit-sense-ex">
+          <span class="sit-sense-en">${escapeHtml(s.example)}</span>
+          <span class="sit-example-speak" data-lang="en-US" title="朗读例句">🔊</span>
+        </div>` : ''}
+        ${s.translation ? `
+        <div class="sit-sense-ex">
+          <span class="sit-sense-zh">${escapeHtml(s.translation)}</span>
+          <span class="sit-example-speak" data-lang="zh-CN" title="朗读译文">🔊</span>
+        </div>` : ''}
+      </div>`).join('');
+
+    const primary = data.primary ? `
+      <div class="sit-entry-primary">
+        <span class="sit-primary-text">${escapeHtml(data.primary)}</span>
+        <span class="sit-example-speak" data-lang="zh-CN" title="朗读">🔊</span>
+        <span class="sit-primary-copy" title="复制">📋</span>
+      </div>` : '';
+
+    const note = data.note
+      ? `<div class="sit-entry-note">${escapeHtml(data.note)}</div>`
+      : '';
+
+    el.innerHTML = senses + primary + note;
+    el.style.display = '';
+
+    // 朗读按钮取同一行里的文本；主释义那一行的文本在 .sit-primary-text
+    el.querySelectorAll('.sit-example-speak').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const row = btn.parentElement;
+        const text = row?.querySelector('.sit-sense-en, .sit-sense-zh, .sit-primary-text')
+          ?.textContent?.trim();
+        if (text) window.ttsManager.speak(text, btn.dataset.lang);
+      });
+    });
+
+    const copyBtn = el.querySelector('.sit-primary-copy');
+    copyBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      navigator.clipboard.writeText(data.primary).then(() => {
+        copyBtn.textContent = '✅';
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1200);
+      }).catch(() => {
+        copyBtn.textContent = '✕';
+        setTimeout(() => { copyBtn.textContent = '📋'; }, 1200);
+      });
+    });
+  }
+
   // 单词已经收藏过就直接用现成的 ipa/pos/例句，不重复调用 AI；
   // 没收藏过才生成一次（不写回存储 —— 真正收藏时 enrichWordWithAi 会单独再生成一次，
   // 两次调用不共享缓存，属于已知的可接受浪费，不为此增加复杂度）
@@ -197,20 +264,29 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
       if (phonetic && pos && ex?.sentence) return;
     }
 
-    // 剩下的（例句，以及本地词典查不到的词的音标/词性）才需要 AI
+    // 剩下的都要 AI：多义项词条、例句，以及本地词典查不到的词的音标/词性
     const t = new Translator();
     await t.init();
-    const generated = await generateExampleSentence(sourceText, t);
-    if (!generated) return;
-    renderDictionaryInfo(
-      els,
-      phonetic || generated.ipa,
-      pos || generated.pos,
-      generated.sentence,
-      generated.translation,
-    );
+
+    // 词条与例句并行发起：它们是两次独立请求，串行会让面板多等一轮
+    const [entry, generated] = await Promise.all([
+      analyzeWordSenses(sourceText, t),
+      generateExampleSentence(sourceText, t),
+    ]);
+
+    if (entry) renderEntry(els.entryEl, entry);
+
+    if (generated) {
+      renderDictionaryInfo(
+        els,
+        phonetic || generated.ipa,
+        pos || generated.pos,
+        generated.sentence,
+        generated.translation,
+      );
+    }
     // 已收藏的词顺手把补到的信息写回去，否则下次打开还是空的
-    if (existing) await enrichWordWithAi(sourceText, true);
+    if (existing && generated) await enrichWordWithAi(sourceText, true);
   }
 
   function renderPanel(sourceText, engineResults) {
@@ -248,6 +324,7 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
         <input type="text" class="sit-input" placeholder="输入新单词或句子..." value="">
         <button class="sit-input-btn" title="翻译">→</button>
       </div>
+      <div class="sit-entry" style="display:none"></div>
       <div class="sit-engines">
     `;
 
@@ -279,6 +356,7 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
     loadDictionaryInfo(sourceText, {
       ipaEl: p.querySelector('.sit-ipa'),
       posEl: p.querySelector('.sit-pos-badge'),
+      entryEl: p.querySelector('.sit-entry'),
       exampleWrap: p.querySelector('.sit-example'),
       enTextEl: p.querySelector('.sit-example-en'),
       zhTextEl: p.querySelector('.sit-example-zh')

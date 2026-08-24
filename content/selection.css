@@ -335,3 +335,118 @@
   .sit-loading-text { color: #666; }
   .sit-panel::-webkit-scrollbar-thumb { background: #444; }
 }
+
+/* ========== 词条区（多义项 + 主释义 + 说明） ========== */
+.sit-entry {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.sit-sense {
+  padding: 6px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.sit-sense:last-of-type {
+  border-bottom: none;
+}
+
+.sit-sense-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* 词性做成固定宽度的小标签，多个义项的释义才能左对齐成一列 */
+.sit-sense-pos {
+  flex-shrink: 0;
+  min-width: 30px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #ede9fe;
+  color: #6d28d9;
+  font-size: 11px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.sit-sense-def {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  word-break: break-word;
+}
+
+.sit-sense-ex {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 3px;
+  /* 例句缩进到跟释义对齐，视觉上从属于上面那条义项 */
+  padding-left: 36px;
+}
+
+.sit-sense-en {
+  flex: 1;
+  font-size: 12px;
+  font-style: italic;
+  color: #555;
+  word-break: break-word;
+}
+
+.sit-sense-zh {
+  flex: 1;
+  font-size: 12px;
+  color: #888;
+  word-break: break-word;
+}
+
+.sit-entry-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f0f0;
+}
+
+.sit-primary-text {
+  font-size: 15px;
+  font-weight: 700;
+  color: #4f46e5;
+  word-break: break-word;
+}
+
+.sit-primary-copy {
+  cursor: pointer;
+  font-size: 13px;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+.sit-primary-copy:hover {
+  opacity: 1;
+}
+
+.sit-entry-note {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #999;
+  word-break: break-word;
+}
+
+@media (prefers-color-scheme: dark) {
+  .sit-entry,
+  .sit-entry-primary { border-color: #3a3a3e; }
+  .sit-sense { border-bottom-color: #333; }
+  .sit-sense-def { color: #e5e5e5; }
+  .sit-sense-pos { background: #3730a3; color: #c7d2fe; }
+  .sit-sense-en { color: #bbb; }
+  .sit-sense-zh,
+  .sit-entry-note { color: #888; }
+  .sit-primary-text { color: #a5b4fc; }
+}

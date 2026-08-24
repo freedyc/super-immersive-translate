@@ -903,6 +903,49 @@ section('剪贴板同步：端到端加密');
 // 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
 // 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
 // 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
+section('划词面板：词条区');
+{
+  const { readFileSync } = await import('node:fs');
+  const sel = readFileSync('content/selection.js', 'utf8');
+  const css = readFileSync('content/selection.css', 'utf8');
+  const ai = readFileSync('utils/example-sentence.js', 'utf8');
+
+  // 查词的人最想先看到「这个词有几个意思」，各引擎译文是用来相互印证的，排在后面
+  const entryPos = sel.indexOf('class="sit-entry"');
+  const inputPos = sel.indexOf('class="sit-input-wrap"');
+  const enginePos = sel.indexOf('class="sit-engines"');
+  check('词条区排在输入框之后、引擎结果之前',
+    inputPos > 0 && entryPos > inputPos && enginePos > entryPos);
+
+  // 义项必须按词性分开：challenge 作名词是「挑衅/考验」、作动词是「挑战」，
+  // 混成一段就看不出区别了
+  check('提示词要求不同词性拆成不同义项',
+    /Different parts of speech MUST be separate senses/.test(ai));
+  check('义项数量有上限（撑满面板会把引擎结果挤到很后面）',
+    /\.slice\(0, 4\)/.test(ai));
+  check('每个义项都要求自带能区分词义的例句',
+    /own example sentence that actually disambiguates/.test(ai));
+
+  // 默认配置下根本没有可用 AI 引擎，这块内容本就是锦上添花，拿不到必须能降级
+  check('拿不到分析结果时返回 null 而不是抛',
+    /export async function analyzeWordSenses[\s\S]{0,400}if \(!engine\) return null/.test(ai));
+  check('渲染前判空，没有义项就不显示这一块',
+    /if \(!el \|\| !data\?\.senses\?\.length\) return/.test(sel));
+
+  // 词条和例句是两次独立请求，串行会让面板多等一轮
+  check('词条与例句并行请求', /Promise\.all\(\[[\s\S]{0,120}analyzeWordSenses/.test(sel));
+
+  // 面板会出现在任意网页上，用户内容必须转义
+  check('义项内容经过 HTML 转义',
+    /escapeHtml\(s\.definition\)/.test(sel) && /escapeHtml\(s\.example\)/.test(sel));
+
+  // 浮层在影子树里，宿主页深色时这块也要能看
+  const dark = css.slice(css.lastIndexOf('prefers-color-scheme: dark'));
+  for (const cls of ['sit-sense-def', 'sit-sense-pos', 'sit-primary-text', 'sit-entry-note']) {
+    check(`${cls} 有深色模式样式`, dark.includes(`.${cls}`));
+  }
+}
+
 section('React：Hook 必须在提前返回之前调用');
 {
   const { readdirSync, readFileSync, statSync } = await import('node:fs');
