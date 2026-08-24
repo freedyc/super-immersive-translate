@@ -926,6 +926,16 @@ section('划词面板：词条区');
   check('每个义项都要求自带能区分词义的例句',
     /own example sentence that actually disambiguates/.test(ai));
 
+  // 词条区只能由 AI 产出，本地词典给不了多义项释义。所以「音标/词性/例句都齐了」
+  // 不能用来跳过词条请求——早先那个 return 就是这么写的，
+  // 导致凡是收藏过的词都看不到词条区
+  const body = sel.slice(sel.indexOf('async function loadDictionaryInfo'));
+  const fnEnd = body.indexOf('\n  }');
+  const lookup = body.slice(0, fnEnd);
+  check('取词条不受「音标词性已齐」的提前返回影响',
+    lookup.indexOf('analyzeWordSenses') > 0
+    && !/if \(phonetic && pos && ex\?\.sentence\) return;/.test(lookup));
+
   // 默认配置下根本没有可用 AI 引擎，这块内容本就是锦上添花，拿不到必须能降级
   check('拿不到分析结果时返回 null 而不是抛',
     /export async function analyzeWordSenses[\s\S]{0,400}if \(!engine\) return null/.test(ai));

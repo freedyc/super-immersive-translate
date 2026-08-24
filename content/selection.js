@@ -257,14 +257,18 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
       pos = pos || formatPos(meta.pos);
     }
 
+    // 已有的信息先显示出来，不等 AI
+    const ex = existing ? pickExample(existing) : null;
     if (existing || phonetic || pos) {
-      const ex = existing ? pickExample(existing) : null;
       renderDictionaryInfo(els, phonetic, pos, ex?.sentence, ex?.translation);
-      // 两样都齐、且例句也有了，就不必再调 AI
-      if (phonetic && pos && ex?.sentence) return;
     }
 
-    // 剩下的都要 AI：多义项词条、例句，以及本地词典查不到的词的音标/词性
+    // 音标、词性、例句都齐了就不必再为它们调 AI；
+    // 但**词条区**是另一回事——它只能由 AI 产出，本地词典给不了多义项释义。
+    // 早先这里是无条件 return，于是凡是收藏过的词（已有例句）都走不到下面，
+    // 词条区永远不显示。这个判断写在加词条区之前，对它一无所知。
+    const needsMeta = !phonetic || !pos || !ex?.sentence;
+
     const t = new Translator();
     await t.init();
 
@@ -277,6 +281,9 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
     analyzeWordSenses(sourceText, t)
       .then((entry) => { if (entry) renderEntry(els.entryEl, entry); })
       .catch(() => {});
+
+    // 例句/音标/词性都齐了就跳过这次请求，省一轮本地推理
+    if (!needsMeta) return;
 
     generateExampleSentence(sourceText, t)
       .then(async (generated) => {
