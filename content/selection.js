@@ -13,6 +13,7 @@ import {
 import { collectWord, getWord } from '../utils/learning/collect.ts';
 import { formatPhonetic, formatPos, pickExample, pickPhonetic, pickPos } from '../utils/learning/wordMeta.ts';
 import { getUiRoot, isInsideUi, isNodeInsideUi } from './shadow-ui.js';
+import { placeOverlay } from './overlay-position.js';
 import { lookupWordMeta } from '../utils/dictionary-client.js';
 
 /**
@@ -105,8 +106,17 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
     // 7000 多字符，是原来那段 SVG 的六倍。走 URL 只多一个字符串
     icon.innerHTML = `<img src="${chrome.runtime.getURL('icons/trigger.png')}" alt="翻译">`;
     icon.title = '点击翻译';
-    const top = rect.bottom + window.scrollY + 4;
-    const left = rect.right + window.scrollX + 4;
+    // 尺寸与 .sit-icon 的 CSS 保持一致；此处需要在插入 DOM 前就算好位置，
+    // 量不到实际尺寸，用常量而不是塞进去再测——那会先闪一下再跳位
+    const { top, left } = placeOverlay({
+      rect,
+      width: 30,
+      height: 30,
+      viewportW: document.documentElement.clientWidth,
+      viewportH: document.documentElement.clientHeight,
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    });
     icon.style.top = top + 'px';
     icon.style.left = left + 'px';
     getUiRoot(selectionCss).appendChild(icon);
@@ -497,22 +507,31 @@ import { lookupWordMeta } from '../utils/dictionary-client.js';
 
   function positionPanel(rect) {
     const p = createPanel();
-    let top = rect.bottom + window.scrollY + 10;
-    let left = rect.left + window.scrollX;
-    p.style.top = top + 'px';
-    p.style.left = left + 'px';
     p.style.display = 'block';
 
+    const apply = (width, height) => {
+      const { top, left } = placeOverlay({
+        rect,
+        width,
+        height,
+        viewportW: document.documentElement.clientWidth,
+        viewportH: document.documentElement.clientHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        gap: 10,
+        margin: 12,
+        anchor: 'left',   // 面板贴选区左缘，读起来跟原文对齐
+      });
+      p.style.top = top + 'px';
+      p.style.left = left + 'px';
+    };
+
+    // 先按 CSS 里的标称宽度摆一次，避免插入瞬间停在 (0,0) 闪一下；
+    // 真实高度要等内容渲染完才知道，下一帧再校准一次
+    apply(420, 320);
     requestAnimationFrame(() => {
       const pr = p.getBoundingClientRect();
-      // Overflow right
-      if (pr.right > window.innerWidth - 12) {
-        p.style.left = Math.max(8, window.innerWidth - pr.width - 12) + 'px';
-      }
-      // Overflow bottom → show above
-      if (pr.bottom > window.innerHeight - 12) {
-        p.style.top = Math.max(8, rect.top + window.scrollY - pr.height - 10) + 'px';
-      }
+      apply(pr.width || 420, pr.height || 320);
     });
   }
 

@@ -923,6 +923,64 @@ section('AI 请求必须有超时');
   }
 }
 
+section('划词浮层定位');
+{
+  const { placeOverlay } = await import('../content/overlay-position.js');
+  const V = { viewportW: 1000, viewportH: 800, scrollX: 0, scrollY: 0 };
+  const box = { width: 30, height: 30 };
+  const at = (top, bottom, left, right, extra = {}) =>
+    placeOverlay({ rect: { top, bottom, left, right }, ...box, ...V, ...extra });
+
+  // 结果必须钳在视口内。不钳的话，在视口右缘/页面底部划词时浮层伸到文档之外，
+  // 浏览器据此扩大滚动区域——宿主网站平白多出一条滚动条
+  const right = at(300, 320, 940, 995);
+  check('贴右缘时不超出视口右边界', right.left + box.width <= V.viewportW);
+  const bottom = at(770, 795, 400, 460);
+  check('贴底部时不超出视口下边界', bottom.top + box.height <= V.viewportH);
+  const topEdge = at(0, 5, 400, 460);
+  check('贴顶部时不越过上边界', topEdge.top >= 0);
+  const leftEdge = at(300, 320, 0, 2);
+  check('贴左缘时不越过左边界', leftEdge.left >= 0);
+
+  // 下方放不下要翻到上方，否则按钮落在视口外，用户根本看不到
+  check('底部划词时翻到选区上方', bottom.flipped === true);
+  check('中间划词时不翻转', at(300, 320, 400, 460).flipped === false);
+  check('翻转后落在选区上方', bottom.top + box.height <= 770);
+
+  // 上下都放不下（选区几乎占满视口）也不能跑出视口
+  const tall = placeOverlay({
+    rect: { top: 5, bottom: 795, left: 400, right: 460 }, ...box, ...V,
+  });
+  check('上下都放不下时仍钳在视口内',
+    tall.top >= 0 && tall.top + box.height <= V.viewportH);
+
+  // 页面坐标 = 视口坐标 + 滚动量。先加滚动再钳的话钳的是文档边界，
+  // 仍然可能落在视口之外
+  const scrolled = placeOverlay({
+    rect: { top: 300, bottom: 320, left: 400, right: 460 },
+    ...box, ...V, scrollY: 2000, scrollX: 50,
+  });
+  const plain = at(300, 320, 400, 460);
+  check('滚动后返回的是页面坐标',
+    scrolled.top === plain.top + 2000 && scrolled.left === plain.left + 50);
+
+  // 浮层比视口还宽时，贴左边总比贴右边可用
+  const huge = placeOverlay({
+    rect: { top: 300, bottom: 320, left: 400, right: 460 },
+    width: 2000, height: 30, ...V,
+  });
+  check('浮层比视口还宽时贴左边而不是算出负数', huge.left >= 0);
+
+  // 面板贴选区左缘，读起来跟原文对齐；图标贴右缘，不挡住刚选的字
+  check('anchor=left 时贴选区左缘',
+    at(300, 320, 400, 460, { anchor: 'left' }).left === 400);
+  check('默认贴选区右缘', at(300, 320, 400, 460).left > 460);
+
+  const sel = (await import('node:fs')).readFileSync('content/selection.js', 'utf8');
+  check('图标与面板都走同一套定位',
+    (sel.match(/placeOverlay\(/g) || []).length >= 2);
+}
+
 section('划词面板：词条区');
 {
   const { readFileSync } = await import('node:fs');
