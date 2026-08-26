@@ -4,6 +4,7 @@
  * Paid engines: DeepL, Custom API
  */
 import { pick } from './defaults.js';
+import { request } from './net.js';
 
 /**
  * 请求超时。没有超时的话，一个卡住的本地模型会让请求永远挂着——
@@ -19,9 +20,21 @@ const LOCAL_TIMEOUT_MS = 120000;
 /**
  * 带超时的 fetch。超时会抛 TimeoutError，被各 engine 的调用方
  * 当成普通失败处理（_flushQueue 会退回 Google）。
+ *
+ * 免费接口（Google/MyMemory/Lingva/Libre）自己发 CORS 头，
+ * 内容脚本里直接发就行，不必绕后台多一次消息往返。
  */
 function fetchWithTimeout(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
   return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+}
+
+/**
+ * 需要 Key 的 API 和本地 Ollama 走这条：它们都不给浏览器发 CORS 头，
+ * 在内容脚本里直接 fetch 会被拦。request() 会按运行环境决定
+ * 直接发还是转交 Service Worker 代发。
+ */
+function fetchViaBackground(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
+  return request(url, init, timeoutMs);
 }
 
 export class Translator {
@@ -277,7 +290,7 @@ export class Translator {
   async _deeplBatch(texts) {
     if (!this.deeplKey) throw new Error('DeepL API key not set');
     const url = 'https://api-free.deepl.com/v2/translate';
-    const resp = await fetchWithTimeout(url, {
+    const resp = await fetchViaBackground(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -294,7 +307,7 @@ export class Translator {
   // --- Custom API ---
   async _customBatch(texts) {
     if (!this.customApiUrl) throw new Error('Custom API URL not set');
-    const resp = await fetchWithTimeout(this.customApiUrl, {
+    const resp = await fetchViaBackground(this.customApiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -338,7 +351,7 @@ export class Translator {
     const merged = texts.join(SEP);
     const url = this.openaiUrl || 'https://api.openai.com/v1/chat/completions';
     
-    const resp = await fetchWithTimeout(url, {
+    const resp = await fetchViaBackground(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -366,7 +379,7 @@ export class Translator {
     const model = this.geminiModel || 'gemini-1.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.geminiKey}`;
     
-    const resp = await fetchWithTimeout(url, {
+    const resp = await fetchViaBackground(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -387,7 +400,7 @@ export class Translator {
     const url = this.ollamaUrl || 'http://localhost:11434/api/chat';
     
     // 本地推理用长超时：大模型一次几十秒是正常的，按在线接口的 20 秒卡会误杀
-    const resp = await fetchWithTimeout(url, {
+    const resp = await fetchViaBackground(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -412,7 +425,7 @@ export class Translator {
     const merged = texts.join(SEP);
     const url = 'https://api.anthropic.com/v1/messages';
     
-    const resp = await fetchWithTimeout(url, {
+    const resp = await fetchViaBackground(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

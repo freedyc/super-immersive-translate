@@ -188,6 +188,17 @@ strength of `utils/tts.js` being listed before it, which failed randomly with
 same emitted chunk, so the module body still runs exactly once. `verify` asserts that any
 content script touching `window.ttsManager` / `window.translator` imports its provider.
 
+**Key-bearing APIs and local Ollama must go through the service worker.** Since Chrome 85
+a content script's cross-origin fetch is bound by the *host page's* CORS — extension
+`host_permissions` do not exempt it there — and OpenAI, Gemini, Claude and DeepL send no
+CORS headers to browsers while Ollama only allows localhost origins by default. Those
+engines therefore cannot reach the network from `content/selection.js` at all. `utils/net.js`
+`request()` decides by environment: content script → `proxyFetch` message to the worker;
+extension page or worker → direct fetch. The free engines (Google/MyMemory/Lingva/Libre)
+send their own CORS headers and stay direct — routing them would only add a message
+round-trip. A side benefit: every AI request now originates from
+`chrome-extension://<id>`, so `OLLAMA_ORIGINS` can name that one origin instead of `*`.
+
 ### Background: `background/background.js`
 Minimal MV3 service worker. Registers context menus and the `Alt+T` / `Alt+S` commands
 (declared in `manifest.json` `commands`), and forwards them to the active tab's content

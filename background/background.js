@@ -118,6 +118,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     fetchTtsAudio(msg).then(sendResponse, (err) => sendResponse({ error: err.message }));
     return true;
   }
+  // 内容脚本的跨域请求代发。内容脚本受宿主页面的 CORS 约束
+  // （Chrome 85 起 host_permissions 在那里不再豁免），而 OpenAI/Gemini/Claude
+  // 都不给浏览器发 CORS 头、Ollama 默认也只放行 localhost 来源
+  if (msg.action === 'proxyFetch') {
+    proxyFetch(msg).then(sendResponse, (err) => sendResponse({
+      ok: false, status: 0, error: err?.message || '请求失败',
+    }));
+    return true;
+  }
   if (msg.action === 'triggerHistorySync') {
     syncNow().then(sendResponse);
     return true;
@@ -252,4 +261,30 @@ async function saveImageFromUrl(srcUrl, tab) {
   });
   await trimImages(clipboardMaxImages);
   chrome.runtime.sendMessage({ action: 'clipboardImagesChanged' }).catch(() => {});
+}
+
+
+/**
+ * 代内容脚本发一个跨域请求。
+ *
+ * 回传的是**文本**而不是解析后的对象：消息通道要序列化，
+ * 文本原样过去由调用方自己 JSON.parse，出错时也还能看到原始响应。
+ */
+async function proxyFetch({ url, init = {}, timeoutMs = 30000 }) {
+  try {
+    const resp = await fetch(url, {
+      method: init.method || 'GET',
+      headers: init.headers || {},
+      body: init.body,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return { ok: resp.ok, status: resp.status, body: await resp.text() };
+  } catch (err) {
+    // 超时和网络失败都走这里；调用方按普通失败处理（会退回 Google）
+    return {
+      ok: false,
+      status: 0,
+      error: err?.name === 'TimeoutError' ? `请求超时（${timeoutMs / 1000}s）` : err?.message,
+    };
+  }
 }

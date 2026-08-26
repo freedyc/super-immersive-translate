@@ -4,6 +4,7 @@
  * 这里是单条生成，走独立的 fetch 请求，但复用同样的 key/模型设置。
  */
 import { Translator } from './translator.js';
+import { request } from './net.js';
 import { getWord, patchWord } from './learning/collect.ts';
 import { pickPhonetic, pickPos } from './learning/wordMeta.ts';
 
@@ -103,8 +104,13 @@ function parseJsonResult(text) {
 const HTTP_TIMEOUT_MS = 30000;
 const LOCAL_TIMEOUT_MS = 120000;
 
+/**
+ * 本文件里的请求全是 AI 引擎（OpenAI / Gemini / Claude / Ollama），
+ * 它们都不给浏览器发 CORS 头，在内容脚本里直接 fetch 会被拦。
+ * request() 按运行环境决定直接发还是转交 Service Worker 代发。
+ */
 function fetchWithTimeout(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
-  return fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+  return request(url, init, timeoutMs);
 }
 
 async function callOpenAI(t, prompt) {

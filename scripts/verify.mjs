@@ -903,6 +903,60 @@ section('剪贴板同步：端到端加密');
 // 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
 // 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
 // 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
+section('AI 请求走 Service Worker（内容脚本受宿主页 CORS 约束）');
+{
+  const { readFileSync } = await import('node:fs');
+  const tr = readFileSync('utils/translator.js', 'utf8');
+  const es = readFileSync('utils/example-sentence.js', 'utf8');
+  const net = readFileSync('utils/net.js', 'utf8');
+  const bg = readFileSync('background/background.js', 'utf8');
+
+  // Chrome 85 起 host_permissions 在内容脚本里不再豁免 CORS。
+  // OpenAI/Gemini/Claude 都不给浏览器发 CORS 头，Ollama 默认只放行 localhost，
+  // 所以这些引擎在划词面板里必须绕后台，否则根本发不出请求
+  /**
+   * 截取一个方法的函数体：切到**下一个方法定义**为止，不能用固定长度。
+   * 用固定长度切的话，_ollamaBatch 后面 25 行就是 _claudeBatch，
+   * 邻居的 fetchViaBackground 会落进窗口里让断言假通过（踩过）。
+   */
+  const methodBody = (src, name) => {
+    const start = src.indexOf(`async ${name}(`);
+    if (start < 0) return '';
+    const next = src.slice(start + 1).search(/\n  (async )?_[a-zA-Z]+\(/);
+    return next < 0 ? src.slice(start) : src.slice(start, start + 1 + next);
+  };
+
+  const AI_ENGINES = ['_deeplBatch', '_customBatch', '_openaiBatch',
+    '_geminiBatch', '_claudeBatch', '_ollamaBatch'];
+  for (const fn of AI_ENGINES) {
+    const body = methodBody(tr, fn);
+    check(`${fn} 存在`, body.length > 0);
+    if (!body) continue;
+    check(`${fn} 走后台代发`, body.includes('fetchViaBackground('),
+      body.includes('fetchWithTimeout(') ? '还在用直连的 fetchWithTimeout' : '');
+  }
+
+  // 免费接口自己发 CORS 头，直连即可，绕后台只会多一次消息往返
+  const FREE = ['_googleBatch', '_mymemoryBatch', '_lingvaBatch', '_libreBatch'];
+  for (const fn of FREE) {
+    const body = methodBody(tr, fn);
+    if (!body) continue;
+    check(`${fn} 直连，不必绕后台`, !body.includes('fetchViaBackground('));
+  }
+
+  check('example-sentence 的请求也走后台', es.includes("from './net.js'"));
+
+  // 判断运行环境：内容脚本在宿主页面的源里，扩展页面是 chrome-extension:
+  check('按运行环境分流，而不是一律绕后台',
+    /location\.protocol !== 'chrome-extension:'/.test(net));
+  check('后台注册了代发处理器', /msg\.action === 'proxyFetch'/.test(bg));
+  // 消息通道要序列化，回传文本由调用方自己解析，出错时还能看到原始响应
+  check('代发回传文本而不是解析后的对象', /body: await resp\.text\(\)/.test(bg));
+  check('代发也有超时', /signal: AbortSignal\.timeout\(timeoutMs\)/.test(bg));
+  // 通道断了（扩展重载、SW 被回收）拿不到 reply，不能当成成功
+  check('拿不到回复时报错而不是静默当成功', /if \(!reply\) throw new Error/.test(net));
+}
+
 section('AI 请求必须有超时');
 {
   const { readFileSync } = await import('node:fs');
@@ -916,7 +970,11 @@ section('AI 请求必须有超时');
     // 裸 fetch( 一处都不该剩（fetchWithTimeout 里面那次除外）
     const bare = [...src.matchAll(/await fetch\(/g)].length;
     check(`${f} 没有不带超时的 fetch`, bare === 0, `还有 ${bare} 处`);
-    check(`${f} 有超时包装`, /AbortSignal\.timeout\(/.test(src));
+    // 超时可以自己加，也可以委托给 net.js 的 request（它内部和后台代发都会加）。
+    // 断言认的是「这条路径有超时」，不是某一种写法——
+    // 上一版只认 AbortSignal.timeout，请求改走后台后就误报了
+    check(`${f} 每条请求路径都有超时`,
+      /AbortSignal\.timeout\(/.test(src) || /return request\(url, init, timeoutMs\)/.test(src));
     // 本地推理天生慢，按在线接口的超时卡会误杀大模型
     check(`${f} 本地引擎用更长的超时`,
       /LOCAL_TIMEOUT_MS/.test(src) && /}, LOCAL_TIMEOUT_MS\)/.test(src));
