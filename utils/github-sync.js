@@ -517,8 +517,10 @@ async function syncClipboardNow() {
     .catch(() => null);
 
   // 用全局唯一的主密钥，跟 API Key 那份密文同一把——
-  // 这样一串恢复密钥就能覆盖全部加密内容
-  const dek = await getMasterDek(passphrase);
+  // 这样一串恢复密钥就能覆盖全部加密内容。
+  // 本机还没有主密钥时认领远端那把：另一台设备先启用了加密，
+  // 这台如果自己新建一把，两边就再也读不了对方的数据
+  const dek = await getMasterDek(passphrase, { adoptFrom: remoteRaw });
 
   let remote = [];
   if (isEnvelope(remoteRaw)) {

@@ -55,13 +55,33 @@ function fromBase32(str) {
   return new Uint8Array(out);
 }
 
-/** 取主密钥；还没有就生成一把并包装保存 */
-export async function getMasterDek(passphrase) {
+/**
+ * 取主密钥。
+ *
+ * 顺序很关键：**先找现成的，最后才新建**。
+ *  1. 本机已保存的主密钥
+ *  2. adoptFrom 给的信封里的密钥——比如远端已有的剪贴板密文。
+ *     另一台设备先启用了加密，这台设备必须认领同一把，
+ *     否则同一个口令会长出两把互不相认的主密钥，两边都读不了对方的数据
+ *  3. 都没有才生成新的
+ *
+ * @param {string} [passphrase]
+ * @param {object} [opts]
+ * @param {object} [opts.adoptFrom] 一个已有的信封，能解开就认领它的密钥
+ */
+export async function getMasterDek(passphrase, { adoptFrom } = {}) {
   const pass = passphrase ?? await getPassphrase();
   if (!pass) throw new Error('没有设置加密口令');
 
   const stored = await chrome.storage.sync.get(MASTER_KEY);
   if (stored[MASTER_KEY]) return unwrapDek(stored[MASTER_KEY], pass);
+
+  if (adoptFrom?.wrappedKey) {
+    // 解不开说明口令不对，让错误冒上去——静默新建会把两边彻底劈开
+    const adopted = await unwrapDek(adoptFrom, pass);
+    await chrome.storage.sync.set({ [MASTER_KEY]: await wrapDek(adopted, pass) });
+    return adopted;
+  }
 
   const dek = await crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'],

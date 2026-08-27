@@ -1422,8 +1422,10 @@ section('主密钥：全局一把，可导出为恢复密钥');
 
   // 各处各生成一把 DEK 的话，「保存好这串恢复密钥就能恢复数据」就是假的：
   // 用户得保存好几串，还分不清哪串对应什么
-  check('API Key 用全局主密钥', /getMasterDek\(passphrase\)/.test(secrets));
-  check('剪贴板同步用同一把主密钥', /getMasterDek\(passphrase\)/.test(sync));
+  check('API Key 用全局主密钥', /getMasterDek\(passphrase[,)]/.test(secrets));
+  // 匹配 getMasterDek( 即可，参数形态会随「认领已有密钥」这类改动变化——
+  // 断言贴着参数写，实现一调整就误报（这次就是）
+  check('剪贴板同步用同一把主密钥', /getMasterDek\(passphrase[,)]/.test(sync));
   check('两处不再各自生成 DEK',
     !/unwrapDek\(remoteRaw/.test(sync) && !/unwrapDek\(stored\[BLOB_KEY\]/.test(secrets));
 
@@ -1438,6 +1440,18 @@ section('主密钥：全局一把，可导出为恢复密钥');
   const { default: _ } = { default: null };
   const base32 = mk.match(/const ALPHABET = '([^']+)'/)?.[1] || '';
   check('恢复密钥字母表去掉易混字符', !/[IO01]/.test(base32) && base32.length === 32);
+
+  // 先找现成的，最后才新建。顺序反了的话，同一个口令在两台设备上会长出
+  // 两把互不相认的主密钥，两边都读不了对方的数据（实测复现过）
+  const getBody = mk.slice(mk.indexOf('export async function getMasterDek'));
+  const adoptAt = getBody.indexOf('adoptFrom?.wrappedKey');
+  const createAt = getBody.indexOf('crypto.subtle.generateKey');
+  check('取主密钥时先认领已有的，再考虑新建',
+    adoptAt > 0 && createAt > 0 && adoptAt < createAt);
+  check('剪贴板同步会认领远端已有的主密钥',
+    /getMasterDek\(passphrase, \{ adoptFrom: remoteRaw \}\)/.test(sync));
+  check('写密钥时会认领本机已有密文的主密钥',
+    /getMasterDek\(passphrase, \{ adoptFrom: existing\[BLOB_KEY\] \}\)/.test(secrets));
 
   check('可导出恢复密钥', /export async function exportRecoveryKey/.test(mk));
   check('可用恢复密钥重新取得访问权', /export async function restoreFromRecoveryKey/.test(mk));

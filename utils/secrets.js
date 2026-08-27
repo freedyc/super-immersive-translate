@@ -83,7 +83,10 @@ export async function saveSecrets(patch) {
   }
   // 用全局唯一的主密钥。各处各生成一把的话，「保存好这串恢复密钥就能
   // 恢复数据」就不成立了——用户得保存好几串，还分不清哪串对应什么
-  const dek = await getMasterDek(passphrase);
+  // 认领已有密文里的密钥：设置可能是从另一台设备同步过来的，
+  // 那份密文用的是那边的主密钥
+  const existing = await chrome.storage.sync.get(BLOB_KEY);
+  const dek = await getMasterDek(passphrase, { adoptFrom: existing[BLOB_KEY] });
   await chrome.storage.sync.set({
     [BLOB_KEY]: await encryptEnvelope(next, passphrase, dek),
   });
