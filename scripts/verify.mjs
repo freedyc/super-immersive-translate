@@ -903,6 +903,74 @@ section('剪贴板同步：端到端加密');
 // 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
 // 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
 // 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
+section('API Key 加密存储');
+{
+  const { readFileSync } = await import('node:fs');
+  const { SECRET_KEYS } = await import('../utils/secrets.js');
+  const secrets = readFileSync('utils/secrets.js', 'utf8');
+  const sync = readFileSync('utils/github-sync.js', 'utf8');
+  const data = readFileSync('options/tabs/DataTab.tsx', 'utf8');
+  const card = readFileSync('options/components/EncryptionCard.tsx', 'utf8');
+  const defaults = readFileSync('utils/defaults.js', 'utf8');
+
+  // 每个需要 Key 的引擎都要在保护名单里，漏一个就是那个 Key 仍旧明文同步
+  for (const k of ['openaiKey', 'deepseekKey', 'geminiKey', 'claudeKey',
+    'deeplKey', 'customApiKey', 'githubToken']) {
+    check(`${k} 在受保护名单里`, SECRET_KEYS.includes(k));
+  }
+  // defaults 里声明的凭证键必须都被保护
+  const declared = [...defaults.matchAll(/^\s{2}(\w*(?:Key|Token))\s*:/gm)].map((m) => m[1]);
+  const unprotected = declared.filter((k) => !SECRET_KEYS.includes(k));
+  check('defaults 里没有漏保护的凭证键', unprotected.length === 0, unprotected.join(', '));
+
+  // 启用加密后必须删掉明文副本，否则加密等于没做。
+  // 必须**按函数体**查：saveSecrets 里也有同一行，全文件搜索的话
+  // 把 enableEncryption 里那行删掉照样"通过"（踩过两次了）
+  const fnBody = (src, name) => {
+    const start = src.indexOf(`export async function ${name}(`);
+    if (start < 0) return '';
+    const next = src.slice(start + 1).search(/\nexport (async )?function /);
+    return next < 0 ? src.slice(start) : src.slice(start, start + 1 + next);
+  };
+  for (const fn of ['enableEncryption', 'saveSecrets']) {
+    const body = fnBody(secrets, fn);
+    check(`${fn} 存在`, body.length > 0);
+    check(`${fn} 写入密文后清除明文副本`,
+      /chrome\.storage\.sync\.remove\(SECRET_KEYS\)/.test(body));
+  }
+
+  // 口令永远只在本地：进了 sync 就经 Google，进了 GitHub 就跟密文一起走
+  check('口令存 storage.local', /chrome\.storage\.local\.set\(\{ \[PASSPHRASE_KEY\]/.test(secrets));
+  check('口令不写进 storage.sync',
+    !/storage\.sync\.set\([^)]*PASSPHRASE_KEY/.test(secrets));
+  // 口令存在 storage.local，而设置同步只读 storage.sync——
+  // 这是结构性保证，比"检查有没有出现这个字符串"可靠：
+  // 同步代码里出现口令是正常的（要用它加密剪贴板），关键是不能被打包上传
+  check('设置同步只从 storage.sync 取，取不到存在 local 的口令',
+    /readLocalSettings[\s\S]{0,200}chrome\.storage\.sync\.get\(null\)/.test(sync)
+    && !/readLocalSettings[\s\S]{0,300}storage\.local/.test(sync));
+
+  // 新设备只同步到密文、还没输口令时，要能分辨「锁着」和「没配 Key」
+  check('缺口令时抛 LockedError 而不是当成没配 Key',
+    /err\.name = 'LockedError'/.test(secrets));
+  check('有安全版读取，解不开时不把整个流程带崩',
+    /export async function loadSecretsSafe/.test(secrets));
+
+  // 明文密钥键不能随设置同步上传；密钥只以密文形式随行
+  for (const k of ['openaiKey', 'deepseekKey', 'githubToken']) {
+    check(`设置同步排除明文 ${k}`, new RegExp(`SETTINGS_EXCLUDE[\\s\\S]{0,400}'${k}'`).test(sync));
+  }
+  // gist id 是同步载体自身的地址，同步它会让两台设备指到同一个 gist 上打架
+  check('设置同步排除 githubGistId', /SETTINGS_EXCLUDE[\s\S]{0,200}'githubGistId'/.test(sync));
+
+  // 导出的备份常常发给自己、存网盘，明文凭证躺在里面风险不小
+  check('导出备份剔除全部凭证', /for \(const key of SECRET_KEYS\) delete exported\[key\]/.test(data));
+  check('导出备份不含密文块（没有口令也解不开）', /delete exported\.secretsEnc/.test(data));
+
+  check('设置页有启用/关闭加密的入口',
+    card.includes('enableEncryption') && card.includes('disableEncryption'));
+}
+
 section('引擎注册：每个引擎六处都要齐');
 {
   const { readFileSync } = await import('node:fs');

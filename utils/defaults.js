@@ -112,6 +112,9 @@ export const DEFAULTS = {
   // 打开后没有口令也不会上传（见 github-sync.js 的 syncClipboardNow）。
   // 口令本身存 storage.local，不进 sync——否则等于把密文和钥匙分给两家云
   githubSyncClipboard: false,
+  // 设置同步：让你不必依赖 Chrome 的 Google 账号同步。
+  // API Key 以密文（secretsEnc）随行；加密口令永远不上传
+  githubSyncSettings: false,
 
   // 单词学习（形状见 types/models.ts 的 StudyConfig；默认值与
   // utils/learning/queue.js 的 DEFAULT_STUDY_CONFIG 保持一致）

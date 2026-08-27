@@ -10,6 +10,8 @@ import { DEFAULTS } from '../../utils/defaults.js';
 import type { TabProps } from '../lib/types.ts';
 import type { SyncStatus } from '../../types/models.ts';
 import { ClipboardSyncCard } from '../components/ClipboardSyncCard.tsx';
+import { EncryptionCard } from '../components/EncryptionCard.tsx';
+import { SECRET_KEYS } from '../../utils/secrets.js';
 
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -76,11 +78,15 @@ export function DataTab({ settings, update, reload, notify }: TabProps) {
       chrome.storage.sync.get(null),
       chrome.storage.local.get({ wordbook: [], translationHistory: [] }),
     ]);
-    // GitHub token 是账号级权限（尤其 repo 权限的 PAT），不写进导出文件；
-    // 只删副本里的，不影响实际存储。
+    // 所有凭证都不写进导出文件：GitHub PAT 是账号级权限，
+    // OpenAI / Claude 之类的 Key 同样能直接花钱。备份文件常常发给自己、
+    // 存网盘、甚至贴出来排查问题，明文躺在里面风险不小。
+    // 早先这里只删了 GitHub token，把 AI Key 漏掉了。
+    // 只删副本里的，不影响实际存储；secretsEnc 是密文，留着也无妨，
+    // 但没有口令解不开，导出它没有意义，一并去掉更干净。
     const exported = { ...sync };
-    delete exported.githubToken;
-    delete exported.githubOAuthAccessToken;
+    for (const key of SECRET_KEYS) delete exported[key];
+    delete exported.secretsEnc;
     downloadJson({
       type: 'super-immersive-translate-backup',
       version: 1,
@@ -168,6 +174,8 @@ export function DataTab({ settings, update, reload, notify }: TabProps) {
               enabled={!!settings.githubSyncClipboard}
               onToggle={(v) => update({ githubSyncClipboard: v })}
             />
+
+            <EncryptionCard settings={settings} update={update} />
 
             <div className="flex flex-col gap-3">
               <h4 className="text-xs font-bold uppercase tracking-wide text-base-content/40">同步载体</h4>

@@ -1,5 +1,6 @@
 import { pick } from './defaults.js';
 import { chunkText, getEngine, resolveTts, supportsLang } from './tts-engines.js';
+import { loadSecretsSafe } from './secrets.js';
 
 class TTSManager {
   constructor() {
@@ -46,6 +47,9 @@ class TTSManager {
 
     // 引擎和音色按语种解析，所以整份设置留着，speak() 时再按 lang 取
     this.settings = settings;
+    // OpenAI TTS 复用同一个 Key，它可能是加密存储的
+    const secrets = await loadSecretsSafe();
+    settings.openaiKey = secrets.openaiKey || settings.openaiKey;
     this.browserRate = parseFloat(settings.ttsBrowserRate) || 1.0;
     this.browserPitch = parseFloat(settings.ttsBrowserPitch) || 1.0;
     

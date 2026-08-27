@@ -444,7 +444,10 @@ export async function syncNow() {
       }
     }
 
-    const { githubSyncClipboard } = await chrome.storage.sync.get(pick('githubSyncClipboard'));
+    const { githubSyncClipboard, githubSyncSettings } = await chrome.storage.sync.get(
+      pick('githubSyncClipboard', 'githubSyncSettings'),
+    );
+    if (githubSyncSettings) await syncSettingsNow();
     if (githubSyncClipboard) await syncClipboardNow();
 
     await chrome.storage.local.set({ githubSyncStatus: { lastSyncAt: Date.now(), lastError: null } });
@@ -533,5 +536,72 @@ async function syncClipboardNow() {
     },
     merged,
     'Update clipboard (encrypted)',
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 设置同步
+//
+// 让你不必依赖 Chrome 的 Google 账号同步：设置走你自己的 Gist/仓库。
+// API Key 以密文形式随行；**加密口令永远不上传**——口令跟密文一起走，
+// 加密就没有意义了。所以换设备时口令要手动输一次，这是应该付的代价。
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SETTINGS_GIST_FILENAME = 'settings.json';
+const SETTINGS_REPO_PATH = 'settings.json';
+
+/**
+ * 这些键不参与同步：
+ *  - githubGistId 是同步载体自身的地址，同步它会把两台设备指到同一个 gist 上打架
+ *  - 明文密钥键一律不上传；密钥只以 secretsEnc 密文形式随行
+ */
+const SETTINGS_EXCLUDE = new Set([
+  'githubGistId',
+  'openaiKey', 'deepseekKey', 'geminiKey', 'claudeKey',
+  'deeplKey', 'customApiKey', 'githubToken', 'githubOAuthAccessToken',
+]);
+
+async function readLocalSettings() {
+  const all = await chrome.storage.sync.get(null);
+  const out = {};
+  for (const [k, v] of Object.entries(all)) {
+    if (!SETTINGS_EXCLUDE.has(k)) out[k] = v;
+  }
+  return { version: 1, updatedAt: Date.now(), settings: out };
+}
+
+/**
+ * 合并两端设置：整体按 updatedAt 取较新的一份。
+ *
+ * 不做逐键合并——设置之间是有关联的（引擎和它的模型、地址是一组），
+ * 逐键取新会拼出两边都没有过的组合，比"以某一端为准"更难排查。
+ */
+export function mergeSettings(local, remote) {
+  const l = local?.settings ? local : { updatedAt: 0, settings: {} };
+  const r = remote?.settings ? remote : { updatedAt: 0, settings: {} };
+  return (r.updatedAt || 0) > (l.updatedAt || 0) ? r : l;
+}
+
+async function syncSettingsNow() {
+  const local = await readLocalSettings();
+  const remote = await pullRemoteFile(SETTINGS_GIST_FILENAME, SETTINGS_REPO_PATH)
+    .catch(() => null);
+
+  const winner = mergeSettings(local, Array.isArray(remote) ? null : remote);
+  if (winner !== local && winner.settings) {
+    // 远端更新：写回本地，但同样不碰被排除的那些键
+    const patch = {};
+    for (const [k, v] of Object.entries(winner.settings)) {
+      if (!SETTINGS_EXCLUDE.has(k)) patch[k] = v;
+    }
+    await chrome.storage.sync.set(patch);
+  }
+
+  await pushRemoteFile(
+    SETTINGS_GIST_FILENAME, SETTINGS_REPO_PATH,
+    (mine, theirs) => mergeSettings(mine, Array.isArray(theirs) ? null : theirs),
+    winner,
+    'Update settings',
   );
 }
