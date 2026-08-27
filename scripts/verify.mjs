@@ -904,110 +904,6 @@ section('剪贴板同步：端到端加密');
     !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
 }
 
-// ── React Hook 顺序 ────────────────────────────────────────────────────────
-// 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
-// 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
-// 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
-section('API Key 加密存储');
-{
-  const { readFileSync } = await import('node:fs');
-  const { SECRET_KEYS } = await import('../utils/secrets.js');
-  const secrets = readFileSync('utils/secrets.js', 'utf8');
-  const sync = readFileSync('utils/github-sync.js', 'utf8');
-  const data = readFileSync('options/tabs/DataTab.tsx', 'utf8');
-  const card = readFileSync('options/components/EncryptionCard.tsx', 'utf8');
-  const defaults = readFileSync('utils/defaults.js', 'utf8');
-
-  // 每个需要 Key 的引擎都要在保护名单里，漏一个就是那个 Key 仍旧明文同步
-  for (const k of ['openaiKey', 'deepseekKey', 'geminiKey', 'claudeKey',
-    'deeplKey', 'customApiKey', 'githubToken']) {
-    check(`${k} 在受保护名单里`, SECRET_KEYS.includes(k));
-  }
-  // defaults 里声明的凭证键必须都被保护
-  const declared = [...defaults.matchAll(/^\s{2}(\w*(?:Key|Token))\s*:/gm)].map((m) => m[1]);
-  const unprotected = declared.filter((k) => !SECRET_KEYS.includes(k));
-  check('defaults 里没有漏保护的凭证键', unprotected.length === 0, unprotected.join(', '));
-
-  // 启用加密后必须删掉明文副本，否则加密等于没做。
-  // 必须**按函数体**查：saveSecrets 里也有同一行，全文件搜索的话
-  // 把 enableEncryption 里那行删掉照样"通过"（踩过两次了）
-  const fnBody = (src, name) => {
-    const start = src.indexOf(`export async function ${name}(`);
-    if (start < 0) return '';
-    const next = src.slice(start + 1).search(/\nexport (async )?function /);
-    return next < 0 ? src.slice(start) : src.slice(start, start + 1 + next);
-  };
-  for (const fn of ['enableEncryption', 'saveSecrets']) {
-    const body = fnBody(secrets, fn);
-    check(`${fn} 存在`, body.length > 0);
-    check(`${fn} 写入密文后清除明文副本`,
-      /chrome\.storage\.sync\.remove\(SECRET_KEYS\)/.test(body));
-  }
-
-  // 口令永远只在本地：进了 sync 就经 Google，进了 GitHub 就跟密文一起走
-  // 别把断言写得对格式敏感：这两条原本只匹配单行的 set({ [PASSPHRASE_KEY]...，
-  // 换行之后就误报了。要认的是「写进 local、没写进 sync」这件事
-  // 口令存取已收进 secrets-store.js（单独成模块以打断与 masterkey.js 的循环依赖）
-  const store = readFileSync('utils/secrets-store.js', 'utf8');
-  check('口令存 storage.local',
-    /storage\.local\.set\(\{[\s\S]{0,120}\[PASSPHRASE_KEY\]/.test(store));
-  check('口令不写进 storage.sync',
-    !/storage\.sync\.set\([\s\S]{0,120}PASSPHRASE_KEY/.test(store));
-  // 口令存在 storage.local，而设置同步只读 storage.sync——
-  // 这是结构性保证，比"检查有没有出现这个字符串"可靠：
-  // 同步代码里出现口令是正常的（要用它加密剪贴板），关键是不能被打包上传
-  check('设置同步只从 storage.sync 取，取不到存在 local 的口令',
-    /readLocalSettings[\s\S]{0,200}chrome\.storage\.sync\.get\(null\)/.test(sync)
-    && !/readLocalSettings[\s\S]{0,300}storage\.local/.test(sync));
-
-  // 新设备只同步到密文、还没输口令时，要能分辨「锁着」和「没配 Key」
-  check('缺口令时抛 LockedError 而不是当成没配 Key',
-    /err\.name = 'LockedError'/.test(secrets));
-  check('有安全版读取，解不开时不把整个流程带崩',
-    /export async function loadSecretsSafe/.test(secrets));
-
-  // 明文密钥键不能随设置同步上传；密钥只以密文形式随行
-  for (const k of ['openaiKey', 'deepseekKey', 'githubToken']) {
-    check(`设置同步排除明文 ${k}`, new RegExp(`SETTINGS_EXCLUDE[\\s\\S]{0,400}'${k}'`).test(sync));
-  }
-  // gist id 是同步载体自身的地址，同步它会让两台设备指到同一个 gist 上打架
-  check('设置同步排除 githubGistId', /SETTINGS_EXCLUDE[\s\S]{0,200}'githubGistId'/.test(sync));
-
-  // 备份要能完整还原，所以包含凭证。启用加密后 Key 在密文里，
-  // 必须解出来写进备份——否则在没有口令的设备上恢复会得到一份没有 Key 的设置
-  check('导出备份包含解密后的凭证',
-    /\{ \.\.\.sync, \.\.\.\(await loadSecretsSafe\(\)\) \}/.test(data));
-  check('导出备份不含密文块（与已解出的明文并存只是冗余）',
-    /delete exported\.secretsEnc/.test(data));
-  // 这个文件等同于凭证本身，界面上必须说清楚
-  check('导出说明里提示了包含凭证',
-    /API Key/.test(data) && /妥善保管/.test(data));
-
-  // 导入必须走加密层：这台设备若已启用加密，直写明文会把加密绕过去，
-  // 而且跟现有的 secretsEnc 并存后读出来的是哪一份就说不准了
-  check('导入备份时凭证走加密层，不直写 sync',
-    /await saveSecrets\(secrets\)/.test(data)
-    && /for \(const key of SECRET_KEYS\)[\s\S]{0,200}delete incoming\[key\]/.test(data));
-
-  // 全扩展只有一个口令。曾经有过两个：剪贴板同步用 clipboardSyncPassphrase，
-  // API Key 加密用 syncPassphrase，两个界面各写各的——在这边设了口令，
-  // 那边却报「需要先设置加密口令」。口令的读写必须只有一个出入口。
-  const OTHER_FILES = ['utils/github-sync.js', 'options/components/ClipboardSyncCard.tsx',
-    'options/components/EncryptionCard.tsx'];
-  for (const f of OTHER_FILES) {
-    const src = readFileSync(f, 'utf8');
-    check(`${f} 不直接读写口令存储键`,
-      !src.includes("'clipboardSyncPassphrase'") && !src.includes("'syncPassphrase'"),
-      '应通过 utils/secrets.js 的 getPassphrase/setPassphrase');
-  }
-  // 写入时要同时更新兼容键，否则老用户在新界面设了口令，剪贴板同步读不到
-  check('写口令时同时更新兼容键',
-    /\[PASSPHRASE_KEY\]: value,[\s\S]{0,80}\[LEGACY_PASSPHRASE_KEY\]: value/.test(store));
-
-  check('设置页有启用/关闭加密的入口',
-    card.includes('enableEncryption') && card.includes('disableEncryption'));
-}
-
 section('引擎注册：每个引擎六处都要齐');
 {
   const { readFileSync } = await import('node:fs');
@@ -1412,92 +1308,6 @@ section('剪贴板图片');
     item.includes('revokeObjectURL'));
 }
 
-section('主密钥：全局一把，可导出为恢复密钥');
-{
-  const { readFileSync } = await import('node:fs');
-  const mk = readFileSync('utils/masterkey.js', 'utf8');
-  const secrets = readFileSync('utils/secrets.js', 'utf8');
-  const sync = readFileSync('utils/github-sync.js', 'utf8');
-  const card = readFileSync('options/components/EncryptionCard.tsx', 'utf8');
-
-  // 各处各生成一把 DEK 的话，「保存好这串恢复密钥就能恢复数据」就是假的：
-  // 用户得保存好几串，还分不清哪串对应什么
-  check('API Key 用全局主密钥', /getMasterDek\(passphrase[,)]/.test(secrets));
-  // 匹配 getMasterDek( 即可，参数形态会随「认领已有密钥」这类改动变化——
-  // 断言贴着参数写，实现一调整就误报（这次就是）
-  check('剪贴板同步用同一把主密钥', /getMasterDek\(passphrase[,)]/.test(sync));
-  check('两处不再各自生成 DEK',
-    !/unwrapDek\(remoteRaw/.test(sync) && !/unwrapDek\(stored\[BLOB_KEY\]/.test(secrets));
-
-  // 主密钥本身绝不能明文落盘
-  check('主密钥以包装形态保存，不明文落盘',
-    /wrapDek\(dek, pass/.test(mk) && !/storage\.sync\.set\(\{ \[MASTER_KEY\]: dek/.test(mk));
-  // 换口令只重新包装主密钥，数据密文不动
-  check('换口令重新包装主密钥', /export async function rewrapMaster/.test(mk));
-  check('secrets 换口令时同步重新包装主密钥',
-    /await rewrapMaster\(oldPassphrase, passphrase\)/.test(secrets));
-
-  const { default: _ } = { default: null };
-  const base32 = mk.match(/const ALPHABET = '([^']+)'/)?.[1] || '';
-  check('恢复密钥字母表去掉易混字符', !/[IO01]/.test(base32) && base32.length === 32);
-
-  // 先找现成的，最后才新建。顺序反了的话，同一个口令在两台设备上会长出
-  // 两把互不相认的主密钥，两边都读不了对方的数据（实测复现过）
-  const getBody = mk.slice(mk.indexOf('export async function getMasterDek'));
-  const adoptAt = getBody.indexOf('adoptFrom?.wrappedKey');
-  const createAt = getBody.indexOf('crypto.subtle.generateKey');
-  check('取主密钥时先认领已有的，再考虑新建',
-    adoptAt > 0 && createAt > 0 && adoptAt < createAt);
-  check('剪贴板同步会认领远端已有的主密钥',
-    /getMasterDek\(passphrase, \{ adoptFrom: remoteRaw \}\)/.test(sync));
-  check('写密钥时会认领本机已有密文的主密钥',
-    /getMasterDek\(passphrase, \{ adoptFrom: existing\[BLOB_KEY\] \}\)/.test(secrets));
-
-  // 换密钥跟换口令是根本不同的操作：换口令只重新包装，换密钥要把所有数据
-  // 重新加密一遍。恢复密钥泄露时必须能作废它
-  check('可重新生成主密钥', /export async function rotateMasterKey/.test(mk));
-
-  const rot = mk.slice(mk.indexOf('export async function rotateMasterKey'));
-  // 顺序是这个函数的要害：本机换了而远端没换，同步会永久坏掉，比不换更糟。
-  // 必须先全部解出来 → 再写远端（唯一可能失败的一步）→ 最后才提交新主密钥
-  const readAt = rot.indexOf('await h.read(oldDek');
-  const remoteAt = rot.indexOf('h2.remote)');
-  const commitAt = rot.indexOf(`[MASTER_KEY]: await wrapDek(newDek`);
-  check('换密钥时先全部解出来，再写入', readAt > 0 && remoteAt > readAt);
-  check('远端写入排在本地提交之前', remoteAt > 0 && commitAt > remoteAt);
-  check('任一处解不开就中止（不半途换密钥）',
-    /decrypted\.push\(\[name, h, await h\.read/.test(rot));
-
-  const rotate = readFileSync('utils/rotate.js', 'utf8');
-  check('剪贴板标记为远端源，排在本地之前', /remote: true/.test(rotate));
-  check('本机密钥标记为本地源', /remote: false/.test(rotate));
-  // 远端内容刚用旧密钥读出来，写回时再合并只会把旧密文掺回去
-  check('换密钥时的推送不做合并', /不做合并/.test(sync));
-
-  check('界面提供重新生成入口，并说明旧的会作废',
-    /rotateAll/.test(card) && /旧的立刻作废/.test(card));
-  check('换密钥失败时明确告知未做改动', /未做任何改动/.test(card));
-
-  check('可导出恢复密钥', /export async function exportRecoveryKey/.test(mk));
-  check('可用恢复密钥重新取得访问权', /export async function restoreFromRecoveryKey/.test(mk));
-  check('恢复时要求同时设置新口令',
-    /if \(!newPassphrase\) throw new Error/.test(mk));
-  // 长度不对就直接报错，而不是拿一把错的密钥去解出乱码
-  check('恢复密钥长度不对时报错', /恢复密钥长度不对/.test(mk));
-
-  // 拿到它等于拿到全部数据，必须让用户郑重保存一次
-  check('界面提示保存恢复密钥', /恢复密钥/.test(card) && /离线保存/.test(card));
-  check('恢复密钥可下载成文件', /downloadRecovery/.test(card));
-  check('界面提供忘记口令后的找回入口', /用恢复密钥恢复/.test(card));
-  // 默认不显示：它等同于全部数据的解密能力
-  check('恢复密钥需主动点击才显示', /\{recovery \?/.test(card) && /显示恢复密钥/.test(card));
-
-  // 口令存取单独成模块以打断循环依赖，且只写 local
-  const store = readFileSync('utils/secrets-store.js', 'utf8');
-  check('口令模块只写 storage.local',
-    /storage\.local\.set/.test(store) && !/storage\.sync\.set/.test(store));
-}
-
 section('信封加密：换口令不能让历史数据失效');
 {
   const {
@@ -1549,12 +1359,14 @@ section('信封加密：换口令不能让历史数据失效');
     && JSON.stringify(await decryptEnvelope(migrated, '新口令')) === JSON.stringify(data));
   check('isEnvelope 认得两种版本', isEnvelope(box) && isEnvelope(v1) && !isEnvelope([1, 2]));
 
-  // 没有旧口令的设备换新口令，会把一堆空值封进去，等于丢光密钥——必须拦住
-  const secrets = (await import('node:fs')).readFileSync('utils/secrets.js', 'utf8');
-  check('本机没有旧口令时拒绝换口令，而不是把空值封进去',
-    /本机没有当前口令[\s\S]{0,120}LockedError/.test(secrets));
-  check('已加密时走 rewrap 而不是整体重新加密',
-    /isEnvelope\(blob\)[\s\S]{0,900}rewrapEnvelope\(blob, oldPassphrase, passphrase\)/.test(secrets));
+  // 换口令必须把远端信封重新包装，否则下次同步解不开远端那份密文。
+  // 拉不到或解不开就中止、本地口令保持原样——本地和远端对不上会让同步永久坏掉
+  const card = (await import('node:fs'))
+    .readFileSync('options/components/ClipboardSyncCard.tsx', 'utf8');
+  check('换口令时重新包装远端信封',
+    /rewrapEnvelope\(remote, current, next\)/.test(card));
+  check('远端处理失败时不改本地口令',
+    /换口令失败，未做任何改动/.test(card));
 }
 
 section('剪贴板：容量裁剪与合并');

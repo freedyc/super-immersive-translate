@@ -1,8 +1,7 @@
 // GitHub 同步：只负责"读远端 / 写远端 / 合并"，不做调度决策（调度在 background）。
 import { pick } from './defaults.js';
-import { decryptEnvelope, encryptEnvelope, isEnvelope } from './crypto.js';
-import { getMasterDek } from './masterkey.js';
-import { getPassphrase } from './secrets.js';
+import { decryptEnvelope, encryptEnvelope, isEnvelope, unwrapDek } from './crypto.js';
+import { getPassphrase } from './passphrase.js';
 import { trim as trimClipboard } from './clipboard.js';
 // 2.1 学习数据的合并逻辑写在 TypeScript 里：这个文件历史上最常见的 bug 就是
 // 新增字段忘了加进合并函数、同步一次字段就被静默丢掉（pos / ipa 都发生过），
@@ -479,8 +478,7 @@ const CLIPBOARD_REPO_PATH = 'clipboard.enc.json';
  * 也就谈不上端到端加密了。代价是换设备要重新输入一次，这是应该付的代价。
  */
 async function getClipboardPassphrase() {
-  // 全扩展只有一个口令（utils/secrets.js 是唯一出入口）。
-  // 剪贴板同步和 API Key 加密共用它——让用户为同一件事记两个口令没有道理
+  // 口令的存取只有 utils/passphrase.js 一个出入口
   return getPassphrase();
 }
 
@@ -516,11 +514,13 @@ async function syncClipboardNow() {
   const remoteRaw = await pullRemoteFile(CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH)
     .catch(() => null);
 
-  // 用全局唯一的主密钥，跟 API Key 那份密文同一把——
-  // 这样一串恢复密钥就能覆盖全部加密内容。
-  // 本机还没有主密钥时认领远端那把：另一台设备先启用了加密，
-  // 这台如果自己新建一把，两边就再也读不了对方的数据
-  const dek = await getMasterDek(passphrase, { adoptFrom: remoteRaw });
+  // 复用远端信封里的数据密钥。信封自带 DEK，所以不需要全局主密钥协商：
+  // 任何拿到口令的设备解开信封就得到同一把密钥。
+  // 每次新生成 DEK 的话，换口令时重新包装只能救最后一次，之前的又打不开了
+  let dek;
+  if (isEnvelope(remoteRaw) && remoteRaw.v === 2) {
+    dek = await unwrapDek(remoteRaw, passphrase).catch(() => undefined);
+  }
 
   let remote = [];
   if (isEnvelope(remoteRaw)) {
@@ -617,19 +617,19 @@ async function syncSettingsNow() {
 
 
 /**
- * 换主密钥时用到的剪贴板密文读写。
+ * 剪贴板密文的原样读写，供「换口令」时重新包装远端信封使用。
  *
- * 单独导出而不是复用 syncClipboardNow：那个函数会做合并、裁剪、写本地历史，
- * 而换密钥只需要把远端那团密文原样取出、再原样放回。
+ * 不复用 syncClipboardNow：那个会做合并、裁剪、写本地历史，
+ * 而换口令只需要把远端那团密文取出、换个包装再放回。
  */
 export const clipboardCiphertext = {
   pullClipboard: () => pullRemoteFile(CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH),
   pushClipboard: (envelope) => pushRemoteFile(
     CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH,
-    // 换密钥时不做合并：远端内容刚刚才用旧密钥读出来，
-    // 这里要写的就是它的重新加密版本，再合并一次只会把旧密文掺回去
+    // 不做合并：这里写的就是刚取出来那团密文的重新包装版本，
+    // 再合并一次只会把旧包装掺回去
     (mine) => mine,
     envelope,
-    'Rotate clipboard encryption key',
+    'Rewrap clipboard encryption',
   ),
 };

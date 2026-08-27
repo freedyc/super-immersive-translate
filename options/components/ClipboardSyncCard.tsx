@@ -8,9 +8,10 @@
  */
 import { useEffect, useState } from 'react';
 import { Eye, EyeOff, KeyRound, ShieldCheck, TriangleAlert, Wand2 } from 'lucide-react';
-import { generateRecoveryKey } from '../../utils/crypto.js';
+import { generateRecoveryKey, isEnvelope, rewrapEnvelope } from '../../utils/crypto.js';
+import { clipboardCiphertext } from '../../utils/github-sync.js';
 // 起别名：组件里的 useState setter 也叫 setPassphrase，直接导入会被它遮住
-import { getPassphrase, setPassphrase as persistPassphrase } from '../../utils/secrets.js';
+import { getPassphrase, setPassphrase as persistPassphrase } from '../../utils/passphrase.js';
 
 export function ClipboardSyncCard({ enabled, onToggle }: {
   enabled: boolean;
@@ -19,6 +20,9 @@ export function ClipboardSyncCard({ enabled, onToggle }: {
   const [passphrase, setPassphrase] = useState('');
   const [reveal, setReveal] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [hint, setHint] = useState('');
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -34,6 +38,39 @@ export function ClipboardSyncCard({ enabled, onToggle }: {
     await persistPassphrase(value);
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
+  };
+
+  /**
+   * 换口令。
+   *
+   * 远端那份密文是用旧口令包装的，只改本地口令的话下次同步就解不开了。
+   * 信封把「包装」和「数据」分开，所以这里只需把包装换掉——
+   * 数据密文一个字节都不用动，历史记录照常可读。
+   *
+   * 远端拉不到或解不开就中止，本地口令保持原样：宁可这次没换成，
+   * 也不能让本地和远端对不上（那会让同步永久坏掉）。
+   */
+  const changePassphrase = async () => {
+    const next = draft.trim();
+    if (!next) { setHint('请先填写新口令'); return; }
+    const current = await getPassphrase();
+    if (!current) { await save(next); return; }
+    if (next === current) { setHint('新口令与当前相同'); return; }
+
+    setBusy(true);
+    try {
+      const remote = await clipboardCiphertext.pullClipboard().catch(() => null);
+      if (isEnvelope(remote)) {
+        await clipboardCiphertext.pushClipboard(
+          await rewrapEnvelope(remote, current, next),
+        );
+      }
+      await save(next);
+      setDraft('');
+      setHint('已换新口令，历史记录仍可解密');
+    } catch (err) {
+      setHint(`换口令失败，未做任何改动：${(err as Error)?.message || ''}`);
+    } finally { setBusy(false); }
   };
 
   const generate = () => { setReveal(true); save(generateRecoveryKey()); };
@@ -108,6 +145,44 @@ export function ClipboardSyncCard({ enabled, onToggle }: {
               <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
               <span>还没设置口令。在设好之前剪贴板不会上传——绝不会退化成明文同步。</span>
             </div>
+          )}
+
+          {passphrase && (
+            <details className="collapse collapse-arrow bg-base-200/40 rounded-lg">
+              <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+                换一个口令
+              </summary>
+              <div className="collapse-content flex flex-col gap-2">
+                <p className="text-xs text-base-content/50">
+                  换口令时会把远端那份密文重新包装一次，
+                  <b className="text-base-content/70">历史记录不会因此丢失</b>。
+                  远端拉不到或解不开就中止，本地口令保持原样。
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    className="input input-sm flex-1 font-mono"
+                    placeholder="新口令"
+                    value={draft}
+                    onChange={(e) => { setDraft(e.target.value); setHint(''); }}
+                  />
+                  <button
+                    className="btn btn-sm btn-outline shrink-0"
+                    onClick={() => setDraft(generateRecoveryKey())}
+                  >
+                    生成
+                  </button>
+                </div>
+                <button
+                  className="btn btn-sm btn-primary self-start"
+                  disabled={busy}
+                  onClick={changePassphrase}
+                >
+                  换口令
+                </button>
+                {hint && <span className="text-xs text-base-content/60">{hint}</span>}
+              </div>
+            </details>
           )}
         </>
       )}

@@ -5,7 +5,6 @@
  */
 import { pick } from './defaults.js';
 import { request } from './net.js';
-import { loadSecretsSafe } from './secrets.js';
 
 /**
  * 请求超时。没有超时的话，一个卡住的本地模型会让请求永远挂着——
@@ -74,12 +73,6 @@ export class Translator {
       'ollamaModel', 'ollamaUrl', 'webllmModel', 'aiPrompt'
     ));
     Object.assign(this, settings);
-
-    // 密钥可能是加密存储的，单独取一次覆盖上去。
-    // 读取方（那 37 处 t.openaiKey 之类）因此完全不用改。
-    // 解不开时返回空串——表现为「这些引擎没配 Key」，
-    // 而不是让 init() 抛错把整个翻译流程带崩
-    Object.assign(this, await loadSecretsSafe());
   }
 
   getCacheKey(text) {

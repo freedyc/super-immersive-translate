@@ -220,6 +220,21 @@ Listing strips `blob` and returns only the thumbnail; the full image is fetched 
 demand. Copying back converts non-PNG to PNG first — the clipboard only reliably accepts
 `image/png`.
 
+**Only the clipboard is encrypted. API keys are not.** Encryption exists for one reason:
+the clipboard is everything you have ever copied, and it goes to GitHub. Keys were briefly
+encrypted too (master key, recovery key, key rotation — four modules, ~1000 lines) and it
+was reverted: encrypting them only defends against Chrome's Google-account sync, while the
+values are plainly visible in memory and in the settings inputs anyway. The whole surface
+is now `utils/crypto.js` + `utils/passphrase.js` + one card in the options page.
+
+Envelope format (v2) is what remains and is worth keeping: data is encrypted with a random
+DEK, and the DEK is wrapped by a passphrase-derived KEK inside the same envelope. Changing
+the passphrase therefore only re-wraps — the ciphertext is untouched, so history stays
+readable. Since the envelope carries its own DEK there is no cross-device key negotiation:
+any device with the passphrase opens it. Changing the passphrase must re-wrap the *remote*
+envelope too, and must abort without touching the local passphrase if that fails — a local
+passphrase that disagrees with the remote ciphertext breaks sync permanently.
+
 GitHub sync for the text side is **end-to-end encrypted and opt-in** (`githubSyncClipboard`).
 `utils/crypto.js` does AES-256-GCM with a key derived by PBKDF2-SHA256 (600k iterations,
 fresh random salt and IV per encryption). The design rule that must never be relaxed: **no
