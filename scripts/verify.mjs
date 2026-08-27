@@ -963,9 +963,21 @@ section('API Key 加密存储');
   // gist id 是同步载体自身的地址，同步它会让两台设备指到同一个 gist 上打架
   check('设置同步排除 githubGistId', /SETTINGS_EXCLUDE[\s\S]{0,200}'githubGistId'/.test(sync));
 
-  // 导出的备份常常发给自己、存网盘，明文凭证躺在里面风险不小
-  check('导出备份剔除全部凭证', /for \(const key of SECRET_KEYS\) delete exported\[key\]/.test(data));
-  check('导出备份不含密文块（没有口令也解不开）', /delete exported\.secretsEnc/.test(data));
+  // 备份要能完整还原，所以包含凭证。启用加密后 Key 在密文里，
+  // 必须解出来写进备份——否则在没有口令的设备上恢复会得到一份没有 Key 的设置
+  check('导出备份包含解密后的凭证',
+    /\{ \.\.\.sync, \.\.\.\(await loadSecretsSafe\(\)\) \}/.test(data));
+  check('导出备份不含密文块（与已解出的明文并存只是冗余）',
+    /delete exported\.secretsEnc/.test(data));
+  // 这个文件等同于凭证本身，界面上必须说清楚
+  check('导出说明里提示了包含凭证',
+    /API Key/.test(data) && /妥善保管/.test(data));
+
+  // 导入必须走加密层：这台设备若已启用加密，直写明文会把加密绕过去，
+  // 而且跟现有的 secretsEnc 并存后读出来的是哪一份就说不准了
+  check('导入备份时凭证走加密层，不直写 sync',
+    /await saveSecrets\(secrets\)/.test(data)
+    && /for \(const key of SECRET_KEYS\)[\s\S]{0,200}delete incoming\[key\]/.test(data));
 
   check('设置页有启用/关闭加密的入口',
     card.includes('enableEncryption') && card.includes('disableEncryption'));

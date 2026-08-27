@@ -11,7 +11,7 @@ import type { TabProps } from '../lib/types.ts';
 import type { SyncStatus } from '../../types/models.ts';
 import { ClipboardSyncCard } from '../components/ClipboardSyncCard.tsx';
 import { EncryptionCard } from '../components/EncryptionCard.tsx';
-import { SECRET_KEYS } from '../../utils/secrets.js';
+import { loadSecretsSafe, saveSecrets, SECRET_KEYS } from '../../utils/secrets.js';
 
 function downloadJson(data: unknown, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -78,14 +78,13 @@ export function DataTab({ settings, update, reload, notify }: TabProps) {
       chrome.storage.sync.get(null),
       chrome.storage.local.get({ wordbook: [], translationHistory: [] }),
     ]);
-    // 所有凭证都不写进导出文件：GitHub PAT 是账号级权限，
-    // OpenAI / Claude 之类的 Key 同样能直接花钱。备份文件常常发给自己、
-    // 存网盘、甚至贴出来排查问题，明文躺在里面风险不小。
-    // 早先这里只删了 GitHub token，把 AI Key 漏掉了。
-    // 只删副本里的，不影响实际存储；secretsEnc 是密文，留着也无妨，
-    // 但没有口令解不开，导出它没有意义，一并去掉更干净。
-    const exported = { ...sync };
-    for (const key of SECRET_KEYS) delete exported[key];
+    // 备份要能完整还原，所以**包含全部凭证**。启用加密后 Key 存在
+    // secretsEnc 密文里，这里解出来写进备份——否则在没有口令的设备上
+    // 恢复备份会得到一份没有 Key 的设置，等于没恢复。
+    // 密文块本身不导出：它需要口令才解得开，跟已经解出来的明文并存只是冗余。
+    //
+    // 代价是这个文件里有能直接花钱的凭证，导出时的提示文案已写明。
+    const exported = { ...sync, ...(await loadSecretsSafe()) };
     delete exported.secretsEnc;
     downloadJson({
       type: 'super-immersive-translate-backup',
@@ -113,7 +112,20 @@ export function DataTab({ settings, update, reload, notify }: TabProps) {
   };
 
   const applyBundle = async (bundle: BackupBundle) => {
-    await chrome.storage.sync.set(bundle.settings);
+    // 凭证要走加密层，不能直接写进 sync：这台设备若已启用加密，
+    // 直写明文会把加密绕过去，而且跟现有的 secretsEnc 并存后
+    // 读出来的是哪一份就说不准了
+    const incoming = { ...bundle.settings } as Record<string, unknown>;
+    const secrets: Record<string, string> = {};
+    for (const key of SECRET_KEYS) {
+      if (key in incoming) {
+        secrets[key] = String(incoming[key] ?? '');
+        delete incoming[key];
+      }
+    }
+    await chrome.storage.sync.set(incoming);
+    // saveSecrets 按本机当前状态决定写密文还是明文
+    if (Object.keys(secrets).length > 0) await saveSecrets(secrets);
     await chrome.storage.local.set({
       wordbook: Array.isArray(bundle.wordbook) ? bundle.wordbook : [],
       translationHistory: Array.isArray(bundle.history) ? bundle.history : [],
@@ -268,7 +280,10 @@ export function DataTab({ settings, update, reload, notify }: TabProps) {
           <input ref={bundleFileRef} type="file" accept=".json" hidden onChange={pickBundle} />
         </div>
         <p className="text-xs text-base-content/40">
-          设置 + 单词本 + 翻译历史打包成一个文件。出于安全考虑，GitHub Token 不会被导出。
+          设置 + 单词本 + 翻译历史打包成一个文件，<b className="text-warning">包含各引擎的
+          API Key 与 GitHub Token</b>（备份要能完整还原，少了 Key 恢复出来还得重配一遍）。
+          启用加密的话，Key 会解密后写入备份，这样在没有口令的设备上也能恢复。
+          这个文件等同于凭证本身，请妥善保管，不要随手发给别人或存进公开位置。
         </p>
       </Card>
 
