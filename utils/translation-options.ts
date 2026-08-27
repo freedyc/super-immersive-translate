@@ -9,7 +9,8 @@ export const ENGINES: readonly Option[] = [
   ['google', 'Google 翻译 (免费)'], ['mymemory', 'MyMemory (免费)'],
   ['lingva', 'Lingva Translate (免费)'], ['libre', 'LibreTranslate (免费)'],
   ['deepl', 'DeepL (需 API Key)'], ['custom', '自定义 API'],
-  ['openai', 'OpenAI (需 API Key)'], ['gemini', 'Gemini (需 API Key)'],
+  ['openai', 'OpenAI (需 API Key)'], ['deepseek', 'DeepSeek (需 API Key)'],
+  ['gemini', 'Gemini (需 API Key)'],
   ['claude', 'Claude (需 API Key)'], ['ollama', 'Ollama (本地/自定义)'],
   ['webllm', 'WebLLM (本地运行/显卡加速)'],
 ];
@@ -17,7 +18,7 @@ export const ENGINES: readonly Option[] = [
 export const ENGINE_NAMES: Record<string, string> = {
   google: 'Google', mymemory: 'MyMemory', lingva: 'Lingva',
   libre: 'Libre', deepl: 'DeepL', custom: '自定义',
-  openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude',
+  openai: 'OpenAI', deepseek: 'DeepSeek', gemini: 'Gemini', claude: 'Claude',
   ollama: 'Ollama', webllm: 'WebLLM',
 };
 
@@ -61,6 +62,7 @@ export const ENGINE_CONCURRENCY: Record<string, ConcurrencyProfile> = {
   deepl:    { recommended: 5,  note: '按 Key 的额度和套餐决定，免费版限流较严' },
   custom:   { recommended: 5,  note: '取决于你自己的服务端' },
   openai:   { recommended: 5,  note: '受账号的每分钟请求数/令牌数限制' },
+  deepseek: { recommended: 5,  note: '价格便宜、限流宽松，可按需调高' },
   gemini:   { recommended: 5,  note: '免费层每分钟请求数很低，容易 429' },
   claude:   { recommended: 5,  note: '受账号的每分钟请求数/令牌数限制' },
   ollama:   { recommended: 4,  note: '本机推理，不受 API 限流约束。上限取决于显存和 OLLAMA_NUM_PARALLEL，可按机器能力调高' },
@@ -129,7 +131,24 @@ export const ENGINE_FIELDS: Record<string, readonly EngineField[]> = {
       label: 'API 地址',
       type: 'text',
       placeholder: 'https://api.openai.com/v1/chat/completions',
-      hint: '兼容 OpenAI 接口的服务都能填在这里，比如 DeepSeek：https://api.deepseek.com/chat/completions（模型填 deepseek-chat）',
+      hint: '兼容 OpenAI 接口的第三方服务（中转、自建）也能填在这里',
+    },
+  ],
+  deepseek: [
+    { key: 'deepseekKey', label: 'DeepSeek API Key', type: 'password', placeholder: 'sk-...' },
+    {
+      key: 'deepseekModel',
+      label: '模型',
+      type: 'text',
+      placeholder: 'deepseek-chat',
+      hint: 'deepseek-chat 通用且快；deepseek-reasoner 会先输出思维链，翻译场景反而更慢',
+    },
+    {
+      key: 'deepseekUrl',
+      label: 'API 地址',
+      type: 'text',
+      placeholder: 'https://api.deepseek.com/chat/completions',
+      hint: '官方地址，一般不用改',
     },
   ],
   gemini: [

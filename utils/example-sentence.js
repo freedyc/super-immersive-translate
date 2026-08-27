@@ -8,7 +8,7 @@ import { request } from './net.js';
 import { getWord, patchWord } from './learning/collect.ts';
 import { pickPhonetic, pickPos } from './learning/wordMeta.ts';
 
-const AI_ENGINES = ['openai', 'gemini', 'claude', 'ollama'];
+const AI_ENGINES = ['openai', 'deepseek', 'gemini', 'claude', 'ollama'];
 
 const LANG_NAMES = {
   'zh-CN': 'Simplified Chinese', 'zh-TW': 'Traditional Chinese', 'en': 'English',
@@ -38,6 +38,7 @@ function pickEngine(t) {
     if (t[`${t.engine}Key`]) return t.engine;
   }
   if (t.openaiKey) return 'openai';
+  if (t.deepseekKey) return 'deepseek';
   if (t.geminiKey) return 'gemini';
   if (t.claudeKey) return 'claude';
   // 都没配 key 时兜底试一次本地 Ollama（不需要 key）；没启动的话 fetch 会失败，
@@ -113,20 +114,42 @@ function fetchWithTimeout(url, init = {}, timeoutMs = HTTP_TIMEOUT_MS) {
   return request(url, init, timeoutMs);
 }
 
-async function callOpenAI(t, prompt) {
-  const url = t.openaiUrl || 'https://api.openai.com/v1/chat/completions';
+/**
+ * OpenAI 兼容接口的通用实现。DeepSeek 照搬了 /chat/completions 协议，
+ * 差别只有默认地址和模型名，所以共用一份——复制的话改提示词或错误处理
+ * 要同步好几处，迟早漏掉一处。
+ */
+async function callOpenAiCompatible(prompt, { label, key, url, model }) {
   const resp = await fetchWithTimeout(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${t.openaiKey}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
     body: JSON.stringify({
-      model: t.openaiModel || 'gpt-3.5-turbo',
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7
     })
   });
-  if (!resp.ok) throw new Error(`OpenAI API ${resp.status}`);
+  if (!resp.ok) throw new Error(`${label} API ${resp.status}`);
   const data = await resp.json();
   return data.choices?.[0]?.message?.content || '';
+}
+
+function callOpenAI(t, prompt) {
+  return callOpenAiCompatible(prompt, {
+    label: 'OpenAI',
+    key: t.openaiKey,
+    url: t.openaiUrl || 'https://api.openai.com/v1/chat/completions',
+    model: t.openaiModel || 'gpt-3.5-turbo'
+  });
+}
+
+function callDeepSeek(t, prompt) {
+  return callOpenAiCompatible(prompt, {
+    label: 'DeepSeek',
+    key: t.deepseekKey,
+    url: t.deepseekUrl || 'https://api.deepseek.com/chat/completions',
+    model: t.deepseekModel || 'deepseek-chat'
+  });
 }
 
 async function callGemini(t, prompt) {
@@ -187,6 +210,7 @@ async function callOllama(t, prompt) {
 async function callEngine(engine, t, prompt) {
   switch (engine) {
     case 'openai': return callOpenAI(t, prompt);
+    case 'deepseek': return callDeepSeek(t, prompt);
     case 'gemini': return callGemini(t, prompt);
     case 'claude': return callClaude(t, prompt);
     case 'ollama': return callOllama(t, prompt);

@@ -68,6 +68,7 @@ export class Translator {
       'engine', 'targetLang', 'sourceLang',
       'deeplKey', 'customApiUrl', 'customApiKey', 'libreUrl',
       'openaiKey', 'openaiModel', 'openaiUrl',
+      'deepseekKey', 'deepseekModel', 'deepseekUrl',
       'geminiKey', 'geminiModel', 'claudeKey', 'claudeModel',
       'ollamaModel', 'ollamaUrl', 'webllmModel', 'aiPrompt'
     ));
@@ -140,6 +141,7 @@ export class Translator {
       case 'deepl':    return this._deeplBatch(texts);
       case 'custom':   return this._customBatch(texts);
       case 'openai':   return this._openaiBatch(texts);
+      case 'deepseek': return this._deepseekBatch(texts);
       case 'gemini':   return this._geminiBatch(texts);
       case 'claude':   return this._claudeBatch(texts);
       case 'ollama':   return this._ollamaBatch(texts);
@@ -345,20 +347,29 @@ export class Translator {
     return Array(originalCount).fill(parts[0] || '');
   }
 
-  async _openaiBatch(texts) {
-    if (!this.openaiKey) throw new Error('OpenAI API key not set');
+  /**
+   * OpenAI 兼容接口的通用实现。
+   *
+   * DeepSeek、Moonshot、智谱这些国产服务都照搬了 OpenAI 的 /chat/completions
+   * 协议，差别只有默认地址和模型名。复制一份实现的话，以后改提示词、
+   * 改错误处理要同步好几处——迟早漏掉一处。
+   *
+   * @param {string[]} texts
+   * @param {{label:string, key:string, url:string, model:string}} cfg
+   */
+  async _openAiCompatibleBatch(texts, cfg) {
+    if (!cfg.key) throw new Error(`${cfg.label} API key not set`);
     const SEP = '\n\u2581\u2581\u2581\n';
     const merged = texts.join(SEP);
-    const url = this.openaiUrl || 'https://api.openai.com/v1/chat/completions';
-    
-    const resp = await fetchViaBackground(url, {
+
+    const resp = await fetchViaBackground(cfg.url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.openaiKey}`
+        'Authorization': `Bearer ${cfg.key}`
       },
       body: JSON.stringify({
-        model: this.openaiModel || 'gpt-3.5-turbo',
+        model: cfg.model,
         messages: [
           { role: 'system', content: this._getAiPrompt() },
           { role: 'user', content: merged }
@@ -366,10 +377,28 @@ export class Translator {
         temperature: 0.3
       })
     });
-    if (!resp.ok) throw new Error(`OpenAI API ${resp.status}`);
+    if (!resp.ok) throw new Error(`${cfg.label} API ${resp.status}`);
     const data = await resp.json();
     const resultText = data.choices?.[0]?.message?.content || '';
     return this._parseAiResult(resultText, texts.length);
+  }
+
+  async _openaiBatch(texts) {
+    return this._openAiCompatibleBatch(texts, {
+      label: 'OpenAI',
+      key: this.openaiKey,
+      url: this.openaiUrl || 'https://api.openai.com/v1/chat/completions',
+      model: this.openaiModel || 'gpt-3.5-turbo'
+    });
+  }
+
+  async _deepseekBatch(texts) {
+    return this._openAiCompatibleBatch(texts, {
+      label: 'DeepSeek',
+      key: this.deepseekKey,
+      url: this.deepseekUrl || 'https://api.deepseek.com/chat/completions',
+      model: this.deepseekModel || 'deepseek-chat'
+    });
   }
 
   async _geminiBatch(texts) {

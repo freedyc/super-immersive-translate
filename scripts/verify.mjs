@@ -903,6 +903,46 @@ section('剪贴板同步：端到端加密');
 // 提前返回上面少调了几个 Hook，下次渲染数量就对不上，React 抛 #310 整页白屏。
 // 这类错误 typecheck 查不出、构建也不报，只有真打开页面才炸——
 // 设置页就这么崩过一次（加标签页持久化时把 useCallback 写到了 return null 下面）。
+section('引擎注册：每个引擎六处都要齐');
+{
+  const { readFileSync } = await import('node:fs');
+  const opts = readFileSync('utils/translation-options.ts', 'utf8');
+  const tr = readFileSync('utils/translator.js', 'utf8');
+  const es = readFileSync('utils/example-sentence.js', 'utf8');
+  const defaults = readFileSync('utils/defaults.js', 'utf8');
+  const { ENGINES, ENGINE_NAMES, ENGINE_CONCURRENCY, ENGINE_FIELDS } =
+    await import('../utils/translation-options.ts');
+
+  // 加一个引擎要动六处，漏掉任何一处的表现都不是报错，而是「选了没反应」
+  for (const [id] of ENGINES) {
+    check(`${id} 有显示名`, !!ENGINE_NAMES[id]);
+    check(`${id} 有并发配置`, !!ENGINE_CONCURRENCY[id]);
+    check(`${id} 在 translator 里有分支`, tr.includes(`case '${id}':`));
+  }
+
+  // DeepSeek 作为独立引擎接入
+  check('DeepSeek 在引擎清单里', ENGINES.some(([id]) => id === 'deepseek'));
+  check('DeepSeek 有 Key/模型/地址三个字段',
+    (ENGINE_FIELDS.deepseek || []).length === 3);
+  for (const key of ['deepseekKey', 'deepseekModel', 'deepseekUrl']) {
+    check(`defaults 有 ${key}`, defaults.includes(key));
+    check(`translator.init 读取 ${key}`, tr.includes(`'${key}'`));
+  }
+  check('DeepSeek 默认指向官方地址',
+    defaults.includes('https://api.deepseek.com/chat/completions'));
+
+  // 与 OpenAI 共用一份实现：复制的话改提示词或错误处理要同步好几处
+  check('OpenAI 与 DeepSeek 共用兼容实现',
+    tr.includes('_openAiCompatibleBatch') && es.includes('callOpenAiCompatible'));
+
+  // 这里漏了的话表现很隐蔽：翻译能用，但划词面板的词条区和例句静默不生成，
+  // 因为 pickEngine 会跳过你配的引擎去兜底试 Ollama
+  check('example-sentence 认得 deepseek', /AI_ENGINES = \[[^\]]*'deepseek'/.test(es));
+  check('example-sentence 能按 deepseek 分发', es.includes("case 'deepseek':"));
+  check('没配当前引擎的 Key 时会回退到已配的 DeepSeek',
+    /if \(t\.deepseekKey\) return 'deepseek'/.test(es));
+}
+
 section('AI 请求走 Service Worker（内容脚本受宿主页 CORS 约束）');
 {
   const { readFileSync } = await import('node:fs');
@@ -926,13 +966,18 @@ section('AI 请求走 Service Worker（内容脚本受宿主页 CORS 约束）')
     return next < 0 ? src.slice(start) : src.slice(start, start + 1 + next);
   };
 
-  const AI_ENGINES = ['_deeplBatch', '_customBatch', '_openaiBatch',
+  // 通用实现单独验一次；openai / deepseek 只是薄封装，委托给它就算合格
+  const SHARED = '_openAiCompatibleBatch';
+  check(`${SHARED} 走后台代发`, methodBody(tr, SHARED).includes('fetchViaBackground('));
+
+  const AI_ENGINES = ['_deeplBatch', '_customBatch', '_openaiBatch', '_deepseekBatch',
     '_geminiBatch', '_claudeBatch', '_ollamaBatch'];
   for (const fn of AI_ENGINES) {
     const body = methodBody(tr, fn);
     check(`${fn} 存在`, body.length > 0);
     if (!body) continue;
-    check(`${fn} 走后台代发`, body.includes('fetchViaBackground('),
+    check(`${fn} 走后台代发`,
+      body.includes('fetchViaBackground(') || body.includes(`this.${SHARED}(`),
       body.includes('fetchWithTimeout(') ? '还在用直连的 fetchWithTimeout' : '');
   }
 

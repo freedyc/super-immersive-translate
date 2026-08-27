@@ -65,6 +65,11 @@ export const DEFAULTS = {
   openaiKey: '',
   openaiModel: 'gpt-3.5-turbo',
   openaiUrl: 'https://api.openai.com/v1/chat/completions',
+  // DeepSeek 用的是 OpenAI 兼容协议，实现与 openai 共用
+  // Translator._openAiCompatibleBatch，只是默认地址和模型不同
+  deepseekKey: '',
+  deepseekModel: 'deepseek-chat',
+  deepseekUrl: 'https://api.deepseek.com/chat/completions',
   geminiKey: '',
   geminiModel: 'gemini-1.5-flash',
   claudeKey: '',
