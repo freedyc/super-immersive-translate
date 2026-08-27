@@ -947,10 +947,12 @@ section('API Key 加密存储');
   // 口令永远只在本地：进了 sync 就经 Google，进了 GitHub 就跟密文一起走
   // 别把断言写得对格式敏感：这两条原本只匹配单行的 set({ [PASSPHRASE_KEY]...，
   // 换行之后就误报了。要认的是「写进 local、没写进 sync」这件事
+  // 口令存取已收进 secrets-store.js（单独成模块以打断与 masterkey.js 的循环依赖）
+  const store = readFileSync('utils/secrets-store.js', 'utf8');
   check('口令存 storage.local',
-    /storage\.local\.set\(\{[\s\S]{0,120}\[PASSPHRASE_KEY\]/.test(secrets));
+    /storage\.local\.set\(\{[\s\S]{0,120}\[PASSPHRASE_KEY\]/.test(store));
   check('口令不写进 storage.sync',
-    !/storage\.sync\.set\([\s\S]{0,120}PASSPHRASE_KEY/.test(secrets));
+    !/storage\.sync\.set\([\s\S]{0,120}PASSPHRASE_KEY/.test(store));
   // 口令存在 storage.local，而设置同步只读 storage.sync——
   // 这是结构性保证，比"检查有没有出现这个字符串"可靠：
   // 同步代码里出现口令是正常的（要用它加密剪贴板），关键是不能被打包上传
@@ -1000,7 +1002,7 @@ section('API Key 加密存储');
   }
   // 写入时要同时更新兼容键，否则老用户在新界面设了口令，剪贴板同步读不到
   check('写口令时同时更新兼容键',
-    /\[PASSPHRASE_KEY\]: value,[\s\S]{0,80}\[LEGACY_PASSPHRASE_KEY\]: value/.test(secrets));
+    /\[PASSPHRASE_KEY\]: value,[\s\S]{0,80}\[LEGACY_PASSPHRASE_KEY\]: value/.test(store));
 
   check('设置页有启用/关闭加密的入口',
     card.includes('enableEncryption') && card.includes('disableEncryption'));
@@ -1410,6 +1412,53 @@ section('剪贴板图片');
     item.includes('revokeObjectURL'));
 }
 
+section('主密钥：全局一把，可导出为恢复密钥');
+{
+  const { readFileSync } = await import('node:fs');
+  const mk = readFileSync('utils/masterkey.js', 'utf8');
+  const secrets = readFileSync('utils/secrets.js', 'utf8');
+  const sync = readFileSync('utils/github-sync.js', 'utf8');
+  const card = readFileSync('options/components/EncryptionCard.tsx', 'utf8');
+
+  // 各处各生成一把 DEK 的话，「保存好这串恢复密钥就能恢复数据」就是假的：
+  // 用户得保存好几串，还分不清哪串对应什么
+  check('API Key 用全局主密钥', /getMasterDek\(passphrase\)/.test(secrets));
+  check('剪贴板同步用同一把主密钥', /getMasterDek\(passphrase\)/.test(sync));
+  check('两处不再各自生成 DEK',
+    !/unwrapDek\(remoteRaw/.test(sync) && !/unwrapDek\(stored\[BLOB_KEY\]/.test(secrets));
+
+  // 主密钥本身绝不能明文落盘
+  check('主密钥以包装形态保存，不明文落盘',
+    /wrapDek\(dek, pass/.test(mk) && !/storage\.sync\.set\(\{ \[MASTER_KEY\]: dek/.test(mk));
+  // 换口令只重新包装主密钥，数据密文不动
+  check('换口令重新包装主密钥', /export async function rewrapMaster/.test(mk));
+  check('secrets 换口令时同步重新包装主密钥',
+    /await rewrapMaster\(oldPassphrase, passphrase\)/.test(secrets));
+
+  const { default: _ } = { default: null };
+  const base32 = mk.match(/const ALPHABET = '([^']+)'/)?.[1] || '';
+  check('恢复密钥字母表去掉易混字符', !/[IO01]/.test(base32) && base32.length === 32);
+
+  check('可导出恢复密钥', /export async function exportRecoveryKey/.test(mk));
+  check('可用恢复密钥重新取得访问权', /export async function restoreFromRecoveryKey/.test(mk));
+  check('恢复时要求同时设置新口令',
+    /if \(!newPassphrase\) throw new Error/.test(mk));
+  // 长度不对就直接报错，而不是拿一把错的密钥去解出乱码
+  check('恢复密钥长度不对时报错', /恢复密钥长度不对/.test(mk));
+
+  // 拿到它等于拿到全部数据，必须让用户郑重保存一次
+  check('界面提示保存恢复密钥', /恢复密钥/.test(card) && /离线保存/.test(card));
+  check('恢复密钥可下载成文件', /downloadRecovery/.test(card));
+  check('界面提供忘记口令后的找回入口', /用恢复密钥恢复/.test(card));
+  // 默认不显示：它等同于全部数据的解密能力
+  check('恢复密钥需主动点击才显示', /\{recovery \?/.test(card) && /显示恢复密钥/.test(card));
+
+  // 口令存取单独成模块以打断循环依赖，且只写 local
+  const store = readFileSync('utils/secrets-store.js', 'utf8');
+  check('口令模块只写 storage.local',
+    /storage\.local\.set/.test(store) && !/storage\.sync\.set/.test(store));
+}
+
 section('信封加密：换口令不能让历史数据失效');
 {
   const {
@@ -1466,7 +1515,7 @@ section('信封加密：换口令不能让历史数据失效');
   check('本机没有旧口令时拒绝换口令，而不是把空值封进去',
     /本机没有当前口令[\s\S]{0,120}LockedError/.test(secrets));
   check('已加密时走 rewrap 而不是整体重新加密',
-    /isEnvelope\(blob\)[\s\S]{0,400}rewrapEnvelope\(blob, oldPassphrase, passphrase\)/.test(secrets));
+    /isEnvelope\(blob\)[\s\S]{0,900}rewrapEnvelope\(blob, oldPassphrase, passphrase\)/.test(secrets));
 }
 
 section('剪贴板：容量裁剪与合并');

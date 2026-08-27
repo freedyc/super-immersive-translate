@@ -289,3 +289,29 @@ export function isEnvelope(payload) {
     && typeof payload === 'object'
     && (payload.v === ENVELOPE_VERSION || payload.v === FORMAT_VERSION);
 }
+
+
+/** 只包装一把密钥，不带数据负载——主密钥用这个形态保存 */
+export async function wrapDek(dek, passphrase) {
+  if (!passphrase) throw new Error('没有设置加密口令');
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const kek = await deriveKek(passphrase, salt, ITERATIONS);
+  const wrapped = await crypto.subtle.wrapKey('raw', dek, kek, { name: 'AES-GCM', iv });
+  return {
+    v: ENVELOPE_VERSION,
+    kdf: 'PBKDF2-SHA256',
+    iterations: ITERATIONS,
+    salt: toBase64(salt),
+    wrappedKey: { iv: toBase64(iv), key: toBase64(wrapped) },
+  };
+}
+
+export function exportRawKey(key) {
+  return crypto.subtle.exportKey('raw', key);
+}
+
+export function importRawKey(raw) {
+  return crypto.subtle.importKey('raw', raw, { name: 'AES-GCM', length: 256 }, true,
+    ['encrypt', 'decrypt']);
+}

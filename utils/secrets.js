@@ -15,7 +15,9 @@
  * 没设口令时保持明文（当前行为），只是设置页会提示。不强制加密的理由：
  * 用户在新设备上没输口令之前，翻译会直接不可用——那比明文更糟。
  */
-import { decryptEnvelope, encryptEnvelope, isEnvelope, rewrapEnvelope, unwrapDek } from './crypto.js';
+import { decryptEnvelope, encryptEnvelope, isEnvelope, rewrapEnvelope } from './crypto.js';
+import { getPassphrase, setPassphrase } from './secrets-store.js';
+import { getMasterDek, rewrapMaster } from './masterkey.js';
 
 /** 需要保护的键。加了新引擎记得同步加进来，verify 有断言盯着 */
 export const SECRET_KEYS = [
@@ -24,23 +26,10 @@ export const SECRET_KEYS = [
 ];
 
 const BLOB_KEY = 'secretsEnc';
-const PASSPHRASE_KEY = 'syncPassphrase';
-/** 剪贴板同步先用了这个键；老用户不该被要求重新设一遍口令 */
-const LEGACY_PASSPHRASE_KEY = 'clipboardSyncPassphrase';
 
-export async function getPassphrase() {
-  const s = await chrome.storage.local.get([PASSPHRASE_KEY, LEGACY_PASSPHRASE_KEY]);
-  return s[PASSPHRASE_KEY] || s[LEGACY_PASSPHRASE_KEY] || '';
-}
-
-export async function setPassphrase(value) {
-  // 同时写兼容键：整个扩展只有一个口令的概念，但剪贴板同步先落地、
-  // 用的是旧键名。两边各写各的会出现「在这个界面设了，那个功能却说没设」
-  await chrome.storage.local.set({
-    [PASSPHRASE_KEY]: value,
-    [LEGACY_PASSPHRASE_KEY]: value,
-  });
-}
+// 口令的存取在 secrets-store.js（单独一个模块以打断与 masterkey.js 的循环依赖），
+// 这里原样转发，对外仍是同一套 API
+export { getPassphrase, setPassphrase };
 
 /**
  * 读出全部密钥。
@@ -92,12 +81,9 @@ export async function saveSecrets(patch) {
     );
     return;
   }
-  // 复用信封里已有的数据密钥：每次换一把新 DEK 的话，旧密文又会变成
-  // 解不开的，那就等于没用信封
-  const stored = await chrome.storage.sync.get(BLOB_KEY);
-  const dek = isEnvelope(stored[BLOB_KEY]) && stored[BLOB_KEY].v === 2
-    ? await unwrapDek(stored[BLOB_KEY], passphrase).catch(() => undefined)
-    : undefined;
+  // 用全局唯一的主密钥。各处各生成一把的话，「保存好这串恢复密钥就能
+  // 恢复数据」就不成立了——用户得保存好几串，还分不清哪串对应什么
+  const dek = await getMasterDek(passphrase);
   await chrome.storage.sync.set({
     [BLOB_KEY]: await encryptEnvelope(next, passphrase, dek),
   });
@@ -138,6 +124,8 @@ export async function enableEncryption(passphrase) {
       err.name = 'LockedError';
       throw err;
     }
+    // 主密钥和这份密文的包装都要换成新口令；数据密文不动
+    await rewrapMaster(oldPassphrase, passphrase);
     await chrome.storage.sync.set({
       [BLOB_KEY]: await rewrapEnvelope(blob, oldPassphrase, passphrase),
     });
@@ -148,7 +136,10 @@ export async function enableEncryption(passphrase) {
 
   const current = await loadSecretsSafe();
   await setPassphrase(passphrase);
-  await chrome.storage.sync.set({ [BLOB_KEY]: await encryptEnvelope(current, passphrase) });
+  const dek = await getMasterDek(passphrase);
+  await chrome.storage.sync.set({
+    [BLOB_KEY]: await encryptEnvelope(current, passphrase, dek),
+  });
   await chrome.storage.sync.remove(SECRET_KEYS);
 }
 

@@ -6,11 +6,12 @@
  * （那会跟密文一起走，加密就白做了）。代价是换设备要手输一次口令。
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Eye, EyeOff, KeyRound, Lock, ShieldCheck, TriangleAlert, Wand2 } from 'lucide-react';
+import { Download, Eye, EyeOff, KeyRound, Lock, ShieldCheck, TriangleAlert, Wand2 } from 'lucide-react';
 import { generateRecoveryKey } from '../../utils/crypto.js';
 import {
   disableEncryption, enableEncryption, getPassphrase, isEncryptedNow,
 } from '../../utils/secrets.js';
+import { exportRecoveryKey, restoreFromRecoveryKey } from '../../utils/masterkey.js';
 
 export function EncryptionCard({ settings, update }: {
   settings: Record<string, unknown>;
@@ -21,6 +22,9 @@ export function EncryptionCard({ settings, update }: {
   const [reveal, setReveal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
+  /** 恢复密钥只在用户主动点击后显示——它等同于全部数据的解密能力 */
+  const [recovery, setRecovery] = useState('');
+  const [restoreKey, setRestoreKey] = useState('');
 
   const refresh = useCallback(async () => {
     setPassphrase((await getPassphrase()) as string);
@@ -37,6 +41,50 @@ export function EncryptionCard({ settings, update }: {
       setMsg('已加密。明文副本已从存储中删除');
     } catch (err) {
       setMsg((err as Error)?.message || '启用失败');
+    } finally { setBusy(false); }
+  };
+
+  const showRecovery = async () => {
+    setBusy(true);
+    try {
+      setRecovery(await exportRecoveryKey(passphrase.trim()));
+      setMsg('');
+    } catch (err) {
+      setMsg((err as Error)?.message || '导出失败');
+    } finally { setBusy(false); }
+  };
+
+  const downloadRecovery = () => {
+    const blob = new Blob([
+      '超级翻译 · 恢复密钥\n',
+      '════════════════════════════════════════\n\n',
+      `${recovery}\n\n`,
+      '这串密钥可以解开你全部的加密数据（API Key、剪贴板同步内容），\n',
+      '即使忘记口令、或换到一台从未输过口令的设备也能恢复。\n\n',
+      '· 请离线保存：密码管理器、打印出来、或存进加密的本地文件\n',
+      '· 不要放进会被同步的位置——那等于把钥匙和密文一起交出去\n',
+      '· 拿到它的人可以解开你的全部数据\n\n',
+      `生成时间：${new Date().toLocaleString('zh-CN')}\n`,
+    ], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '超级翻译-恢复密钥.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const restore = async () => {
+    if (!restoreKey.trim()) { setMsg('请先粘贴恢复密钥'); return; }
+    if (!passphrase.trim()) { setMsg('请同时设置一个新口令'); return; }
+    setBusy(true);
+    try {
+      await restoreFromRecoveryKey(restoreKey.trim(), passphrase.trim());
+      await refresh();
+      setRestoreKey('');
+      setMsg('已用恢复密钥恢复访问，历史数据现在可以解密了');
+    } catch (err) {
+      setMsg((err as Error)?.message || '恢复失败，请检查密钥是否完整');
     } finally { setBusy(false); }
   };
 
@@ -114,14 +162,69 @@ export function EncryptionCard({ settings, update }: {
         {msg && <span className="text-xs text-base-content/60">{msg}</span>}
       </div>
 
-      <div className="flex items-start gap-1.5 text-xs text-base-content/50">
-        <KeyRound className="w-3.5 h-3.5 shrink-0 mt-px" />
-        <span>
-          「生成」会造一串 260 位随机密钥当口令用。存进密码管理器，
-          在别的设备粘贴同一串即可。<b className="text-warning">口令遗失则密钥无法恢复</b>，
-          需要重新填写各引擎的 Key。
-        </span>
-      </div>
+      {encrypted && (
+        <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 flex flex-col gap-2">
+          <div className="flex items-start gap-1.5 text-xs">
+            <KeyRound className="w-3.5 h-3.5 shrink-0 mt-px text-warning" />
+            <span className="text-base-content/70">
+              <b>恢复密钥</b>是全局唯一的一把主密钥，
+              你的 API Key 和剪贴板同步内容都由它加密。
+              <b className="text-warning">拿到它就能恢复全部数据</b>——
+              即使忘了口令、或换到一台从没输过口令的设备。
+              务必离线保存一份；换口令不会让它失效。
+            </span>
+          </div>
+
+          {recovery ? (
+            <>
+              <code className="block text-xs font-mono break-all bg-base-200 rounded p-2 select-all">
+                {recovery}
+              </code>
+              <div className="flex gap-2 flex-wrap">
+                <button className="btn btn-xs btn-primary gap-1" onClick={downloadRecovery}>
+                  <Download className="w-3 h-3" />
+                  下载为文件
+                </button>
+                <button
+                  className="btn btn-xs btn-ghost"
+                  onClick={() => navigator.clipboard.writeText(recovery)}
+                >
+                  复制
+                </button>
+                <button className="btn btn-xs btn-ghost" onClick={() => setRecovery('')}>
+                  我已保存，隐藏
+                </button>
+              </div>
+            </>
+          ) : (
+            <button className="btn btn-xs btn-outline self-start" disabled={busy} onClick={showRecovery}>
+              显示恢复密钥
+            </button>
+          )}
+        </div>
+      )}
+
+      <details className="collapse collapse-arrow bg-base-200/40 rounded-lg">
+        <summary className="collapse-title min-h-0 py-2 text-xs font-medium">
+          忘记口令？用恢复密钥找回
+        </summary>
+        <div className="collapse-content flex flex-col gap-2">
+          <p className="text-xs text-base-content/50">
+            粘贴之前保存的恢复密钥，并在上面填一个新口令。
+            恢复后全部历史数据（含已上传的）立刻可读。
+          </p>
+          <textarea
+            className="textarea textarea-sm font-mono text-xs"
+            rows={2}
+            placeholder="粘贴恢复密钥…"
+            value={restoreKey}
+            onChange={(e) => setRestoreKey(e.target.value)}
+          />
+          <button className="btn btn-sm btn-outline self-start" disabled={busy} onClick={restore}>
+            用恢复密钥恢复
+          </button>
+        </div>
+      </details>
 
       {encrypted && !passphrase && (
         <div className="flex items-start gap-1.5 text-xs text-warning">

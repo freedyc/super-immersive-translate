@@ -1,6 +1,7 @@
 // GitHub 同步：只负责"读远端 / 写远端 / 合并"，不做调度决策（调度在 background）。
 import { pick } from './defaults.js';
-import { decryptEnvelope, encryptEnvelope, isEnvelope, unwrapDek } from './crypto.js';
+import { decryptEnvelope, encryptEnvelope, isEnvelope } from './crypto.js';
+import { getMasterDek } from './masterkey.js';
 import { getPassphrase } from './secrets.js';
 import { trim as trimClipboard } from './clipboard.js';
 // 2.1 学习数据的合并逻辑写在 TypeScript 里：这个文件历史上最常见的 bug 就是
@@ -515,12 +516,9 @@ async function syncClipboardNow() {
   const remoteRaw = await pullRemoteFile(CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH)
     .catch(() => null);
 
-  // 复用远端信封里的数据密钥：换口令时 rewrap 保持数据密文不变，
-  // 若这里每次新生成 DEK，远端历史密文又会变成解不开的
-  let dek;
-  if (isEnvelope(remoteRaw) && remoteRaw.v === 2) {
-    dek = await unwrapDek(remoteRaw, passphrase).catch(() => undefined);
-  }
+  // 用全局唯一的主密钥，跟 API Key 那份密文同一把——
+  // 这样一串恢复密钥就能覆盖全部加密内容
+  const dek = await getMasterDek(passphrase);
 
   let remote = [];
   if (isEnvelope(remoteRaw)) {
