@@ -34,7 +34,12 @@ export async function getPassphrase() {
 }
 
 export async function setPassphrase(value) {
-  await chrome.storage.local.set({ [PASSPHRASE_KEY]: value });
+  // 同时写兼容键：整个扩展只有一个口令的概念，但剪贴板同步先落地、
+  // 用的是旧键名。两边各写各的会出现「在这个界面设了，那个功能却说没设」
+  await chrome.storage.local.set({
+    [PASSPHRASE_KEY]: value,
+    [LEGACY_PASSPHRASE_KEY]: value,
+  });
 }
 
 /**

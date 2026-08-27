@@ -892,9 +892,11 @@ section('剪贴板同步：端到端加密');
   // 口令绝不能进 storage.sync —— 那会同步到 Google 账号，
   // 密文给 GitHub、钥匙给 Google，就谈不上端到端了
   const uiSrc = readFileSync('options/components/ClipboardSyncCard.tsx', 'utf8');
-  check('口令只存 storage.local，不进 sync',
-    uiSrc.includes('storage.local.set({ clipboardSyncPassphrase')
-    && !/storage\.sync\.set\([^)]*clipboardSyncPassphrase/.test(uiSrc));
+  // 口令的读写已收归 utils/secrets.js 唯一出入口（那里另有断言保证只写 local）。
+  // 这条原本检查卡片自己直写 clipboardSyncPassphrase——统一之后就该反过来查：
+  // 卡片**不应**再自己碰存储
+  check('剪贴板卡片通过统一入口存取口令，不自己写存储',
+    uiSrc.includes('persistPassphrase') && !uiSrc.includes('storage.local.set'));
   check('defaults 里没有 clipboardSyncPassphrase（它不属于可同步设置）',
     !readFileSync('utils/defaults.js', 'utf8').includes('clipboardSyncPassphrase'));
 }
@@ -940,9 +942,12 @@ section('API Key 加密存储');
   }
 
   // 口令永远只在本地：进了 sync 就经 Google，进了 GitHub 就跟密文一起走
-  check('口令存 storage.local', /chrome\.storage\.local\.set\(\{ \[PASSPHRASE_KEY\]/.test(secrets));
+  // 别把断言写得对格式敏感：这两条原本只匹配单行的 set({ [PASSPHRASE_KEY]...，
+  // 换行之后就误报了。要认的是「写进 local、没写进 sync」这件事
+  check('口令存 storage.local',
+    /storage\.local\.set\(\{[\s\S]{0,120}\[PASSPHRASE_KEY\]/.test(secrets));
   check('口令不写进 storage.sync',
-    !/storage\.sync\.set\([^)]*PASSPHRASE_KEY/.test(secrets));
+    !/storage\.sync\.set\([\s\S]{0,120}PASSPHRASE_KEY/.test(secrets));
   // 口令存在 storage.local，而设置同步只读 storage.sync——
   // 这是结构性保证，比"检查有没有出现这个字符串"可靠：
   // 同步代码里出现口令是正常的（要用它加密剪贴板），关键是不能被打包上传
@@ -978,6 +983,21 @@ section('API Key 加密存储');
   check('导入备份时凭证走加密层，不直写 sync',
     /await saveSecrets\(secrets\)/.test(data)
     && /for \(const key of SECRET_KEYS\)[\s\S]{0,200}delete incoming\[key\]/.test(data));
+
+  // 全扩展只有一个口令。曾经有过两个：剪贴板同步用 clipboardSyncPassphrase，
+  // API Key 加密用 syncPassphrase，两个界面各写各的——在这边设了口令，
+  // 那边却报「需要先设置加密口令」。口令的读写必须只有一个出入口。
+  const OTHER_FILES = ['utils/github-sync.js', 'options/components/ClipboardSyncCard.tsx',
+    'options/components/EncryptionCard.tsx'];
+  for (const f of OTHER_FILES) {
+    const src = readFileSync(f, 'utf8');
+    check(`${f} 不直接读写口令存储键`,
+      !src.includes("'clipboardSyncPassphrase'") && !src.includes("'syncPassphrase'"),
+      '应通过 utils/secrets.js 的 getPassphrase/setPassphrase');
+  }
+  // 写入时要同时更新兼容键，否则老用户在新界面设了口令，剪贴板同步读不到
+  check('写口令时同时更新兼容键',
+    /\[PASSPHRASE_KEY\]: value,[\s\S]{0,80}\[LEGACY_PASSPHRASE_KEY\]: value/.test(secrets));
 
   check('设置页有启用/关闭加密的入口',
     card.includes('enableEncryption') && card.includes('disableEncryption'));

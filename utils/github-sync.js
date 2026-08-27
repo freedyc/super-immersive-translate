@@ -1,6 +1,7 @@
 // GitHub 同步：只负责"读远端 / 写远端 / 合并"，不做调度决策（调度在 background）。
 import { pick } from './defaults.js';
 import { decryptJson, encryptJson, isEncrypted } from './crypto.js';
+import { getPassphrase } from './secrets.js';
 import { trim as trimClipboard } from './clipboard.js';
 // 2.1 学习数据的合并逻辑写在 TypeScript 里：这个文件历史上最常见的 bug 就是
 // 新增字段忘了加进合并函数、同步一次字段就被静默丢掉（pos / ipa 都发生过），
@@ -477,8 +478,9 @@ const CLIPBOARD_REPO_PATH = 'clipboard.enc.json';
  * 也就谈不上端到端加密了。代价是换设备要重新输入一次，这是应该付的代价。
  */
 async function getClipboardPassphrase() {
-  const { clipboardSyncPassphrase } = await chrome.storage.local.get('clipboardSyncPassphrase');
-  return clipboardSyncPassphrase || '';
+  // 全扩展只有一个口令（utils/secrets.js 是唯一出入口）。
+  // 剪贴板同步和 API Key 加密共用它——让用户为同一件事记两个口令没有道理
+  return getPassphrase();
 }
 
 /**

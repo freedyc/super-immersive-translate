@@ -9,6 +9,8 @@
 import { useEffect, useState } from 'react';
 import { Eye, EyeOff, KeyRound, ShieldCheck, TriangleAlert, Wand2 } from 'lucide-react';
 import { generateRecoveryKey } from '../../utils/crypto.js';
+// 起别名：组件里的 useState setter 也叫 setPassphrase，直接导入会被它遮住
+import { getPassphrase, setPassphrase as persistPassphrase } from '../../utils/secrets.js';
 
 export function ClipboardSyncCard({ enabled, onToggle }: {
   enabled: boolean;
@@ -20,15 +22,16 @@ export function ClipboardSyncCard({ enabled, onToggle }: {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    chrome.storage.local.get('clipboardSyncPassphrase').then((s) => {
-      setPassphrase((s.clipboardSyncPassphrase as string) || '');
+    // 走统一入口：全扩展只有一个口令，跟「加密与同步内容」那张卡是同一个
+    getPassphrase().then((v) => {
+      setPassphrase(v as string);
       setLoaded(true);
     });
   }, []);
 
   const save = async (value: string) => {
     setPassphrase(value);
-    await chrome.storage.local.set({ clipboardSyncPassphrase: value });
+    await persistPassphrase(value);
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
   };
