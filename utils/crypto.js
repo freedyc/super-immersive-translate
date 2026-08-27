@@ -21,6 +21,8 @@ const ITERATIONS = 600000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;   // GCM 的标准 IV 长度，不要改
 const FORMAT_VERSION = 1;
+/** 信封格式：数据用随机 DEK 加密，DEK 再被口令派生的 KEK 包起来 */
+const ENVELOPE_VERSION = 2;
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -135,4 +137,155 @@ export function generateRecoveryKey() {
   const bytes = crypto.getRandomValues(new Uint8Array(CHARS));
   const chars = [...bytes].map((b) => ALPHABET[b % ALPHABET.length]);
   return chars.join('').replace(/(.{5})(?=.)/g, '$1-');
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 信封加密（v2）
+//
+// v1 直接用口令派生的密钥加密数据，于是**换口令就意味着旧密文再也解不开**——
+// 已经同步到 GitHub 的剪贴板密文会就此搁浅。这不是可以接受的取舍：
+// 「以前上传的数据永远解得开」才是正确行为。
+//
+// 信封的做法：数据始终用一把随机生成的数据密钥（DEK）加密；口令派生的
+// 密钥（KEK）只负责把 DEK 包起来。换口令时只需用新 KEK 重新包一次 DEK，
+// 数据密文一个字节都不用动，历史数据自然仍然可读。
+//
+// 这也是密码管理器的通行做法。
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** 从口令派生包装密钥。只用来包/解 DEK，不直接碰数据 */
+async function deriveKek(passphrase, salt, iterations) {
+  const base = await crypto.subtle.importKey(
+    'raw', enc.encode(passphrase), 'PBKDF2', false, ['deriveKey'],
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['wrapKey', 'unwrapKey'],
+  );
+}
+
+function newDek() {
+  return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt']);
+}
+
+/**
+ * 用信封加密数据。
+ *
+ * @param {any} data
+ * @param {string} passphrase
+ * @param {CryptoKey} [dek] 复用已有的数据密钥；不传就新生成一把。
+ *   同一份数据源的后续写入应当复用，否则每次换 DEK，
+ *   旧密文就又变成解不开的了——那等于没解决问题
+ */
+export async function encryptEnvelope(data, passphrase, dek) {
+  if (!passphrase) throw new Error('没有设置加密口令');
+  const key = dek || await newDek();
+
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const wrapIv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const kek = await deriveKek(passphrase, salt, ITERATIONS);
+  const wrapped = await crypto.subtle.wrapKey('raw', key, kek, { name: 'AES-GCM', iv: wrapIv });
+
+  const dataIv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: dataIv }, key, enc.encode(JSON.stringify(data)),
+  );
+
+  return {
+    v: ENVELOPE_VERSION,
+    kdf: 'PBKDF2-SHA256',
+    iterations: ITERATIONS,
+    salt: toBase64(salt),
+    wrappedKey: { iv: toBase64(wrapIv), key: toBase64(wrapped) },
+    data: { iv: toBase64(dataIv), ciphertext: toBase64(ciphertext) },
+  };
+}
+
+/** 从信封里取出数据密钥。换口令、追加写入都需要它 */
+export async function unwrapDek(envelope, passphrase) {
+  if (!passphrase) throw new Error('没有设置加密口令');
+  const kek = await deriveKek(
+    passphrase,
+    fromBase64(envelope.salt),
+    Number(envelope.iterations) || ITERATIONS,
+  );
+  try {
+    return await crypto.subtle.unwrapKey(
+      'raw',
+      fromBase64(envelope.wrappedKey.key),
+      kek,
+      { name: 'AES-GCM', iv: fromBase64(envelope.wrappedKey.iv) },
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt'],
+    );
+  } catch {
+    const err = new Error('口令不正确，或密文已被修改');
+    err.name = 'WrongPassphraseError';
+    throw err;
+  }
+}
+
+/**
+ * 解开信封。同时兼容 v1 旧密文——老用户的数据不能因为升级就打不开。
+ */
+export async function decryptEnvelope(envelope, passphrase) {
+  if (!envelope || typeof envelope !== 'object') throw new Error('密文格式不对');
+  if (envelope.v === FORMAT_VERSION) return decryptJson(envelope, passphrase);
+  if (envelope.v !== ENVELOPE_VERSION) {
+    throw new Error(`不认识的加密格式版本 ${envelope.v}`);
+  }
+
+  const dek = await unwrapDek(envelope, passphrase);
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: fromBase64(envelope.data.iv) },
+      dek,
+      fromBase64(envelope.data.ciphertext),
+    );
+    return JSON.parse(dec.decode(plain));
+  } catch {
+    const err = new Error('密文已被修改');
+    err.name = 'WrongPassphraseError';
+    throw err;
+  }
+}
+
+/**
+ * 换口令：只把 DEK 重新包一遍，**数据密文原样保留**。
+ *
+ * 这正是信封存在的意义——历史数据不需要重新加密，也就不存在
+ * 「换了口令旧数据就打不开」这件事。
+ */
+export async function rewrapEnvelope(envelope, oldPassphrase, newPassphrase) {
+  if (!newPassphrase) throw new Error('新口令不能为空');
+  // v1 没有 DEK 可包，只能整体解密后重新用信封封一次
+  if (envelope?.v === FORMAT_VERSION) {
+    const data = await decryptJson(envelope, oldPassphrase);
+    return encryptEnvelope(data, newPassphrase);
+  }
+
+  const dek = await unwrapDek(envelope, oldPassphrase);
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
+  const wrapIv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
+  const kek = await deriveKek(newPassphrase, salt, ITERATIONS);
+  const wrapped = await crypto.subtle.wrapKey('raw', dek, kek, { name: 'AES-GCM', iv: wrapIv });
+
+  return {
+    ...envelope,
+    salt: toBase64(salt),
+    iterations: ITERATIONS,
+    wrappedKey: { iv: toBase64(wrapIv), key: toBase64(wrapped) },
+  };
+}
+
+/** 是不是本模块产出的密文（v1 或 v2 都算） */
+export function isEnvelope(payload) {
+  return !!payload
+    && typeof payload === 'object'
+    && (payload.v === ENVELOPE_VERSION || payload.v === FORMAT_VERSION);
 }

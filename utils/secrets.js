@@ -15,7 +15,7 @@
  * 没设口令时保持明文（当前行为），只是设置页会提示。不强制加密的理由：
  * 用户在新设备上没输口令之前，翻译会直接不可用——那比明文更糟。
  */
-import { decryptJson, encryptJson, isEncrypted } from './crypto.js';
+import { decryptEnvelope, encryptEnvelope, isEnvelope, rewrapEnvelope, unwrapDek } from './crypto.js';
 
 /** 需要保护的键。加了新引擎记得同步加进来，verify 有断言盯着 */
 export const SECRET_KEYS = [
@@ -55,7 +55,7 @@ export async function loadSecrets() {
   const stored = await chrome.storage.sync.get([BLOB_KEY, ...SECRET_KEYS]);
   const blob = stored[BLOB_KEY];
 
-  if (!isEncrypted(blob)) {
+  if (!isEnvelope(blob)) {
     return Object.fromEntries(SECRET_KEYS.map((k) => [k, stored[k] || '']));
   }
 
@@ -65,7 +65,7 @@ export async function loadSecrets() {
     err.name = 'LockedError';
     throw err;
   }
-  const plain = await decryptJson(blob, passphrase);
+  const plain = await decryptEnvelope(blob, passphrase);
   return Object.fromEntries(SECRET_KEYS.map((k) => [k, plain[k] || '']));
 }
 
@@ -92,7 +92,15 @@ export async function saveSecrets(patch) {
     );
     return;
   }
-  await chrome.storage.sync.set({ [BLOB_KEY]: await encryptJson(next, passphrase) });
+  // 复用信封里已有的数据密钥：每次换一把新 DEK 的话，旧密文又会变成
+  // 解不开的，那就等于没用信封
+  const stored = await chrome.storage.sync.get(BLOB_KEY);
+  const dek = isEnvelope(stored[BLOB_KEY]) && stored[BLOB_KEY].v === 2
+    ? await unwrapDek(stored[BLOB_KEY], passphrase).catch(() => undefined)
+    : undefined;
+  await chrome.storage.sync.set({
+    [BLOB_KEY]: await encryptEnvelope(next, passphrase, dek),
+  });
   // 明文副本必须清掉，否则加密等于没做
   await chrome.storage.sync.remove(SECRET_KEYS);
 }
@@ -100,18 +108,47 @@ export async function saveSecrets(patch) {
 /** 当前是不是已经加密存储 */
 export async function isEncryptedNow() {
   const stored = await chrome.storage.sync.get(BLOB_KEY);
-  return isEncrypted(stored[BLOB_KEY]);
+  return isEnvelope(stored[BLOB_KEY]);
 }
 
 /**
  * 启用加密：把现有明文 Key 搬进密文，并删掉明文副本。
  * 幂等——已经加密过再调一次只是用新口令重新封一遍。
  */
+/**
+ * 启用加密，或换成新口令。
+ *
+ * 已经加密过时走 rewrapEnvelope：只把数据密钥重新包一遍，**数据密文不动**。
+ * 这样换口令不会让任何历史密文失效——包括别处（比如剪贴板）用同一把
+ * 数据密钥加密的内容。
+ *
+ * 首次启用时才做一次真正的加密。
+ */
 export async function enableEncryption(passphrase) {
   if (!passphrase) throw new Error('口令不能为空');
+  const stored = await chrome.storage.sync.get(BLOB_KEY);
+  const blob = stored[BLOB_KEY];
+
+  if (isEnvelope(blob)) {
+    const oldPassphrase = await getPassphrase();
+    if (!oldPassphrase) {
+      // 这台机器没有旧口令，解不出现有密钥。若继续，loadSecretsSafe 会返回
+      // 一堆空串并被当成"新内容"封进去，用户的 Key 就此丢失——必须拦住
+      const err = new Error('本机没有当前口令，无法换新口令。请先输入现有口令，或关闭加密后重新设置');
+      err.name = 'LockedError';
+      throw err;
+    }
+    await chrome.storage.sync.set({
+      [BLOB_KEY]: await rewrapEnvelope(blob, oldPassphrase, passphrase),
+    });
+    await setPassphrase(passphrase);
+    await chrome.storage.sync.remove(SECRET_KEYS);
+    return;
+  }
+
   const current = await loadSecretsSafe();
   await setPassphrase(passphrase);
-  await chrome.storage.sync.set({ [BLOB_KEY]: await encryptJson(current, passphrase) });
+  await chrome.storage.sync.set({ [BLOB_KEY]: await encryptEnvelope(current, passphrase) });
   await chrome.storage.sync.remove(SECRET_KEYS);
 }
 

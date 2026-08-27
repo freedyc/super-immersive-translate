@@ -887,7 +887,10 @@ section('剪贴板同步：端到端加密');
   const syncSrc = readFileSync('utils/github-sync.js', 'utf8');
   check('同步代码里没有口令就抛错，不会走到上传',
     /if \(!passphrase\)[\s\S]{0,200}throw new Error/.test(syncSrc));
-  check('剪贴板推送的是 encryptJson 的结果', /encryptJson\(final, passphrase\)/.test(syncSrc));
+  // 推送的必须是信封，且复用远端已有的数据密钥——每次新生成 DEK 的话，
+  // 换口令时 rewrap 只能救最后一次，之前的远端密文又打不开了
+  check('剪贴板推送信封密文并复用数据密钥',
+    /encryptEnvelope\(final, passphrase, dek\)/.test(syncSrc));
 
   // 口令绝不能进 storage.sync —— 那会同步到 Google 账号，
   // 密文给 GitHub、钥匙给 Google，就谈不上端到端了
@@ -1405,6 +1408,65 @@ section('剪贴板图片');
     item.includes("blob.type !== 'image/png'") && item.includes("'image/png'"));
   check('缩略图的 blob URL 会被撤销（否则翻几次列表就攒一堆）',
     item.includes('revokeObjectURL'));
+}
+
+section('信封加密：换口令不能让历史数据失效');
+{
+  const {
+    encryptEnvelope, decryptEnvelope, rewrapEnvelope, unwrapDek, isEnvelope, encryptJson,
+  } = await import('../utils/crypto.js');
+
+  const data = { keys: ['sk-live-secret', 'ghp-token'] };
+  const box = await encryptEnvelope(data, '旧口令');
+
+  check('信封里没有明文残留', !JSON.stringify(box).includes('sk-live-secret'));
+  check('数据密钥被包装后随信封保存', !!box.wrappedKey?.key && !!box.wrappedKey?.iv);
+  check('原口令能解开', JSON.stringify(await decryptEnvelope(box, '旧口令')) === JSON.stringify(data));
+
+  // 这一节存在的全部理由：v1 直接用口令派生密钥加密数据，换口令后
+  // 已经上传到 GitHub 的密文就永远打不开了。信封把这件事拆开——
+  // 换口令只重新包装数据密钥，数据密文一个字节都不动
+  const rotated = await rewrapEnvelope(box, '旧口令', '新口令');
+  check('换口令后数据密文一字未动',
+    rotated.data.ciphertext === box.data.ciphertext);
+  check('换口令后新口令能解开**旧**数据',
+    JSON.stringify(await decryptEnvelope(rotated, '新口令')) === JSON.stringify(data));
+  check('包装部分确实换了（不是什么都没做）',
+    rotated.wrappedKey.key !== box.wrappedKey.key && rotated.salt !== box.salt);
+
+  let stale = null;
+  try { await decryptEnvelope(rotated, '旧口令'); } catch (e) { stale = e.name; }
+  check('旧口令换掉之后不再有效', stale === 'WrongPassphraseError');
+
+  // 追加写入必须复用同一把数据密钥，否则每次写都换 DEK，
+  // 换口令时 rewrap 只能救最后一次，之前的又打不开了
+  const dek = await unwrapDek(box, '旧口令');
+  const appended = await encryptEnvelope({ keys: ['new'] }, '旧口令', dek);
+  const sameDek = await unwrapDek(appended, '旧口令');
+  const raw = async (k) => new Uint8Array(await crypto.subtle.exportKey('raw', k)).join();
+  check('复用数据密钥写入后仍是同一把', await raw(dek) === await raw(sameDek));
+
+  let tampered = null;
+  const bad = { ...box, data: { ...box.data, ciphertext: `${box.data.ciphertext.slice(0, -4)}AAAA` } };
+  try { await decryptEnvelope(bad, '旧口令'); } catch (e) { tampered = e.name; }
+  check('密文被篡改时解密失败', tampered === 'WrongPassphraseError');
+
+  // 老用户的 v1 密文不能因为升级就打不开
+  const v1 = await encryptJson(data, '旧口令');
+  check('仍能读 v1 旧密文',
+    JSON.stringify(await decryptEnvelope(v1, '旧口令')) === JSON.stringify(data));
+  const migrated = await rewrapEnvelope(v1, '旧口令', '新口令');
+  check('v1 密文换口令后升级成信封并可解',
+    migrated.v === 2
+    && JSON.stringify(await decryptEnvelope(migrated, '新口令')) === JSON.stringify(data));
+  check('isEnvelope 认得两种版本', isEnvelope(box) && isEnvelope(v1) && !isEnvelope([1, 2]));
+
+  // 没有旧口令的设备换新口令，会把一堆空值封进去，等于丢光密钥——必须拦住
+  const secrets = (await import('node:fs')).readFileSync('utils/secrets.js', 'utf8');
+  check('本机没有旧口令时拒绝换口令，而不是把空值封进去',
+    /本机没有当前口令[\s\S]{0,120}LockedError/.test(secrets));
+  check('已加密时走 rewrap 而不是整体重新加密',
+    /isEnvelope\(blob\)[\s\S]{0,400}rewrapEnvelope\(blob, oldPassphrase, passphrase\)/.test(secrets));
 }
 
 section('剪贴板：容量裁剪与合并');

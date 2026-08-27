@@ -1,6 +1,6 @@
 // GitHub 同步：只负责"读远端 / 写远端 / 合并"，不做调度决策（调度在 background）。
 import { pick } from './defaults.js';
-import { decryptJson, encryptJson, isEncrypted } from './crypto.js';
+import { decryptEnvelope, encryptEnvelope, isEnvelope, unwrapDek } from './crypto.js';
 import { getPassphrase } from './secrets.js';
 import { trim as trimClipboard } from './clipboard.js';
 // 2.1 学习数据的合并逻辑写在 TypeScript 里：这个文件历史上最常见的 bug 就是
@@ -515,11 +515,18 @@ async function syncClipboardNow() {
   const remoteRaw = await pullRemoteFile(CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH)
     .catch(() => null);
 
+  // 复用远端信封里的数据密钥：换口令时 rewrap 保持数据密文不变，
+  // 若这里每次新生成 DEK，远端历史密文又会变成解不开的
+  let dek;
+  if (isEnvelope(remoteRaw) && remoteRaw.v === 2) {
+    dek = await unwrapDek(remoteRaw, passphrase).catch(() => undefined);
+  }
+
   let remote = [];
-  if (isEncrypted(remoteRaw)) {
+  if (isEnvelope(remoteRaw)) {
     // 口令不对时**不要**用本地数据覆盖远端：那会把另一台设备的记录全删掉。
     // 让错误冒上去，用户看到的是"口令不对"，而不是数据悄悄消失
-    remote = await decryptJson(remoteRaw, passphrase);
+    remote = await decryptEnvelope(remoteRaw, passphrase);
   } else if (Array.isArray(remoteRaw) && remoteRaw.length > 0) {
     throw new Error('远端剪贴板文件不是本扩展加密的格式，已停止同步以免覆盖它');
   }
@@ -532,9 +539,9 @@ async function syncClipboardNow() {
     // 推送时再与刚拉到的远端合一次（应对 409 重试），同样要先解密
     async (mine, remoteAtPush) => {
       let theirs = [];
-      if (isEncrypted(remoteAtPush)) theirs = await decryptJson(remoteAtPush, passphrase);
+      if (isEnvelope(remoteAtPush)) theirs = await decryptEnvelope(remoteAtPush, passphrase);
       const final = mergeClipboard(mine, Array.isArray(theirs) ? theirs : [], clipboardMaxItems);
-      return encryptJson(final, passphrase);
+      return encryptEnvelope(final, passphrase, dek);
     },
     merged,
     'Update clipboard (encrypted)',
