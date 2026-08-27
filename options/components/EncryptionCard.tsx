@@ -12,6 +12,8 @@ import {
   disableEncryption, enableEncryption, getPassphrase, isEncryptedNow,
 } from '../../utils/secrets.js';
 import { exportRecoveryKey, restoreFromRecoveryKey } from '../../utils/masterkey.js';
+import { rotateAll } from '../../utils/rotate.js';
+import { clipboardCiphertext } from '../../utils/github-sync.js';
 
 export function EncryptionCard({ settings, update }: {
   settings: Record<string, unknown>;
@@ -85,6 +87,31 @@ export function EncryptionCard({ settings, update }: {
       setMsg('已用恢复密钥恢复访问，历史数据现在可以解密了');
     } catch (err) {
       setMsg((err as Error)?.message || '恢复失败，请检查密钥是否完整');
+    } finally { setBusy(false); }
+  };
+
+  /**
+   * 换一把新主密钥。旧的恢复密钥立刻作废——泄露时用这个。
+   * 跟换口令不同：所有数据都要重新加密一遍，所以要用户明确确认。
+   */
+  const rotate = async () => {
+    if (!confirm(
+      '将生成新的恢复密钥，旧的立刻作废。\n\n'
+      + '所有加密数据会用新密钥重新加密一遍。'
+      + '若已开启剪贴板同步，需要能连上 GitHub，否则本次不做任何改动。\n\n'
+      + '确定继续？',
+    )) return;
+
+    setBusy(true);
+    try {
+      const next = await rotateAll(passphrase.trim(), {
+        // 只有开了剪贴板同步才需要连远端；没开就只换本机那份
+        clipboardSync: settings.githubSyncClipboard ? clipboardCiphertext : undefined,
+      });
+      setRecovery(next);
+      setMsg('已换新密钥。请立刻保存下面这串新的恢复密钥，旧的已作废');
+    } catch (err) {
+      setMsg(`换密钥失败，未做任何改动：${(err as Error)?.message || ''}`);
     } finally { setBusy(false); }
   };
 
@@ -194,12 +221,20 @@ export function EncryptionCard({ settings, update }: {
                 <button className="btn btn-xs btn-ghost" onClick={() => setRecovery('')}>
                   我已保存，隐藏
                 </button>
+                <button className="btn btn-xs btn-ghost text-warning" disabled={busy} onClick={rotate}>
+                  重新生成
+                </button>
               </div>
             </>
           ) : (
-            <button className="btn btn-xs btn-outline self-start" disabled={busy} onClick={showRecovery}>
-              显示恢复密钥
-            </button>
+            <div className="flex gap-2">
+              <button className="btn btn-xs btn-outline" disabled={busy} onClick={showRecovery}>
+                显示恢复密钥
+              </button>
+              <button className="btn btn-xs btn-ghost text-warning" disabled={busy} onClick={rotate}>
+                重新生成（旧的作废）
+              </button>
+            </div>
           )}
         </div>
       )}

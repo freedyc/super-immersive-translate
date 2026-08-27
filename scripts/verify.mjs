@@ -1453,6 +1453,31 @@ section('主密钥：全局一把，可导出为恢复密钥');
   check('写密钥时会认领本机已有密文的主密钥',
     /getMasterDek\(passphrase, \{ adoptFrom: existing\[BLOB_KEY\] \}\)/.test(secrets));
 
+  // 换密钥跟换口令是根本不同的操作：换口令只重新包装，换密钥要把所有数据
+  // 重新加密一遍。恢复密钥泄露时必须能作废它
+  check('可重新生成主密钥', /export async function rotateMasterKey/.test(mk));
+
+  const rot = mk.slice(mk.indexOf('export async function rotateMasterKey'));
+  // 顺序是这个函数的要害：本机换了而远端没换，同步会永久坏掉，比不换更糟。
+  // 必须先全部解出来 → 再写远端（唯一可能失败的一步）→ 最后才提交新主密钥
+  const readAt = rot.indexOf('await h.read(oldDek');
+  const remoteAt = rot.indexOf('h2.remote)');
+  const commitAt = rot.indexOf(`[MASTER_KEY]: await wrapDek(newDek`);
+  check('换密钥时先全部解出来，再写入', readAt > 0 && remoteAt > readAt);
+  check('远端写入排在本地提交之前', remoteAt > 0 && commitAt > remoteAt);
+  check('任一处解不开就中止（不半途换密钥）',
+    /decrypted\.push\(\[name, h, await h\.read/.test(rot));
+
+  const rotate = readFileSync('utils/rotate.js', 'utf8');
+  check('剪贴板标记为远端源，排在本地之前', /remote: true/.test(rotate));
+  check('本机密钥标记为本地源', /remote: false/.test(rotate));
+  // 远端内容刚用旧密钥读出来，写回时再合并只会把旧密文掺回去
+  check('换密钥时的推送不做合并', /不做合并/.test(sync));
+
+  check('界面提供重新生成入口，并说明旧的会作废',
+    /rotateAll/.test(card) && /旧的立刻作废/.test(card));
+  check('换密钥失败时明确告知未做改动', /未做任何改动/.test(card));
+
   check('可导出恢复密钥', /export async function exportRecoveryKey/.test(mk));
   check('可用恢复密钥重新取得访问权', /export async function restoreFromRecoveryKey/.test(mk));
   check('恢复时要求同时设置新口令',

@@ -614,3 +614,22 @@ async function syncSettingsNow() {
     'Update settings',
   );
 }
+
+
+/**
+ * 换主密钥时用到的剪贴板密文读写。
+ *
+ * 单独导出而不是复用 syncClipboardNow：那个函数会做合并、裁剪、写本地历史，
+ * 而换密钥只需要把远端那团密文原样取出、再原样放回。
+ */
+export const clipboardCiphertext = {
+  pullClipboard: () => pullRemoteFile(CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH),
+  pushClipboard: (envelope) => pushRemoteFile(
+    CLIPBOARD_GIST_FILENAME, CLIPBOARD_REPO_PATH,
+    // 换密钥时不做合并：远端内容刚刚才用旧密钥读出来，
+    // 这里要写的就是它的重新加密版本，再合并一次只会把旧密文掺回去
+    (mine) => mine,
+    envelope,
+    'Rotate clipboard encryption key',
+  ),
+};

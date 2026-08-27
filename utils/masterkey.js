@@ -126,3 +126,63 @@ export async function restoreFromRecoveryKey(recoveryKey, newPassphrase) {
   await chrome.storage.sync.set({ [MASTER_KEY]: await wrapDek(dek, newPassphrase) });
   return dek;
 }
+
+
+/**
+ * 重新生成主密钥（作废旧的恢复密钥）。
+ *
+ * 跟换口令是**根本不同**的操作：换口令只是把同一把密钥重新包装一次，
+ * 数据密文不动；换密钥则必须把**所有数据重新加密一遍**，
+ * 否则旧密文用新密钥打不开。
+ *
+ * 什么时候需要：恢复密钥泄露了、或你不确定它是否还只在自己手里。
+ * 换完之后旧的那串立刻作废。
+ *
+ * 失败处理是这个函数的要害。如果本机换了、而远端（GitHub 上的剪贴板密文）
+ * 没换，同步就永久坏掉——那比不换更糟。所以顺序严格是：
+ *   1. 用旧密钥把**所有**能碰到的数据解出来（任何一处解不开就中止）
+ *   2. 生成新密钥
+ *   3. 先写远端（可能失败的那一步）
+ *   4. 远端成功后才写本地密文
+ *   5. 最后才提交新的主密钥
+ * 任何一步抛错，前面的写入要么还没发生、要么仍能被旧密钥读取。
+ *
+ * @param {string} passphrase 当前口令
+ * @param {object} handlers 各数据源的解密/重加密回调，由调用方注入——
+ *   masterkey 不该知道剪贴板或 API Key 的存储细节
+ * @returns {Promise<string>} 新的恢复密钥
+ */
+export async function rotateMasterKey(passphrase, handlers = {}) {
+  const pass = passphrase || await getPassphrase();
+  if (!pass) throw new Error('没有设置加密口令');
+
+  const stored = await chrome.storage.sync.get(MASTER_KEY);
+  if (!stored[MASTER_KEY]) throw new Error('还没有启用加密');
+
+  const oldDek = await unwrapDek(stored[MASTER_KEY], pass);
+
+  // 1) 先全部解出来。任何一处解不开就中止——半途换密钥会让那部分数据永久丢失
+  const sources = Object.entries(handlers);
+  const decrypted = [];
+  for (const [name, h] of sources) {
+    decrypted.push([name, h, await h.read(oldDek, pass)]);
+  }
+
+  // 2) 新密钥
+  const newDek = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'],
+  );
+
+  // 3) 远端优先：它是唯一可能失败的一步，失败时本机一切照旧
+  for (const [, h, data] of decrypted.filter(([, h2]) => h2.remote)) {
+    await h.write(data, newDek, pass);
+  }
+  // 4) 再写本地
+  for (const [, h, data] of decrypted.filter(([, h2]) => !h2.remote)) {
+    await h.write(data, newDek, pass);
+  }
+
+  // 5) 最后提交新主密钥
+  await chrome.storage.sync.set({ [MASTER_KEY]: await wrapDek(newDek, pass) });
+  return toBase32(new Uint8Array(await exportRawKey(newDek)));
+}
