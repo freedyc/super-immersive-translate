@@ -74,7 +74,10 @@ export const DEFAULTS = {
   geminiModel: 'gemini-1.5-flash',
   claudeKey: '',
   claudeModel: 'claude-3-haiku-20240307',
-  ollamaModel: 'llama3',
+  // llama3 是个通用对话模型，而且多数机器上根本没装——默认值指向一个不存在的
+  // 模型，403 修好之后紧接着就是 404，等于把「配不通」延后了一步。
+  // 换成专做翻译的 translategemma:4b：体积小、跑得动、拿来就能用。
+  ollamaModel: 'translategemma:4b',
   ollamaUrl: 'http://localhost:11434/api/chat',
   webllmModel: 'Llama-3-8B-Instruct-q4f32_1-MLC',
   aiPrompt: 'Translate the following text to {targetLang}. Keep the exact separators "\\n\\u2581\\u2581\\u2581\\n" unchanged. Only output the translated text.',

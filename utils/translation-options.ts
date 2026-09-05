@@ -160,7 +160,7 @@ export const ENGINE_FIELDS: Record<string, readonly EngineField[]> = {
     { key: 'claudeModel', label: '模型', type: 'text', placeholder: 'claude-3-haiku-20240307' },
   ],
   ollama: [
-    { key: 'ollamaModel', label: '模型', type: 'text', placeholder: 'llama3' },
+    { key: 'ollamaModel', label: '模型', type: 'text', placeholder: 'translategemma:4b' },
     { key: 'ollamaUrl', label: '服务地址', type: 'text', placeholder: 'http://localhost:11434/api/chat' },
   ],
   webllm: [

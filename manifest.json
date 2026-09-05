@@ -4,7 +4,7 @@
   "version": "2.1.0",
   "author": "dyck",
   "homepage_url": "https://github.com/freedyc/super-immersive-translate",
-  "minimum_chrome_version": "114",
+  "minimum_chrome_version": "116",
   "description": "超级沉浸式双语翻译插件，多引擎并行划词翻译 + 全页双语对照",
   "permissions": [
     "storage",
@@ -18,7 +18,8 @@
     "<all_urls>"
   ],
   "background": {
-    "service_worker": "background/background.js"
+    "service_worker": "background/background.js",
+    "type": "module"
   },
   "side_panel": {
     "default_path": "sandbox/index.html"
@@ -78,11 +79,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "wordbook/*",
-        "history/*",
-        "pdf/*",
-        "options/*",
-        "sandbox/*",
         "icons/trigger.png"
       ],
       "matches": [

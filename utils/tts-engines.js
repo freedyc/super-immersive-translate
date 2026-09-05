@@ -14,6 +14,50 @@ export function isChinese(lang) {
   return /^zh/i.test(String(lang || ''));
 }
 
+/**
+ * 「自动匹配」时优先挑的浏览器音色，按语种、按优先级排列。
+ *
+ * 存的是**名字**不是 voiceURI：voiceURI 各平台各写各的（Chrome 自带的
+ * Google 系列 voiceURI 就等于名字，而 macOS 的婷婷是
+ * com.apple.voice.compact.zh-CN.Tingting 这种，还会随系统版本变），
+ * 拿 voiceURI 当默认值必然只在一台机器上对。名字反而稳定，
+ * 同一把嗓子在不同系统上的写法也就那么几种，列全即可。
+ *
+ * 只在用户没有显式选过音色时生效——挑不到就交回浏览器按 utterance.lang 自动选，
+ * 保持原来的行为，不会因为系统里没装这些语音包就读不出来。
+ */
+export const PREFERRED_BROWSER_VOICES = {
+  zh: ['婷婷', 'Tingting', 'Ting-Ting', 'Google 普通话（中国大陆）'],
+  en: ['Google UK English Female'],
+};
+
+/**
+ * 选一把浏览器音色。
+ *
+ * @param {SpeechSynthesisVoice[]} voices window.speechSynthesis.getVoices()
+ * @param {string} lang BCP-47
+ * @param {string} [preferredURI] 用户显式选中的音色（空串表示「自动匹配」）
+ * @returns {SpeechSynthesisVoice|null} null 表示交给浏览器自己按 lang 选
+ */
+export function pickBrowserVoice(voices, lang, preferredURI = '') {
+  if (!Array.isArray(voices) || voices.length === 0) return null;
+
+  if (preferredURI) {
+    // 名字也认一次：设置页存的是 voiceURI，但同一把嗓子换个系统版本
+    // voiceURI 可能就变了，名字通常还在，能救回一次。
+    return voices.find((v) => v.voiceURI === preferredURI)
+      || voices.find((v) => v.name === preferredURI)
+      || null;
+  }
+
+  const names = PREFERRED_BROWSER_VOICES[isChinese(lang) ? 'zh' : 'en'] || [];
+  for (const name of names) {
+    const hit = voices.find((v) => v.name === name || v.voiceURI === name);
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export const TTS_ENGINES = [
   {
     id: 'browser',

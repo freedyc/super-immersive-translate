@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { Card, SelectField, RangeField, type Option } from '../components/Field.tsx';
 import { TtsPreview } from '../components/TtsPreview.tsx';
 import { OPENAI_VOICES } from '../../utils/translation-options.ts';
-import { TTS_ENGINES, getEngine, isChinese, resolveTts, supportsLang } from '../../utils/tts-engines.js';
+import { TTS_ENGINES, getEngine, isChinese, pickBrowserVoice, resolveTts, supportsLang } from '../../utils/tts-engines.js';
 import { SAMPLE_LANGS } from '../../utils/tts-samples.js';
 import type { TabProps } from '../lib/types.ts';
 
@@ -36,8 +36,11 @@ function LangSection({ lang, label, voices, settings, update }: {
 
   // 只列这个语种的音色。把几十个别的语言的音色混在一起，等于让用户自己筛
   const matching = voices.filter((v) => isChinese(v.lang) === zh);
+  // 「自动匹配」不是「随便挑一个」——它会走 PREFERRED_BROWSER_VOICES 里的偏好。
+  // 把实际会用到的那把嗓子写进选项文字里，否则用户没法知道自己听到的是谁。
+  const autoVoice = pickBrowserVoice(matching, lang, '');
   const voiceOptions: Option[] = [
-    ['', '自动匹配 (默认)'],
+    ['', autoVoice ? `自动匹配 (默认 · ${autoVoice.name})` : '自动匹配 (默认)'],
     ...matching.map((v): Option => [v.voiceURI, `${v.name} (${v.lang})`]),
   ];
 

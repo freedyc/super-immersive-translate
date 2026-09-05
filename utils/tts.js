@@ -1,5 +1,5 @@
 import { pick } from './defaults.js';
-import { chunkText, getEngine, resolveTts, supportsLang } from './tts-engines.js';
+import { chunkText, getEngine, pickBrowserVoice, resolveTts, supportsLang } from './tts-engines.js';
 
 class TTSManager {
   constructor() {
@@ -182,11 +182,19 @@ class TTSManager {
       utterance.lang = lang;
     }
 
-    if (this.browserVoiceURI) {
+    // 没显式选过音色时也要挑一次：浏览器按 lang 自选出来的往往是系统里
+    // 排第一的那把（英文常是机械感很强的 Google US English），而不是好听的那把。
+    // PREFERRED_BROWSER_VOICES 给中英文各定了一个默认偏好，挑不到再交回浏览器。
+    // lang 为空或 auto 时不猜——那时候连该挑中文还是英文都不知道。
+    const hasLang = lang && lang !== 'auto';
+    if (this.browserVoiceURI || hasLang) {
       const voices = await this._getVoices();
-      const voice = voices.find(v => v.voiceURI === this.browserVoiceURI);
+      const voice = pickBrowserVoice(voices, lang, this.browserVoiceURI);
       if (voice) {
         utterance.voice = voice;
+        // voice 一旦指定，lang 要跟着它走，否则某些平台上会拿 utterance.lang
+        // 再覆盖一次选择，等于白挑
+        utterance.lang = voice.lang;
       }
     }
 

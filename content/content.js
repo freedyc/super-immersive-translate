@@ -519,12 +519,25 @@ import { resolveEngineConcurrency } from '../utils/translation-options.ts';
 
   updateHoverListeners();
 
-  // ── Tab visibility: stop translating when tab hidden ─
+  // ── Tab visibility: pause translating when tab hidden ─
+  //
+  // 只中止在途请求，不删已经翻好的内容。以前是连 removeTranslations() 一起做的：
+  // 长页面翻到一半切去别的标签查个东西，回来是一片白板，得从头再翻一遍。
+  // 现在保留已翻好的部分，并在切回来时把没翻完的接着翻。
+  let interruptedByHide = false;
+
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && isTranslating) {
-      cancelTranslation();
-      removeTranslations();
-      isEnabled = false;
+    if (document.hidden) {
+      if (isTranslating) {
+        cancelTranslation();
+        interruptedByHide = true;
+      }
+      return;
+    }
+    if (interruptedByHide && isEnabled && !siteBlocked) {
+      interruptedByHide = false;
+      // translatePage() 会跳过已带 TRANSLATED_ATTR 的节点，所以这是续翻不是重翻
+      translatePage();
     }
   });
 
@@ -545,20 +558,18 @@ import { resolveEngineConcurrency } from '../utils/translation-options.ts';
   window.addEventListener('popstate', onNavigate);
   window.addEventListener('hashchange', onNavigate);
 
-  const origPushState = history.pushState;
-  const origReplaceState = history.replaceState;
-  history.pushState = function (...args) {
-    origPushState.apply(this, args);
-    onNavigate();
-  };
-  history.replaceState = function (...args) {
-    origReplaceState.apply(this, args);
-    onNavigate();
-  };
+  // pushState / replaceState 不再打补丁。内容脚本跑在隔离世界，DOM 对象的 JS
+  // 包装器是各自一份，在这里给 history 挂属性只挂在隔离世界那一份上，页面自己
+  // 调用的 pushState 根本不会走过来——那个补丁从来没生效过，SPA 主动跳转
+  // （YouTube 点下一个视频、Twitter 点进一条推文）一直是漏检的。
+  // 改成搭下面那个 MutationObserver 的车：SPA 换页必然伴随 DOM 变动，而 URL
+  // 比对只是一次字符串比较，白蹭。
 
   // ── DOM observer (SPA support) ───────────────────────
 
   const observer = new MutationObserver((mutations) => {
+    // 放在 isEnabled 判断之前：导航复位在关闭状态下也得发生
+    onNavigate();
     if (!isEnabled || isTranslating) return;
 
     let hasNewContent = false;

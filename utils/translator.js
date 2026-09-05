@@ -59,9 +59,21 @@ export class Translator {
     openai:   { name: 'OpenAI', free: false },
     gemini:   { name: 'Gemini', free: false },
     claude:   { name: 'Claude', free: false },
-    ollama:   { name: 'Ollama', free: true },
-    webllm:   { name: 'WebLLM (本地)', free: true }
+    // local: 推理发生在用户自己的机器上。这类引擎失败时**不能**退回 Google——
+    // 用户选它就是为了文本不出机器，静默走网络等于把他明确不想发出去的内容发出去了。
+    ollama:   { name: 'Ollama', free: true, local: true },
+    webllm:   { name: 'WebLLM (本地)', free: true, local: true }
   };
+
+  /**
+   * 当前引擎失败后能不能改用 Google 重试一次。
+   *
+   * google 自己没得退；本地引擎不退（见 ENGINES.local）。
+   * 判断集中在这里，免得两条批量路径各写一份、改一处漏一处。
+   */
+  _canFallbackToGoogle() {
+    return this.engine !== 'google' && !Translator.ENGINES[this.engine]?.local;
+  }
 
   async init() {
     const settings = await chrome.storage.sync.get(pick(
@@ -110,9 +122,9 @@ export class Translator {
         item.resolve(translated);
       });
     } catch (err) {
-      console.warn('[Translator] Batch error:', err.message, '— falling back to Google');
-      // Fallback: retry with Google if current engine fails
-      if (this.engine !== 'google') {
+      console.warn('[Translator] Batch error:', err.message);
+      // Fallback: retry with Google if current engine fails（本地引擎除外）
+      if (this._canFallbackToGoogle()) {
         try {
           const results = await this._googleBatch(texts);
           batch.forEach((item, i) => {
@@ -170,24 +182,32 @@ export class Translator {
     if (uncached.length === 0) return results;
 
     let out;
+    // 失败的这一批不写缓存（下面 cacheable 控制）。缓存里一旦存进
+    // `[翻译失败: …]`，这段文字在本页生命周期内就永远是失败的——重开翻译、
+    // 重新滚回去都会命中缓存，只有刷新页面才能恢复。
+    let cacheable = true;
     try {
       out = await this._dispatchBatch(uncached);
     } catch (err) {
-      console.warn('[Translator] translateBatch error:', err.message, '— falling back to Google');
-      if (this.engine !== 'google') {
+      if (this._canFallbackToGoogle()) {
+        console.warn('[Translator] translateBatch error:', err.message, '— falling back to Google');
         try {
           out = await this._googleBatch(uncached);
         } catch (fallbackErr) {
           out = uncached.map(() => `[翻译失败: ${err.message}]`);
+          cacheable = false;
         }
       } else {
+        console.warn('[Translator] translateBatch error:', err.message);
         out = uncached.map(() => `[翻译失败: ${err.message}]`);
+        cacheable = false;
       }
     }
 
     uncached.forEach((text, k) => {
       const translated = out[k] || '';
-      this.cache.set(this.getCacheKey(text), translated);
+      // 空结果同样不缓存：`out[k] || ''` 会把一次空响应钉死成永久的空译文
+      if (cacheable && translated) this.cache.set(this.getCacheKey(text), translated);
       results[uncachedIdx[k]] = translated;
     });
     return results;
@@ -481,6 +501,14 @@ export class Translator {
     const merged = texts.join(SEP);
     
     if (!this.webllmEngine) {
+      // Worker 脚本必须同源。内容脚本虽然跑在隔离世界，创建 Worker 时继承的是
+      // 宿主页面的源，加载 chrome-extension:// 的 worker 会被直接拒掉（而且那个
+      // chunk 也不在 web_accessible_resources 里）。以前这里失败后被 _flushQueue
+      // 的 Google 兜底吞掉了：用户选着「WebLLM（本地）」，实际每次都发给了
+      // Google，界面上一点提示都没有。现在明确报错。
+      if (location.protocol !== 'chrome-extension:') {
+        throw new Error('WebLLM 只能在扩展页面里运行（侧边栏 / 翻译工作台），网页内请改用其他引擎');
+      }
       const { CreateWebWorkerMLCEngine } = await import("@mlc-ai/web-llm");
       this.webllmEngine = await CreateWebWorkerMLCEngine(
         new Worker(new URL('./webllm-worker.js', import.meta.url), { type: "module" }),

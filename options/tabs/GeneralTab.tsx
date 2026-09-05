@@ -5,9 +5,16 @@ import {
 } from '../../utils/translation-options.ts';
 import type { TabProps } from '../lib/types.ts';
 import { ConcurrencyGrid } from '../components/ConcurrencyGrid.tsx';
+import { OllamaSetupCard } from '../components/OllamaSetupCard.tsx';
 
 export function GeneralTab({ settings, update }: Pick<TabProps, 'settings' | 'update'>) {
   const selEngines = settings.selectionEngines || [];
+  // Ollama 可能被三个地方任意一个用上：默认引擎、全页专用引擎、划词并行引擎。
+  // 只在 engine === 'ollama' 时才提示，会漏掉「划词用 Google、整页用 Ollama」
+  // 这种很常见的组合——那种情况下用户连模型名都没地方填。
+  const usesOllama = settings.engine === 'ollama'
+    || settings.fullPageEngine === 'ollama'
+    || selEngines.includes('ollama');
 
   const toggleSelectionEngine = (value: string, checked: boolean) => {
     const next = checked ? [...selEngines, value] : selEngines.filter((x) => x !== value);
@@ -26,6 +33,12 @@ export function GeneralTab({ settings, update }: Pick<TabProps, 'settings' | 'up
         />
 
         <EngineFields fields={ENGINE_FIELDS[settings.engine]} settings={settings} update={update} />
+
+        {usesOllama && (
+          <div className="bg-base-200/50 border border-base-200 rounded-xl p-3">
+            <OllamaSetupCard settings={settings} update={update} />
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <SelectField

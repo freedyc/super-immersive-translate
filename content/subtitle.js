@@ -39,7 +39,8 @@ import { getUiRoot } from './shadow-ui.js';
 
   let cueUnsubscribers = [];
   let observer = null;
-  let navObserver = null;
+  let navTimer = null;
+  let onUrlChange = null;
   let activeContainer = null;
   let lastCaptionText = '';
   let translateTimer = null;
@@ -67,10 +68,7 @@ import { getUiRoot } from './shadow-ui.js';
     running = false;
     cleanup();
     stopCueFallback();
-    if (navObserver) {
-      navObserver.disconnect();
-      navObserver = null;
-    }
+    stopListeningForNavigation();
   }
 
   function waitForCaptions() {
@@ -85,16 +83,33 @@ import { getUiRoot } from './shadow-ui.js';
     check();
   }
 
+  // 只为了发现 URL 变了，以前在这里挂了一个 document.body 的全子树
+  // MutationObserver——YouTube 这种每秒几百次 DOM 变动的页面上，等于为一次
+  // 字符串比较付了整页 DOM 的监听开销。改成事件 + 低频轮询：popstate /
+  // hashchange 覆盖前进后退，1 秒一次的 href 比对覆盖 SPA 主动 pushState
+  // （内容脚本在隔离世界里给 history 打补丁是无效的，见 content.js 里的说明）。
   function listenForNavigation() {
     let lastUrl = location.href;
-    navObserver = new MutationObserver(() => {
-      if (location.href !== lastUrl) {
-        lastUrl = location.href;
-        cleanup();
-        waitTimer = setTimeout(waitForCaptions, 1000);
-      }
-    });
-    navObserver.observe(document.body, { childList: true, subtree: true });
+
+    onUrlChange = () => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      cleanup();
+      waitTimer = setTimeout(waitForCaptions, 1000);
+    };
+
+    window.addEventListener('popstate', onUrlChange);
+    window.addEventListener('hashchange', onUrlChange);
+    navTimer = setInterval(onUrlChange, 1000);
+  }
+
+  function stopListeningForNavigation() {
+    if (!onUrlChange) return;
+    window.removeEventListener('popstate', onUrlChange);
+    window.removeEventListener('hashchange', onUrlChange);
+    clearInterval(navTimer);
+    navTimer = null;
+    onUrlChange = null;
   }
 
   function setupObserver(container) {

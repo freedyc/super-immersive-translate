@@ -24,6 +24,16 @@ async function setupPeriodicSyncAlarm() {
 }
 
 chrome.runtime.onInstalled.addListener(() => {
+  // 先清空再建。onInstalled 在 reason: 'update' 和「重新加载扩展」时也会触发，
+  // 而已建的菜单项不会被自动清掉——直接 create 同名 id 会抛
+  // "Cannot create item with duplicate id"，还会把后面几条一起带挂。
+  chrome.contextMenus.removeAll(() => {
+    createMenus();
+  });
+  setupPeriodicSyncAlarm();
+});
+
+function createMenus() {
   chrome.contextMenus.create({
     id: 'translate-page',
     title: '⚡ 翻译此页面',
@@ -42,16 +52,16 @@ chrome.runtime.onInstalled.addListener(() => {
     contexts: ['image']
   });
 
-  if (chrome.sidePanel) {
+  // sidePanel.open() 是 Chrome 116 才有的（命名空间本身 114 就在了），
+  // 只判断命名空间会让 114/115 上点了菜单直接踩到 undefined。
+  if (chrome.sidePanel?.open) {
     chrome.contextMenus.create({
       id: 'open-side-panel',
       title: '⚡ 在侧边栏打开快捷翻译',
       contexts: ['page', 'selection']
     });
   }
-
-  setupPeriodicSyncAlarm();
-});
+}
 
 chrome.runtime.onStartup.addListener(setupPeriodicSyncAlarm);
 
@@ -73,7 +83,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       console.warn('[SIT] 保存图片失败:', err?.message || err);
     });
   } else if (info.menuItemId === 'open-side-panel') {
-    if (!chrome.sidePanel) return;
+    if (!chrome.sidePanel?.open) return;
     // sidePanel.open() must be called synchronously within the user gesture.
     // Awaiting setOptions first consumes the gesture and makes open() fail, so
     // fire setOptions without await and call open() in the same tick.
@@ -109,7 +119,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 内容脚本和各页面共用同一份缓存，不必每个页面各载一次
   if (msg.action === 'lookupWordMeta') {
     Promise.all([lookupPhonetic(msg.word), lookupPos(msg.word)])
-      .then(([phonetic, pos]) => sendResponse({ phonetic, pos }));
+      .then(
+        ([phonetic, pos]) => sendResponse({ phonetic, pos }),
+        // 一定要回一次消息：不回的话通道直接关闭，调用端只能当失败处理，
+        // 而它是按词缓存的，这个词在本次会话里就再也查不到音标了。
+        () => sendResponse({ phonetic: '', pos: '' }),
+      );
     return true;
   }
   // 朗读音频统一在这里取：内容脚本自己 fetch 跨域会受宿主页面的 CORS 约束，
@@ -173,11 +188,7 @@ async function fetchTtsAudio({ engine, text, lang, opts }) {
   const req = buildRequest(engine, text, lang, opts || {});
   if (!req) throw new Error(`引擎 ${engine} 不走网络`);
 
-  const res = await fetch(req.url, {
-    ...(req.init || {}),
-    // Google/有道的取音频端点会看 UA，缺了就可能被当成爬虫挡掉
-    headers: { ...(req.init?.headers || {}) },
-  });
+  const res = await fetch(req.url, req.init || {});
   if (!res.ok) {
     throw new Error(`朗读服务返回 ${res.status}`);
   }
